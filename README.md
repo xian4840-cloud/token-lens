@@ -82,9 +82,19 @@ npm run dist:installer  # NSIS 安装包
 - 测试配置：`vitest.config.mts`（独立于 `vite.config.ts`，后者 `root: "ui"` 会让 `electron/` 下的测试扫不到）
 - 数据存储：`token-lens-data.json`（位于 userData 目录），密钥经 safeStorage 加密
 
+## 遇到问题
+
+应用会把运行期间的错误记到本地日志文件，位置是 userData 目录下的 `logs/token-lens.log`。
+在「设置 → 诊断日志」里能直接看到最近的记录，也能一键定位到文件。
+
+日志**只写本地、不会上传**。反馈问题时可以自行把文件内容附上，发不发由你决定。
+写入前会自动隐去 API Key、Cookie、Authorization 头等凭据（见 `electron/lib/redact.ts`），
+但发出去之前仍建议自己扫一眼。
+
 ## 隐私说明
 
-应用不内置任何遥测/统计上报。你配置的 API key 仅保存在本机（safeStorage 加密），用量数据全部从本地文件读取，请求只发往你配置的服务商官方 API。
+应用不内置任何遥测/统计上报，也没有任何日志上传通道。你配置的 API key 仅保存在本机
+（safeStorage 加密），用量数据全部从本地文件读取，请求只发往你配置的服务商官方 API。
 
 ## License
 
