@@ -20,6 +20,7 @@ import {
 import { LogIn } from "lucide-react";
 import { useAppStore } from "@/store/app";
 import { ipc } from "@/lib/ipc";
+import { nextServiceName } from "@/lib/service-name";
 import type { ServiceInput, ServiceRecord } from "@/types";
 
 interface Props {
@@ -46,14 +47,27 @@ export function ServiceFormDialog({ open, onOpenChange, editing }: Props) {
       for (const [k, v] of Object.entries(editing.config)) f[k] = String(v ?? "");
       setFields(f);
     } else {
-      setProvider(definitions[0]?.provider ?? "");
-      setName("");
+      // 名称预填为服务类型名，而不是留空：空白框逼着用户自己想名字，
+      // 是名称与实际服务不符的源头之一
+      const first = definitions[0];
+      setProvider(first?.provider ?? "");
+      setName(first?.label ?? "");
       setFields({});
     }
     setError("");
   }, [open, editing, definitions]);
 
   const def = definitions.find((d) => d.provider === provider);
+
+  /**
+   * 切换服务类型时同步名称，规则见 lib/service-name。
+   * 防的是「标题写百炼、实际查超算互联网」这类名实不符。
+   */
+  const handleProviderChange = (next: string): void => {
+    setProvider(next);
+    setFields({});
+    setName((current) => nextServiceName(current, next, definitions));
+  };
 
   const handleLogin = async () => {
     setLogining(true);
@@ -111,10 +125,7 @@ export function ServiceFormDialog({ open, onOpenChange, editing }: Props) {
             <Label>服务类型</Label>
             <Select
               value={provider}
-              onValueChange={(v) => {
-                setProvider(v);
-                setFields({});
-              }}
+              onValueChange={handleProviderChange}
               disabled={!!editing}
             >
               <SelectTrigger>

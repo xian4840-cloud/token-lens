@@ -10,6 +10,7 @@ import { balanceCaption, formatBalance, formatTime, usedPercent } from "@/lib/fo
 
 export function Dashboard() {
   const services = useAppStore((s) => s.services);
+  const definitions = useAppStore((s) => s.definitions);
   const balances = useAppStore((s) => s.balances);
   const errors = useAppStore((s) => s.errors);
   const refreshing = useAppStore((s) => s.refreshing);
@@ -66,7 +67,15 @@ export function Dashboard() {
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
                       <CardTitle className="font-display text-lg font-medium">{s.name}</CardTitle>
-                      <Badge variant="secondary">{s.provider}</Badge>
+                      {/*
+                        徽章显示服务定义的中文名（如「超算互联网 Token Plan」）而非
+                        provider ID。name 是用户自填且可与实际服务无关（切换服务类型时
+                        不会自动更新），徽章是唯一能看出这张卡查的是哪一家的地方，
+                        必须写成人能直接认出的名字。
+                      */}
+                      <Badge variant="secondary">
+                        {definitions.find((d) => d.provider === s.provider)?.label ?? s.provider}
+                      </Badge>
                     </div>
                   </CardHeader>
                   <CardContent>
