@@ -1,0 +1,29 @@
+{
+  // 测试文件专用的类型检查配置。
+  //
+  // 为什么单独一份：tsconfig.electron.json 会 emit 到 electron-dist，
+  // 因此它 exclude 掉了测试文件；ui/tsconfig.json 的 include 只有 "src"
+  // 且用 Bundler 解析。两边都不适合直接兜住 electron/ 下的测试，
+  // 于是这里以 noEmit 方式单独覆盖，保证测试代码同样受类型约束。
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "types": ["node", "vitest/globals"],
+    // 不设 baseUrl（TS 7.0 起移除）：paths 未配 baseUrl 时按本配置文件所在目录解析
+    "paths": { "@/*": ["./ui/src/*"] }
+  },
+  "include": [
+    "ui/src/**/*.test.ts",
+    "ui/src/**/*.test.tsx",
+    "electron/**/*.test.ts",
+    "vitest.config.mts"
+  ]
+}

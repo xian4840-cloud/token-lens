@@ -6,20 +6,29 @@
 
 ## 功能特性
 
-- **余额/余量查询**：一个界面聚合 13 家服务的账户信息，支持自定义刷新间隔与一键全部刷新
+- **余额/余量查询**：一个界面聚合 13 个服务适配器的账户信息，支持自定义刷新间隔与一键全部刷新
 - **本地 agent 用量采集**：直接读取本地 agent 产生的会话数据（无需 API key），按天/按模型统计 token 用量并按官网价格估算花费
 - **多日趋势图表**：近 N 天用量趋势、花费走势可视化
 - **数据全本地**：所有配置与数据存储在本机 userData 目录，API key 经 Electron safeStorage 加密，不上传任何服务器
 
 ### 支持的服务
 
-**能查到余额数字**：
+各服务开放的接口能力不同，卡片上能看到什么取决于官方给了什么，分三类：
 
-Anthropic (Claude)、OpenAI、DeepSeek、Moonshot Kimi、硅基流动、OpenRouter、火山方舟（含方舟 coding plan）、超算互联网 SCNet（Token Plan）。
+**能查到剩余余额 / 余量**：
 
-**仅校验 Key 有效性**（这些平台官方未提供余额查询接口，余额只能在各自控制台查看）：
+DeepSeek、Moonshot Kimi、硅基流动、OpenRouter、阿里云百炼、火山方舟（含方舟 coding plan）、超算互联网 SCNet（Token Plan）。
 
-Google Gemini、Groq、Together。
+**只能查到用量，查不到余额**（官方接口给的是消耗侧数据，卡片显示本月累计而非剩余）：
+
+| 服务 | 卡片上的数字 |
+|---|---|
+| OpenAI | 本月累计花费（USD，来自 organization/costs） |
+| Anthropic (Claude) | 本月累计 token 数（来自 usage_report，非金额） |
+
+**仅校验 Key 有效性**（这些平台官方未提供余额或配额查询接口，额度只能在各自控制台查看）：
+
+Google Gemini、Groq、Together。注意这三家均同时提供免费与付费档，卡片上的「Key 有效」只表示密钥通过校验，不代表账号是免费额度。
 
 **本地用量采集**：
 
@@ -35,10 +44,18 @@ Google Gemini、Groq、Together。
 ```bash
 npm install
 npm run dev            # 同时启动前端 HMR + Electron
+npm test               # 跑单元测试（vitest，覆盖 ui/ 与 electron/ 两侧）
+npm run test:watch     # watch 模式
+npm run typecheck      # 前端 + 主进程分别做类型检查
 ```
+
+> 改了 `electron/` 下的主进程代码需要重启 Electron，Vite HMR 只覆盖渲染进程。
 
 > 首次安装若 electron 二进制下载慢，可设镜像环境变量：
 > PowerShell: `$env:ELECTRON_MIRROR="https://cdn.npmmirror.com/binaries/electron/"; npm install`
+>
+> 用了镜像源后 `package-lock.json` 里的 `resolved` 会被改写成镜像地址，提交前跑一次
+> `node scripts/sanitize-lockfile.cjs` 改回 registry.npmjs.org（该脚本只动主机名，会校验 integrity 不变）。
 
 ## 打包
 
@@ -61,7 +78,9 @@ npm run dist:installer  # NSIS 安装包
 - `ui/` - 前端源码（React + Vite，构建到 `ui/dist/`）
 - `electron/adapters/` - 各服务适配器（余额/用量查询）
 - `electron/local-usage/` - 本地 agent 用量采集器（Claude Code / Codex / OpenCode / Antigravity）
-- 数据存储：JSON 文件（位于 userData 目录），密钥经 safeStorage 加密
+- `scripts/` - 维护脚本（如 `sanitize-lockfile.cjs`）
+- 测试配置：`vitest.config.mts`（独立于 `vite.config.ts`，后者 `root: "ui"` 会让 `electron/` 下的测试扫不到）
+- 数据存储：`token-lens-data.json`（位于 userData 目录），密钥经 safeStorage 加密
 
 ## 隐私说明
 

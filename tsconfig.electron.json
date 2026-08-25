@@ -14,5 +14,10 @@
     "sourceMap": true,
     "types": ["node"]
   },
-  "include": ["electron/**/*.ts"]
+  "include": ["electron/**/*.ts"],
+  // 测试文件不参与主进程构建：否则 electron-dist 下会生成 *.test.js，
+  // 被 electron-builder 一并打进安装包，而它们 import 的 vitest 只是 devDependency，
+  // 用户机上一旦被加载就是 MODULE_NOT_FOUND。
+  // 它们的类型检查交给 tsconfig.test.json。
+  "exclude": ["electron/**/*.test.ts", "electron/**/*.spec.ts"]
 }
