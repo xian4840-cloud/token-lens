@@ -1,7 +1,7 @@
 {
   "name": "token-app",
   "productName": "Token Lens",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "统一查看各家 API 余额与 coding plan 余量的桌面应用",
   "author": "xian4840-cloud",
   "license": "MIT",
