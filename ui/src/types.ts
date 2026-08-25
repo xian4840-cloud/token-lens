@@ -62,6 +62,12 @@ export interface BalanceResult {
   fetchedAt: string;
   raw?: unknown;
   breakdown?: BreakdownItem[];
+  /**
+   * 无数字可展示时（total / used / remaining 全缺）卡片主位显示的文案。
+   * 供仅能校验 Key 有效性的适配器说明「查不到数字」的原因，
+   * 不要在此断言服务是否免费——多数服务同时有免费与付费档。
+   */
+  statusLabel?: string;
 }
 
 export interface UsageItem {

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RefreshCw, Server, Plus, ChevronDown } from "lucide-react";
 import { useAppStore } from "@/store/app";
-import { formatBalance, formatTime, usedPercent } from "@/lib/format";
+import { balanceCaption, formatBalance, formatTime, usedPercent } from "@/lib/format";
 
 export function Dashboard() {
   const services = useAppStore((s) => s.services);
@@ -110,19 +110,23 @@ export function Dashboard() {
                           </div>
                         ) : (
                           <>
-                            <div className="font-display text-3xl tracking-tight">
+                            <div
+                              className={
+                                bal.remaining != null || bal.used != null
+                                  ? "font-display text-3xl tracking-tight"
+                                  : // 纯文案时缩小字号，避免长文字撑破卡片
+                                    "font-display text-xl tracking-tight text-muted-foreground"
+                              }
+                            >
                               {bal.remaining != null
                                 ? formatBalance(bal.remaining, bal.currency)
                                 : bal.used != null
                                   ? formatBalance(bal.used, bal.currency)
-                                  : "免费服务"}
+                                  : // 查不到数字时由适配器给出原因，不臆断服务免费
+                                    (bal.statusLabel ?? "无余额数据")}
                             </div>
                             <div className="mt-1 text-xs text-muted-foreground">
-                              {bal.remaining != null && bal.used != null
-                                ? `已用 ${formatBalance(bal.used, bal.currency)}`
-                                : bal.used != null
-                                  ? "本月用量"
-                                  : "已校验"}
+                              {balanceCaption(bal)}
                               {" · "}
                               {formatTime(bal.fetchedAt)}
                             </div>

@@ -68,7 +68,8 @@ export const kimiAdapter: Adapter = {
       }
     }
 
-    // fallback：校验 key
+    // fallback：余额端点不可用或字段取不到时，退化为校验 key。
+    // 此时无数字可展示，须给出 statusLabel 说明原因，否则卡片只剩一句无解释的兜底文案。
     const modelRes = await fetchWithTimeout(`${BASE}/models`, { headers });
     if (!modelRes.ok) {
       const text = await modelRes.text();
@@ -76,6 +77,7 @@ export const kimiAdapter: Adapter = {
     }
     return {
       currency: "CNY",
+      statusLabel: "Key 有效（余额未取到）",
       fetchedAt: new Date().toISOString(),
     };
   },

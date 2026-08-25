@@ -14,7 +14,7 @@ export const togetherAdapter: Adapter = {
     label: "Together AI",
     kind: "api",
     official: true,
-    description: "开源模型推理。无公开余额 API，仅校验 Key（credits 见控制台）",
+    description: "开源模型推理。无公开余额 API，仅校验 Key 有效性（credits 见控制台）",
     configSchema: [
       {
         key: "apiKey",
@@ -35,8 +35,10 @@ export const togetherAdapter: Adapter = {
       const text = await res.text();
       throw new Error(`Together ${res.status}: ${text.slice(0, 200)}`);
     }
+    // 无任何数字可返回，只能告知 Key 通过校验
     return {
       currency: "USD",
+      statusLabel: "Key 有效",
       fetchedAt: new Date().toISOString(),
     };
   },

@@ -5,8 +5,9 @@ const BASE = "https://generativelanguage.googleapis.com/v1beta";
 
 /**
  * Google Gemini（AI Studio）适配器。
- * AI Studio 的 API Key 无法查询余额或用量（免费额度需在 Google AI Studio 控制台查看）。
+ * 未提供余额 / 配额查询 API，额度与计费需在 Google AI Studio 与 Cloud 控制台查看。
  * 此处调用 /models 校验 API Key 有效性，不返回余额数字。
+ * 注意：Gemini API 同时存在免费档与付费档，故不在文案里断言「免费服务」。
  */
 export const geminiAdapter: Adapter = {
   definition: {
@@ -14,7 +15,7 @@ export const geminiAdapter: Adapter = {
     label: "Google Gemini",
     kind: "api",
     official: true,
-    description: "AI Studio 免费额度，无余额 API，仅校验 Key 有效性",
+    description: "无余额 / 配额查询 API，仅校验 Key 有效性（额度见 AI Studio 控制台）",
     configSchema: [
       {
         key: "apiKey",
@@ -34,8 +35,10 @@ export const geminiAdapter: Adapter = {
       const text = await res.text();
       throw new Error(`Gemini ${res.status}: ${text.slice(0, 200)}`);
     }
+    // 无任何数字可返回，只能告知 Key 通过校验
     return {
       currency: "USD",
+      statusLabel: "Key 有效",
       fetchedAt: new Date().toISOString(),
     };
   },
