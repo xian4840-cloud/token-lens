@@ -30,7 +30,12 @@ export const geminiAdapter: Adapter = {
   async fetchBalance(_config, secrets): Promise<BalanceResult> {
     const apiKey = secrets.apiKey;
     if (!apiKey) throw new Error("缺少 API Key");
-    const res = await fetchWithTimeout(`${BASE}/models?key=${encodeURIComponent(apiKey)}`);
+    // key 走 x-goog-api-key 头而非 ?key= 查询串（官方文档现只展示头方式）：
+    // 拼在 URL 里会随各类带 url 的错误消息、日志、代理访问记录一起漏出去，
+    // 请求头则不会被这些路径带上。
+    const res = await fetchWithTimeout(`${BASE}/models`, {
+      headers: { "x-goog-api-key": apiKey },
+    });
     if (!res.ok) {
       const text = await res.text();
       throw new Error(`Gemini ${res.status}: ${text.slice(0, 200)}`);

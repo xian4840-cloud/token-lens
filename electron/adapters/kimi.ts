@@ -50,22 +50,37 @@ export const kimiAdapter: Adapter = {
     if (!apiKey) throw new Error("缺少 API Key");
     const headers = { Authorization: `Bearer ${apiKey}` };
 
-    // 余额端点（路径需实测，字段多兜底）
-    const res = await fetchWithTimeout(`${BASE}/users/me/balance`, { headers });
-    if (res.ok) {
-      const json = (await res.json()) as BalanceResponse;
-      const data = json.data ?? {};
-      const remaining =
-        pickNumber(data, ["available_balance", "availableBalance", "balance"]) ??
-        pickNumber(json as Record<string, unknown>, ["available_balance", "availableBalance", "balance"]);
-      if (remaining != null) {
-        return {
-          remaining,
-          currency: "CNY",
-          fetchedAt: new Date().toISOString(),
-          raw: json,
-        };
+    // 余额端点（路径需实测，字段多兜底）。
+    //
+    // 整段包 try：这个端点实测连接成功率不稳定（同一时段四次里三次
+    // ConnectTimeout、一次正常 200），而 /models 端点始终可达。
+    // 不捕获的话网络异常会直接冒出去，连下面的 fallback 都进不了，
+    // 用户看到的就是一句「TypeError: fetch failed」——余额和 Key 状态全没了。
+    // 把失败原因留到 statusLabel 里，比整张卡报错有用。
+    let balanceError: string | undefined;
+    try {
+      const res = await fetchWithTimeout(`${BASE}/users/me/balance`, { headers });
+      if (res.ok) {
+        const json = (await res.json()) as BalanceResponse;
+        const data = json.data ?? {};
+        const remaining =
+          pickNumber(data, ["available_balance", "availableBalance", "balance"]) ??
+          pickNumber(json as Record<string, unknown>, ["available_balance", "availableBalance", "balance"]);
+        if (remaining != null) {
+          return {
+            remaining,
+            currency: "CNY",
+            fetchedAt: new Date().toISOString(),
+            raw: json,
+          };
+        }
+        balanceError = "余额字段未取到";
+      } else {
+        balanceError = `余额接口 ${res.status}`;
       }
+    } catch {
+      // 具体原因由 scheduler / ipc 那层记进日志，这里只需知道「没取到」
+      balanceError = "余额接口连接失败";
     }
 
     // fallback：余额端点不可用或字段取不到时，退化为校验 key。
@@ -77,7 +92,9 @@ export const kimiAdapter: Adapter = {
     }
     return {
       currency: "CNY",
-      statusLabel: "Key 有效（余额未取到）",
+      // 带上具体原因：「余额未取到」太笼统，用户分不清是自己没充值
+      // 还是接口没通，也就无从判断该不该重试
+      statusLabel: `Key 有效（${balanceError ?? "余额未取到"}）`,
       fetchedAt: new Date().toISOString(),
     };
   },

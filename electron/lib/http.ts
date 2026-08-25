@@ -1,6 +1,8 @@
 import { session, shell } from "electron";
-import { ProxyAgent, Socks5ProxyAgent, type Dispatcher } from "undici";
+import { Agent, ProxyAgent, Socks5ProxyAgent, type Dispatcher } from "undici";
 import { getSetting } from "../db";
+import { logError } from "./logger";
+import { redactUrl } from "./redact";
 import type { ProxyTestResult } from "../types";
 
 /**
@@ -41,21 +43,62 @@ export const DEFAULT_TIMEOUT_MS = 15_000;
 export const DEFAULT_BYPASS_RULES =
   "<local>,*.cn,*.aliyuncs.com,*.volcengineapi.com,*.volcengine.com,*.moonshot.cn,*.minimax.chat,*.minimaxi.com,*.xiaomimimo.com,*.scnet.cn,*.siliconflow.cn";
 
+/**
+ * undici 建立 TCP+TLS 连接的超时。
+ *
+ * 必须显式设置：undici 默认 connectTimeout 是 10 秒，且它**先于**我们的
+ * AbortController 超时触发。也就是用户在设置里把超时调成 30 秒也没用，
+ * 连接阶段照旧 10 秒就断，报出来还是一句没有上下文的 "fetch failed"。
+ *
+ * 实测触发场景：api.moonshot.cn 的 /users/me/balance 端点连接成功率不稳定，
+ * 三次超时一次通过，每次都恰好卡在 10.6 秒——正是这个默认值。
+ *
+ * 取用户配置的总超时，但不低于 20 秒：国内直连到部分端点握手本就慢，
+ * 给太短等于把偶发抖动直接判成故障。
+ */
+const MIN_CONNECT_TIMEOUT_MS = 20_000;
+
 /** 代理 Agent 缓存，避免重复为相同代理地址创建 Agent */
 const agentCache = new Map<string, Dispatcher>();
 
+/** 直连 Agent（无代理）。单独缓存，与代理 Agent 互不影响。 */
+let directAgent: Dispatcher | null = null;
+
 export function clearProxyAgentCache(): void {
   agentCache.clear();
+  directAgent = null;
+}
+
+/** 连接超时：取用户配置的总超时与下限中的较大者 */
+function connectTimeoutMs(): number {
+  const s = getSetting("requestTimeout");
+  const n = Number(s);
+  const configured = Number.isFinite(n) && n > 0 ? n * 1000 : DEFAULT_TIMEOUT_MS;
+  return Math.max(configured, MIN_CONNECT_TIMEOUT_MS);
+}
+
+/**
+ * 直连用的 Agent。
+ * 返回它而非 undefined，是为了能覆盖 undici 默认那个 10 秒 connectTimeout。
+ */
+function getDirectAgent(): Dispatcher {
+  if (directAgent) return directAgent;
+  directAgent = new Agent({ connectTimeout: connectTimeoutMs() });
+  return directAgent;
 }
 
 function getOrCreateAgent(proxyUrl: string): Dispatcher {
   const trimmed = proxyUrl.trim();
   let agent = agentCache.get(trimmed);
   if (agent) return agent;
+  // 代理 Agent 同样要显式给 connectTimeout，否则沿用 undici 的 10 秒默认值。
+  // 注意两者构造签名不同：Socks5ProxyAgent 是 (url, options)，
+  // ProxyAgent 支持 { uri, ... } 单对象形式。
+  const connectTimeout = connectTimeoutMs();
   if (trimmed.startsWith("socks5://") || trimmed.startsWith("socks://")) {
-    agent = new Socks5ProxyAgent(trimmed);
+    agent = new Socks5ProxyAgent(trimmed, { connectTimeout });
   } else {
-    agent = new ProxyAgent(trimmed);
+    agent = new ProxyAgent({ uri: trimmed, connectTimeout });
   }
   agentCache.set(trimmed, agent);
   return agent;
@@ -140,13 +183,15 @@ export async function getDispatcherForUrl(
     override?.bypassRules ?? getSetting("proxyBypassRules") ?? DEFAULT_BYPASS_RULES;
 
   // 1. 命中智能分流直连规则
+  // 返回直连 Agent 而非 undefined：undefined 会退回 undici 全局 dispatcher，
+  // 那个的 connectTimeout 固定 10 秒且无法配置（详见 MIN_CONNECT_TIMEOUT_MS）
   if (shouldBypassProxy(url, bypassRules)) {
-    return undefined;
+    return getDirectAgent();
   }
 
   // 2. 直连模式
   if (mode === "direct") {
-    return undefined;
+    return getDirectAgent();
   }
 
   // 3. 自定义代理模式
@@ -185,7 +230,8 @@ export async function getDispatcherForUrl(
     return getOrCreateAgent(envProxy);
   }
 
-  return undefined;
+  // 系统未配代理：同样走带超时配置的直连 Agent
+  return getDirectAgent();
 }
 
 /** 同步 Electron Session 代理配置 */
@@ -209,7 +255,7 @@ export async function applySessionProxy(): Promise<void> {
       }
     }
   } catch (e) {
-    console.error("应用 Session 代理设置失败:", e);
+    logError("proxy", e);
   }
 }
 
@@ -244,7 +290,9 @@ export async function fetchWithTimeout(
     });
   } catch (e) {
     if (e instanceof Error && e.name === "AbortError") {
-      throw new Error(`请求超时（${configuredTimeout}ms）：${url}`);
+      // 必须脱敏：Gemini 把 key 拼在查询串里，原样带 url 等于把密钥写进错误消息，
+      // 而错误消息既会进日志文件、也会显示在界面上
+      throw new Error(`请求超时（${configuredTimeout}ms）：${redactUrl(url)}`);
     }
     throw e;
   } finally {
