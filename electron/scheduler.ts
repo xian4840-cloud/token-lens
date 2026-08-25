@@ -2,6 +2,8 @@ import type { BrowserWindow } from "electron";
 import { listServices, getSetting } from "./db";
 import { refreshServiceInternal } from "./refresh";
 import { scanAndPersistLocalUsage } from "./local-usage";
+import { logError } from "./lib/logger";
+import { redactError } from "./lib/redact";
 import type { BalanceResult } from "./types";
 
 /** 后台自动刷新调度器。应用运行期间按间隔刷新所有服务并记录快照，
@@ -34,13 +36,17 @@ async function refreshAll(): Promise<void> {
       const balance = await refreshServiceInternal(s.id);
       notify(s.id, { balance });
     } catch (e) {
-      notify(s.id, { error: e instanceof Error ? e.message : String(e) });
+      // 记日志：自动刷新在后台跑，用户看到的只是卡片一直不更新，
+      // 不落盘的话事后完全无从查证是哪个服务在报什么错
+      logError(`refresh:${s.provider}`, e);
+      notify(s.id, { error: redactError(e) });
     }
   }
   try {
     await scanAndPersistLocalUsage();
-  } catch {
-    // 本地扫描失败仅意味着本次不更新趋势，下次重试
+  } catch (e) {
+    // 本地扫描失败仅意味着本次不更新趋势，下次重试；但要留痕
+    logError("local-usage", e);
   }
 }
 

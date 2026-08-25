@@ -5,6 +5,8 @@ import { registerAllAdapters } from "./adapters";
 import { registerIpc } from "./ipc";
 import { setMainWindow, startScheduler } from "./scheduler";
 import { buildCsp, safeOpenExternal, applySessionProxy } from "./lib/http";
+import { initLogger, logError, logWarn } from "./lib/logger";
+import { redactUrl } from "./lib/redact";
 
 let win: BrowserWindow | null = null;
 
@@ -30,7 +32,18 @@ function createWindow() {
 
   // 捕获页面加载异常
   win.webContents.on("did-fail-load", (_e, errorCode, errorDescription, validatedURL) => {
-    console.error("页面加载失败:", errorCode, errorDescription, validatedURL);
+    logError(
+      "page-load",
+      `加载失败 ${errorCode} ${errorDescription}: ${redactUrl(validatedURL)}`,
+    );
+  });
+
+  // 渲染进程崩溃：此前完全静默，用户只看到窗口变白或直接消失
+  win.webContents.on("render-process-gone", (_e, details) => {
+    logError("renderer-gone", `渲染进程退出: ${details.reason} (exitCode=${details.exitCode})`);
+  });
+  win.on("unresponsive", () => {
+    logWarn("window", "窗口无响应");
   });
 
   // 新窗口一律拒绝；安全的外部链接（http/https）交给系统浏览器打开
@@ -81,6 +94,10 @@ if (!gotLock) {
     }
   });
   app.whenReady().then(() => {
+    // 日志要最先初始化：initDb 等后续步骤自身也可能抛异常，
+    // 那些异常同样需要被记下来
+    initLogger();
+
     // 注入 CSP：主窗口 default session 所有响应补 Content-Security-Policy 头，
     // 限制脚本来源与外联目标（见 lib/http 的域名白名单）
     const dev = !!process.env.VITE_DEV_SERVER_URL;

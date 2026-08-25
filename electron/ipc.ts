@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { ipcMain, shell } from "electron";
 import { randomUUID } from "node:crypto";
 import {
   listServices,
@@ -33,6 +33,13 @@ import {
   testNetworkConnectivity,
   type ProxyConfigOverride,
 } from "./lib/http";
+import {
+  clearLogs,
+  getLogPath,
+  getRecentLogs,
+  logError,
+  write as writeLog,
+} from "./lib/logger";
 import type { BalanceResult, BalanceSnapshot, ServiceRecord } from "./types";
 
 
@@ -133,9 +140,18 @@ export function registerIpc(): void {
   );
 
 
-  ipcMain.handle("services:refresh", async (_e, id: string) =>
-    refreshServiceInternal(id),
-  );
+  // 手动刷新失败要留痕：用户点了刷新看到报错，日志里得有对应记录，
+  // 否则用户描述「刷新报错」时我们对不上任何上下文。
+  // 抛出的错误照旧交给前端展示，只是顺带记一笔。
+  ipcMain.handle("services:refresh", async (_e, id: string) => {
+    try {
+      return await refreshServiceInternal(id);
+    } catch (e) {
+      const record = getService(id);
+      logError(`refresh:${record?.provider ?? "unknown"}`, e);
+      throw e;
+    }
+  });
 
   ipcMain.handle(
     "snapshots:list",
@@ -177,4 +193,27 @@ export function registerIpc(): void {
 
   ipcMain.handle("auth:volcengine-login", () => openVolcengineLogin());
   ipcMain.handle("auth:scnet-login", () => openScnetLogin());
+
+  // 日志：供「反馈问题」界面展示最近错误、打开日志文件夹、清空日志。
+  // 不提供任何上传接口——文件发不发、发给谁，全由用户自己决定。
+  ipcMain.handle("logs:recent", () => getRecentLogs());
+  ipcMain.handle("logs:path", () => getLogPath());
+  ipcMain.handle("logs:reveal", () => {
+    // 定位到文件本身而非只打开目录，省得用户在一堆缓存文件夹里找
+    shell.showItemInFolder(getLogPath());
+    return true;
+  });
+  ipcMain.handle("logs:clear", () => {
+    clearLogs();
+    return true;
+  });
+
+  // 渲染进程的报错也收进同一份日志：此前前端异常只进 devtools 控制台，
+  // 用户那边等于完全不可见。
+  ipcMain.handle("logs:report-renderer-error", (_e, message: unknown) => {
+    if (typeof message !== "string") return false;
+    // 限长，避免超大堆栈把日志文件塞满
+    writeLog("error", "renderer", message.slice(0, 4000));
+    return true;
+  });
 }

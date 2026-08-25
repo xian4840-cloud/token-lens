@@ -2,6 +2,19 @@
 
 export type ServiceKind = "api" | "plan";
 
+export type LogLevel = "info" | "warn" | "error";
+
+/**
+ * 一条日志。与 electron/lib/logger.ts 的 LogEntry 保持一致，改动需同步两处。
+ * 前端不能直接从主进程导入类型（构建目标不同），故此处重复声明。
+ */
+export interface LogEntry {
+  time: string;
+  level: LogLevel;
+  scope: string;
+  message: string;
+}
+
 export type ConfigFieldType = "string" | "password" | "select" | "number";
 
 export interface ConfigField {

@@ -2,6 +2,7 @@ import type {
   BalanceResult,
   BalanceSnapshot,
   LocalDailyUsageRecord,
+  LogEntry,
   ModelPricing,
   PricingRowDisplay,
   ScanLocalUsageResult,
@@ -70,6 +71,11 @@ declare global {
         customUrl?: string;
         bypassRules?: string;
       }) => Promise<ProxyTestResult>;
+      getRecentLogs: () => Promise<LogEntry[]>;
+      getLogPath: () => Promise<string>;
+      revealLogFile: () => Promise<boolean>;
+      clearLogs: () => Promise<boolean>;
+      reportRendererError: (message: string) => Promise<boolean>;
     };
 
   }

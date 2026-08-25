@@ -12,6 +12,7 @@ import {
   ChevronUp,
   RotateCw,
 } from "lucide-react";
+import { DiagnosticsCard } from "@/components/DiagnosticsCard";
 import { PageHeader } from "@/components/PageHeader";
 import {
   Card,
@@ -350,6 +351,9 @@ export function SettingsPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* 诊断日志 */}
+        <DiagnosticsCard />
 
         {/* 模型价格表入口卡片 */}
         <Link to="/settings/pricing" className="block">

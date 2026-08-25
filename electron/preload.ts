@@ -13,6 +13,7 @@ import type {
 import type { ModelPricing, PricingRowDisplay } from "./adapters/pricing";
 import type { ScanLocalUsageResult } from "./local-usage/types";
 import type { ProxyConfigOverride } from "./lib/http";
+import type { LogEntry } from "./lib/logger";
 
 
 /**
@@ -87,6 +88,15 @@ const api = {
     } | null>,
   testProxy: (override?: ProxyConfigOverride) =>
     ipcRenderer.invoke("proxy:test", override) as Promise<ProxyTestResult>,
+
+  // 日志：只读 + 打开文件夹 + 清空。刻意不提供上传接口，
+  // 日志发不发、发给谁由用户自己决定（见 README 隐私说明）。
+  getRecentLogs: () => ipcRenderer.invoke("logs:recent") as Promise<LogEntry[]>,
+  getLogPath: () => ipcRenderer.invoke("logs:path") as Promise<string>,
+  revealLogFile: () => ipcRenderer.invoke("logs:reveal") as Promise<boolean>,
+  clearLogs: () => ipcRenderer.invoke("logs:clear") as Promise<boolean>,
+  reportRendererError: (message: string) =>
+    ipcRenderer.invoke("logs:report-renderer-error", message) as Promise<boolean>,
 };
 
 
