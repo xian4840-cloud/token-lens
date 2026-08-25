@@ -1,0 +1,28 @@
+appId: app.tokenlens.desktop
+productName: Token Lens
+artifactName: TokenLens-Setup-${version}-${arch}.${ext}
+directories:
+  output: dist-electron
+files:
+  - electron-dist/**
+  - ui/dist/**
+  - package.json
+asar: true
+asarUnpack:
+  - "**/*.node"
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Token Lens
+  uninstallDisplayName: Token Lens
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true

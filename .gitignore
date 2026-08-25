@@ -1,0 +1,13 @@
+node_modules/
+dist-electron/
+electron-dist/
+ui/dist/
+*.log
+.DS_Store
+.vscode/
+
+# 个人本地环境配置（含本机路径/镜像源）与内部文档
+.mcp.json
+.npmrc
+.claude/
+PLAN.md

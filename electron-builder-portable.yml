@@ -1,0 +1,14 @@
+appId: app.tokenlens.desktop
+productName: Token Lens
+directories:
+  output: dist-electron
+files:
+  - electron-dist/**
+  - ui/dist/**
+  - package.json
+asar: true
+asarUnpack:
+  - "**/*.node"
+win:
+  target: dir
+  icon: build/icon.ico

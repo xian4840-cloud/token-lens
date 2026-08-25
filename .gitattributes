@@ -1,0 +1,12 @@
+# 仓库内统一以 LF 存储，检出时由各平台 git 自行处理，
+# 避免 Windows 提交后在 Linux/macOS 上出现全文件行尾 diff。
+* text=auto eol=lf
+
+# 二进制文件不做行尾转换，也不参与文本 diff
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.woff binary
+*.woff2 binary
+*.exe binary
