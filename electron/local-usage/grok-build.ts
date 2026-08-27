@@ -273,7 +273,8 @@ export async function scanGrokBuild(since?: string): Promise<GrokScanResult> {
         model,
         date,
         sessions: v.sessions.size,
-        inputTokens: v.input,
+        // Grok Build 的 input 含 cached（OpenAI 语义），拆分避免 UI 显示总量时双计
+        inputTokens: Math.max(0, v.input - v.cacheRead),
         outputTokens: v.output,
         cacheCreationTokens: v.cacheCreation,
         cacheReadTokens: v.cacheRead,

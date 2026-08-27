@@ -10,17 +10,15 @@ import type { LocalSource, LocalUsageRow, ScanLocalUsageResult } from "./types";
 
 /**
  * 按 source 构造 computeCost 用的 TokenUsage，处理各 agent 的 token 语义差异：
- * - Codex：input_tokens 已含 cached_input_tokens（OpenAI 习惯），拆分避免双计；
- *   reasoning_output_tokens 按 output 价计费。
+ * - Codex / Grok Build：存储时已拆分 inputTokens（不含 cache_read），直接用。
  * - Claude Code：input_tokens 不含 cache_read（Anthropic 语义），直接用。
- * - Antigravity：thinking tokens（field 10）按 output 价计费，与可见输出合并。
- * - Grok Build：与 Codex 同为 OpenAI 语义（input 含 cache_read）；
- *   存储时已把 reasoning 从 output 拆出，此处合并回去按 output 价计费。
+ * - Antigravity：无缓存机制。
+ * - 所有 agent 的 reasoningTokens 按 output 价计费。
  */
 function toCostTokens(row: LocalUsageRow): TokenUsage {
   if (row.source === "codex" || row.source === "grok-build") {
     return {
-      input: Math.max(0, row.inputTokens - row.cacheReadTokens),
+      input: row.inputTokens,  // 已拆分，不含 cacheRead
       output: row.outputTokens + row.reasoningTokens,
       cacheRead: row.cacheReadTokens,
       cacheCreation: row.cacheCreationTokens,

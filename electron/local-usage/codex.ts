@@ -160,8 +160,10 @@ function diffSamples(
  * 扫描 Codex 会话记录：收集 session 内 total_token_usage 采样序列，差分按天落桶。
  * 按 session_meta.thread_source 分派主模型（user）与 subagent 模型（subagent）。
  *
- * token 语义：input_tokens 已含 cached_input_tokens（OpenAI 习惯），
- * cost 换算时在 index.ts 拆分为未缓存输入 + 缓存命中，避免双计。此处仅存原始值。
+ * token 语义：input_tokens 已含 cached_input_tokens（OpenAI 习惯）。
+ * **存储时拆分**：inputTokens 存为不含缓存的纯输入，cacheReadTokens 单独存，
+ * 避免 UI 显示总量时双重计算（inputTokens + cacheReadTokens 会重复）。
+ * cost 换算在 index.ts 中处理，已正确拆分。
  *
  * 性能：mtime 未变的文件走缓存（存采样序列，命中后内存 diff 不重读）；
  * 带 since 时旧文件按 mtime 整体跳过，跨界文件用缓存序列 + since 过滤 diff。
@@ -267,7 +269,8 @@ export async function scanCodex(since?: string): Promise<LocalUsageRow[]> {
       model,
       date,
       sessions: v.sessions.size,
-      inputTokens: v.input,
+      // Codex 的 input 含 cached（OpenAI 语义），拆分避免 UI 显示总量时双计
+      inputTokens: Math.max(0, v.input - v.cacheRead),
       outputTokens: v.output,
       cacheCreationTokens: v.cacheCreation,
       cacheReadTokens: v.cacheRead,
