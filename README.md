@@ -50,6 +50,7 @@ Google Gemini、Groq、Together。注意这三家均同时提供免费与付费�
 | Codex | `~/.codex/sessions` 下的会话记录 |
 | OpenCode | OpenCode 本地存储 |
 | Antigravity | `~/.gemini/antigravity/conversations` 下的会话库 |
+| Grok Build | `~/.grok/sessions` 下的会话记录（updates.jsonl） |
 
 ### 费用估算的口径
 

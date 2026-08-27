@@ -1,11 +1,16 @@
 /** 本地 agent 用量采集（阶段 10）。
  *
- * 扫描本地 AI coding agent（Claude Code / Codex / OpenCode）的使用记录，
- * 按模型聚合 token，用价格表换算费用。数据全在本地文件，无需 API key / 代理 / 抓包。
+ * 扫描本地 AI coding agent（Claude Code / Codex / OpenCode / Antigravity / Grok Build）
+ * 的使用记录，按模型聚合 token，用价格表换算费用。数据全在本地文件，无需 API key / 代理 / 抓包。
  */
 
 /** 数据来源 */
-export type LocalSource = "claude-code" | "codex" | "opencode" | "antigravity";
+export type LocalSource =
+  | "claude-code"
+  | "codex"
+  | "opencode"
+  | "antigravity"
+  | "grok-build";
 
 /** 单行聚合：某来源某模型的用量汇总 */
 export interface LocalUsageRow {

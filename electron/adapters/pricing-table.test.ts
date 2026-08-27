@@ -159,6 +159,8 @@ describe("其余厂商正则顺序", () => {
     ["mimo-v2.5-pro", "mimo-v2.5-pro"],
     ["mimo-v2.5", "mimo-v2.5"],
     ["grok-4.6", "grok-4.6"],
+    // Grok Build 本地采集上报的模型 id（~/.grok/sessions 的 modelUsage key）
+    ["grok-4.6-build", "grok-4.6"],
     ["grok-4.5", "grok-4.5"],
     ["grok-4.3", "grok-4.3"],
     ["grok-build-0.1", "grok-build"],

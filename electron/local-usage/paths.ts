@@ -32,3 +32,6 @@ export const ANTIGRAVITY_CONVERSATIONS_DIR = path.join(
   "antigravity",
   "conversations",
 );
+
+/** Grok Build：~/.grok/sessions/<编码工作目录>/<session-id>/updates.jsonl */
+export const GROK_SESSIONS_DIR = path.join(home, ".grok", "sessions");

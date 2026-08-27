@@ -6,6 +6,7 @@ export const LOCAL_SOURCES: { value: LocalSource; label: string }[] = [
   { value: "codex", label: "Codex" },
   { value: "opencode", label: "OpenCode" },
   { value: "antigravity", label: "Antigravity" },
+  { value: "grok-build", label: "Grok Build" },
 ];
 
 export const LOCAL_SOURCE_COLORS = [
@@ -13,6 +14,7 @@ export const LOCAL_SOURCE_COLORS = [
   "var(--chart-2)",
   "var(--chart-3)",
   "var(--chart-4)",
+  "var(--chart-5)",
 ];
 
 export const LOCAL_SOURCE_LABEL: Record<LocalSource, string> =

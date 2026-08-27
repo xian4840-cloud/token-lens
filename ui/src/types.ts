@@ -140,7 +140,12 @@ export interface PricingRowDisplay {
 }
 
 /** 本地 agent 用量采集（阶段 10），镜像主进程 electron/local-usage/types */
-export type LocalSource = "claude-code" | "codex" | "opencode" | "antigravity";
+export type LocalSource =
+  | "claude-code"
+  | "codex"
+  | "opencode"
+  | "antigravity"
+  | "grok-build";
 
 export interface LocalUsageRow {
   source: LocalSource;

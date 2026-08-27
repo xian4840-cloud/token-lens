@@ -1,6 +1,14 @@
 # 变更日志
 
-## 未发布
+## 0.1.3（2026-08-27）
+
+### 新增
+
+- **本地用量采集支持 Grok Build**：扫描 `~/.grok/sessions` 下的会话记录
+  （updates.jsonl 的 turn_completed 用量），按天/按模型统计 token 并按价格表
+  估算花费。token 口径：inputTokens 已含缓存读取（OpenAI 语义，同 Codex），
+  outputTokens 已含推理 token（实测不变量 totalTokens === inputTokens +
+  outputTokens 恒成立）。模型 id 形如 `grok-4.6-build`，按 grok-4.6 价格行计费。
 
 ### 其他
 

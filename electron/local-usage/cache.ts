@@ -12,6 +12,7 @@ import path from "node:path";
  * 按天分桶后缓存结构：
  * - Claude：per-file -> per-model -> per-day 全量聚合（不做时间过滤）
  * - Codex：per-file -> session 内 total_token_usage 采样点序列（命中后内存 diff 按天落桶）
+ * - Antigravity / Grok：per-file -> per-model -> per-day 全量聚合
  * 旧版（无 date 维度 / 单值 usage）缓存条目会被采集器视为未命中而重扫，自愈为新结构。
  */
 
@@ -72,10 +73,31 @@ export interface AntigravityFileEntry {
   models: Record<string, Record<string, AntigravityModelDayAgg>>;
 }
 
+/** Grok Build：某模型某日的全量聚合（缓存用，不做时间过滤） */
+export interface GrokModelDayAgg {
+  input: number;
+  /** 可见输出（已扣除 reasoning） */
+  output: number;
+  cacheCreation: number;
+  cacheRead: number;
+  reasoning: number;
+  firstTs?: string;
+  lastTs?: string;
+}
+
+export interface GrokFileEntry {
+  mtimeMs: number;
+  /** 文件内最早一条 turn_completed 的时间（ISO），用于时间范围分类 */
+  firstTs?: string;
+  /** per-model -> per-day 全量聚合；空对象表示文件无 usage 行 */
+  models: Record<string, Record<string, GrokModelDayAgg>>;
+}
+
 interface ScanCacheData {
   claude: Record<string, ClaudeFileEntry>;
   codex: Record<string, CodexFileEntry>;
   antigravity: Record<string, AntigravityFileEntry>;
+  grok: Record<string, GrokFileEntry>;
 }
 
 /** 每个来源的缓存条目上限，超出按 mtime 淘汰最旧，防止缓存文件无限膨胀 */
@@ -85,7 +107,7 @@ let cache: ScanCacheData | null = null;
 let cachePath = "";
 
 function emptyCache(): ScanCacheData {
-  return { claude: {}, codex: {}, antigravity: {} };
+  return { claude: {}, codex: {}, antigravity: {}, grok: {} };
 }
 
 /** 懒加载缓存（首次调用时读盘），之后返回内存中的同一份引用。 */
@@ -102,6 +124,7 @@ export function getScanCache(): ScanCacheData {
             codex: parsed.codex,
             antigravity:
               typeof parsed.antigravity === "object" ? parsed.antigravity : {},
+            grok: typeof parsed.grok === "object" ? parsed.grok : {},
           }
         : emptyCache();
   } catch {
@@ -113,7 +136,7 @@ export function getScanCache(): ScanCacheData {
 /** 扫描结束后落盘。写失败不影响主流程（下次重扫而已）。 */
 export function persistScanCache(): void {
   if (!cache || !cachePath) return;
-  for (const key of ["claude", "codex", "antigravity"] as const) {
+  for (const key of ["claude", "codex", "antigravity", "grok"] as const) {
     const entries = Object.entries(cache[key]);
     if (entries.length > MAX_ENTRIES_PER_SOURCE) {
       entries.sort((a, b) => b[1].mtimeMs - a[1].mtimeMs);
@@ -156,6 +179,20 @@ export function isCodexEntryValid(entry: CodexFileEntry): boolean {
 
 /** 类型守卫：Antigravity 缓存条目是否为新版 per-model-per-day 结构 */
 export function isAntigravityEntryValid(entry: AntigravityFileEntry): boolean {
+  if (!entry.models || typeof entry.models !== "object") return false;
+  for (const v of Object.values(entry.models)) {
+    if (v == null || typeof v !== "object") return false;
+    for (const day of Object.values(v as Record<string, unknown>)) {
+      if (!day || typeof day !== "object" || !("input" in (day as object))) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+/** 类型守卫：Grok 缓存条目是否为新版 per-model-per-day 结构 */
+export function isGrokEntryValid(entry: GrokFileEntry): boolean {
   if (!entry.models || typeof entry.models !== "object") return false;
   for (const v of Object.values(entry.models)) {
     if (v == null || typeof v !== "object") return false;
