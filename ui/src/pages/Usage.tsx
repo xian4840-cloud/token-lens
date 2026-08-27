@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bot, Coins } from "lucide-react";
+import { Bot, Coins, ChevronDown, ChevronRight } from "lucide-react";
 import { useAppStore } from "@/store/app";
 import { LocalUsageTooltip } from "@/components/LocalUsageTooltip";
 import { formatTokensCn } from "@/lib/format";
@@ -183,6 +183,7 @@ export function Usage() {
 
   const [range, setRange] = useState<Range>("month");
   const [tab, setTab] = useState<"api" | "local">("api");
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!loaded) init();
@@ -246,6 +247,29 @@ export function Usage() {
       ),
     [localDailyRecords],
   );
+
+  // 按日期分组
+  const groupedByDate = useMemo(() => {
+    const groups = new Map<string, typeof localRows>();
+    for (const row of localRows) {
+      const existing = groups.get(row.date) ?? [];
+      existing.push(row);
+      groups.set(row.date, existing);
+    }
+    return groups;
+  }, [localRows]);
+
+  const toggleDate = (date: string) => {
+    setExpandedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) {
+        next.delete(date);
+      } else {
+        next.add(date);
+      }
+      return next;
+    });
+  };
 
   // 部分上游（GLM/Kimi 代理、Codex）不上报缓存写：结果集全 0 时隐藏写列，避免「全是 0」的坏观感
   const showCacheWrite = useMemo(
@@ -504,82 +528,111 @@ export function Usage() {
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b text-left text-xs tracking-wide text-muted-foreground">
-                              <th className="px-4 py-3 font-medium">来源</th>
-                              <th className="px-4 py-3 font-medium">模型</th>
                               <th className="px-4 py-3 font-medium">日期</th>
                               <th className="px-4 py-3 text-right font-medium">
-                                会话
+                                总 Tokens
                               </th>
                               <th className="px-4 py-3 text-right font-medium">
-                                Input
+                                总费用
                               </th>
                               <th className="px-4 py-3 text-right font-medium">
-                                Output
-                              </th>
-                              <th className="px-4 py-3 text-right font-medium">
-                                {showCacheWrite ? "缓存读/写" : "缓存读"}
-                              </th>
-                              <th className="px-4 py-3 text-right font-medium">
-                                Tokens
-                              </th>
-                              <th className="px-4 py-3 text-right font-medium">
-                                费用
-                              </th>
-                              <th className="px-4 py-3 text-right font-medium">
-                                区间
+                                明细
                               </th>
                             </tr>
                           </thead>
                           <tbody>
-                            {localRows.map((r) => {
-                              const total =
-                                r.inputTokens +
-                                r.outputTokens +
-                                r.cacheCreationTokens +
-                                r.cacheReadTokens +
-                                r.reasoningTokens;
+                            {[...groupedByDate.entries()].map(([date, rows]) => {
+                              const isExpanded = expandedDates.has(date);
+                              const dailyTotal = rows.reduce(
+                                (sum, r) =>
+                                  sum +
+                                  r.inputTokens +
+                                  r.outputTokens +
+                                  r.cacheCreationTokens +
+                                  r.cacheReadTokens +
+                                  r.reasoningTokens,
+                                0,
+                              );
+                              const dailyCost = rows.reduce(
+                                (sum, r) => sum + (r.cost ?? 0),
+                                0,
+                              );
+                              const currency = rows.find((r) => r.currency)?.currency;
+
                               return (
-                                <tr
-                                  key={`${r.source}-${r.model}-${r.date}`}
-                                  className="border-b border-border/60 transition-colors last:border-0 hover:bg-white/30"
-                                >
-                                  <td className="px-4 py-3">
-                                    <Badge variant="secondary">
-                                      {SOURCE_LABEL[r.source]}
-                                    </Badge>
-                                  </td>
-                                  <td className="px-4 py-3 font-mono text-xs">
-                                    {r.model}
-                                  </td>
-                                  <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                                    {formatDateKey(r.date)}
-                                  </td>
-                                  <td className="px-4 py-3 text-right tabular-nums">
-                                    {r.sessions}
-                                  </td>
-                                  <td className="px-4 py-3 text-right tabular-nums">
-                                    {formatTokensCn(r.inputTokens)}
-                                  </td>
-                                  <td className="px-4 py-3 text-right tabular-nums">
-                                    {formatTokensCn(
-                                      r.outputTokens + r.reasoningTokens,
-                                    )}
-                                  </td>
-                                  <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                                    {showCacheWrite
-                                      ? `${formatTokensCn(r.cacheReadTokens)} / ${formatTokensCn(r.cacheCreationTokens)}`
-                                      : formatTokensCn(r.cacheReadTokens)}
-                                  </td>
-                                  <td className="px-4 py-3 text-right tabular-nums">
-                                    {formatTokensCn(total)}
-                                  </td>
-                                  <td className="px-4 py-3 text-right tabular-nums">
-                                    {formatCost(r.cost, r.currency)}
-                                  </td>
-                                  <td className="px-4 py-3 text-right text-muted-foreground">
-                                    {formatDayRange(r.firstAt, r.lastAt)}
-                                  </td>
-                                </tr>
+                                <>
+                                  {/* 日期汇总行 */}
+                                  <tr
+                                    key={date}
+                                    className="border-b border-border/60 cursor-pointer transition-colors hover:bg-accent/30"
+                                    onClick={() => toggleDate(date)}
+                                  >
+                                    <td className="px-4 py-3 font-medium">
+                                      <div className="flex items-center gap-2">
+                                        {isExpanded ? (
+                                          <ChevronDown className="size-4 text-muted-foreground" />
+                                        ) : (
+                                          <ChevronRight className="size-4 text-muted-foreground" />
+                                        )}
+                                        {formatDateKey(date)}
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-right tabular-nums font-medium">
+                                      {formatTokensCn(dailyTotal)}
+                                    </td>
+                                    <td className="px-4 py-3 text-right tabular-nums font-medium">
+                                      {formatCost(dailyCost, currency)}
+                                    </td>
+                                    <td className="px-4 py-3 text-right text-muted-foreground">
+                                      {rows.length} 条记录
+                                    </td>
+                                  </tr>
+
+                                  {/* 展开的明细行 */}
+                                  {isExpanded &&
+                                    rows.map((r) => {
+                                      const total =
+                                        r.inputTokens +
+                                        r.outputTokens +
+                                        r.cacheCreationTokens +
+                                        r.cacheReadTokens +
+                                        r.reasoningTokens;
+                                      return (
+                                        <tr
+                                          key={`${r.source}-${r.model}-${r.date}`}
+                                          className="border-b border-border/40 bg-accent/10 transition-colors last:border-0 hover:bg-accent/20"
+                                        >
+                                          <td className="pl-12 pr-4 py-2.5">
+                                            <div className="flex items-center gap-2">
+                                              <Badge variant="outline" className="text-xs">
+                                                {SOURCE_LABEL[r.source]}
+                                              </Badge>
+                                              <span className="font-mono text-xs text-muted-foreground">
+                                                {r.model}
+                                              </span>
+                                            </div>
+                                          </td>
+                                          <td className="px-4 py-2.5 text-right tabular-nums text-xs">
+                                            <div className="space-y-0.5">
+                                              <div>{formatTokensCn(total)}</div>
+                                              <div className="text-[10px] text-muted-foreground">
+                                                In: {formatTokensCn(r.inputTokens)} / Out:{" "}
+                                                {formatTokensCn(r.outputTokens + r.reasoningTokens)}
+                                                {r.cacheReadTokens > 0 &&
+                                                  ` / Cache: ${formatTokensCn(r.cacheReadTokens)}`}
+                                              </div>
+                                            </div>
+                                          </td>
+                                          <td className="px-4 py-2.5 text-right tabular-nums text-xs">
+                                            {formatCost(r.cost, r.currency)}
+                                          </td>
+                                          <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">
+                                            {r.sessions} 会话 · {formatDayRange(r.firstAt, r.lastAt)}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                </>
                               );
                             })}
                           </tbody>
