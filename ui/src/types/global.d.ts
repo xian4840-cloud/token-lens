@@ -59,6 +59,10 @@ declare global {
         since?: string,
         until?: string,
       ) => Promise<LocalDailyUsageRecord[]>;
+      clearLocalUsageCache: () => Promise<{
+        success: boolean;
+        error?: string;
+      }>;
       loginVolcengine: () => Promise<{
         cookie: string;
         xWebId: string;

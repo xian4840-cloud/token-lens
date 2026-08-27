@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronUp,
   RotateCw,
+  Trash2,
 } from "lucide-react";
 import { DiagnosticsCard } from "@/components/DiagnosticsCard";
 import { PageHeader } from "@/components/PageHeader";
@@ -32,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useAppStore } from "@/store/app";
+import { ipc } from "@/lib/ipc";
 import type { ProxyMode } from "@/types";
 
 const INTERVAL_OPTIONS: { value: string; label: string }[] = [
@@ -80,6 +82,7 @@ export function SettingsPage() {
   const [customUrlInput, setCustomUrlInput] = useState(proxyCustomUrl);
   const [bypassInput, setBypassInput] = useState(proxyBypassRules);
   const [showAdvancedBypass, setShowAdvancedBypass] = useState(false);
+  const [clearingCache, setClearingCache] = useState(false);
 
   useEffect(() => {
     if (!loaded) init();
@@ -111,6 +114,26 @@ export function SettingsPage() {
       customUrl: customUrlInput.trim(),
       bypassRules: bypassInput.trim(),
     });
+  };
+
+  const handleClearCache = async () => {
+    if (!confirm("确定要清除本地用量缓存吗？\n\n这将删除所有缓存数据和历史统计记录，然后重新扫描。操作不可撤销。")) {
+      return;
+    }
+    setClearingCache(true);
+    try {
+      const result = await ipc.clearLocalUsageCache();
+      if (result.success) {
+        alert("缓存清除成功，已重新扫描用量数据。");
+      } else {
+        alert(`清除失败：${result.error || "未知错误"}`);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`清除失败：${msg}`);
+    } finally {
+      setClearingCache(false);
+    }
   };
 
   return (
@@ -354,6 +377,40 @@ export function SettingsPage() {
 
         {/* 诊断日志 */}
         <DiagnosticsCard />
+
+        {/* 本地用量缓存清理 */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-display text-lg font-medium">本地用量缓存</CardTitle>
+            <CardDescription>
+              清除缓存后会重新扫描所有 agent 会话记录。如果发现统计数据异常，可以尝试清除缓存。
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleClearCache}
+              disabled={clearingCache}
+              className="gap-1.5"
+            >
+              {clearingCache ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  清除中...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="size-3.5" />
+                  清除缓存并重新扫描
+                </>
+              )}
+            </Button>
+            <p className="mt-3 text-xs text-muted-foreground">
+              注意：此操作会清空所有历史统计记录，重新扫描可能需要几秒到几分钟（取决于会话文件数量）。
+            </p>
+          </CardContent>
+        </Card>
 
         {/* 模型价格表入口卡片 */}
         <Link to="/settings/pricing" className="block">

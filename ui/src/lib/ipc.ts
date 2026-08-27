@@ -53,6 +53,7 @@ export const ipc = {
   scanLocalUsage: (since?: string) => window.tokenLens.scanLocalUsage(since),
   listLocalDaily: (since?: string, until?: string) =>
     window.tokenLens.listLocalDaily(since, until),
+  clearLocalUsageCache: () => window.tokenLens.clearLocalUsageCache(),
   loginVolcengine: () => window.tokenLens.loginVolcengine(),
   loginScnet: () => window.tokenLens.loginScnet(),
   testProxy: (override?: {

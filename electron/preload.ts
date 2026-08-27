@@ -77,6 +77,11 @@ const api = {
     ipcRenderer.invoke("local-daily:list", since, until) as Promise<
       LocalDailyUsageRecord[]
     >,
+  clearLocalUsageCache: () =>
+    ipcRenderer.invoke("local-usage:clear-cache") as Promise<{
+      success: boolean;
+      error?: string;
+    }>,
   loginVolcengine: () =>
     ipcRenderer.invoke("auth:volcengine-login") as Promise<{
       cookie: string;

@@ -40,6 +40,10 @@ import {
   logError,
   write as writeLog,
 } from "./lib/logger";
+import {
+  clearUsageScanCache,
+  clearLocalDailyUsage,
+} from "./local-usage/clear-cache";
 import type { BalanceResult, BalanceSnapshot, ServiceRecord } from "./types";
 
 
@@ -215,5 +219,20 @@ export function registerIpc(): void {
     // 限长，避免超大堆栈把日志文件塞满
     writeLog("error", "renderer", message.slice(0, 4000));
     return true;
+  });
+
+  // 本地用量缓存清理（统计逻辑修复后需要重新统计）
+  ipcMain.handle("local-usage:clear-cache", async () => {
+    try {
+      clearUsageScanCache();
+      clearLocalDailyUsage();
+      // 清除后立即重新扫描
+      await scanAndPersistLocalUsage();
+      return { success: true };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      logError("ipc", `清除用量缓存失败: ${msg}`);
+      return { success: false, error: msg };
+    }
   });
 }

@@ -107,9 +107,12 @@ function addDelta(
 
 /**
  * 对 session 内 total_token_usage 采样序列做差分，按结束采样点日期落桶。
- * samples 按 ts 升序；首个采样点基线为 0（其值即从 session 起点到该点增量）。
+ * samples 按 ts 升序；**只计算相邻采样点的差分，跳过首个点**（避免将累计值误作增量）。
  * 累计值非单调时 diff 取 max(0, ...) 兜底，避免负数。
  * since 行级过滤：结束采样点 ts < since 的增量跳过（但 prev 仍前进，保持累计基线）。
+ *
+ * 修复说明：原逻辑将首个采样点的值当作增量，但会话重启或恢复检查点时该值可能
+ * 是累计值，导致重复计算。修正为只累加相邻点的差值，首个点作为基线不计入。
  *
  * 注：跨日 diff 归到结束采样点日期，是 session 内最大精度；按时间比例拆分到两天属
  * 过度工程，且 Codex 单次会话通常不跨日，此近似可接受。
@@ -124,21 +127,20 @@ function diffSamples(
   const sorted = [...samples].sort((a, b) => a.ts.localeCompare(b.ts));
   let prev: CodexSample | null = null;
   for (const s of sorted) {
-    const delta = prev
-      ? {
-          input: Math.max(0, s.input - prev.input),
-          cached: Math.max(0, s.cached - prev.cached),
-          cacheWrite: Math.max(0, s.cacheWrite - prev.cacheWrite),
-          output: Math.max(0, s.output - prev.output),
-          reasoning: Math.max(0, s.reasoning - prev.reasoning),
-        }
-      : {
-          input: s.input,
-          cached: s.cached,
-          cacheWrite: s.cacheWrite,
-          output: s.output,
-          reasoning: s.reasoning,
-        };
+    // 首个采样点作为基线，不计入统计（避免累计值被误作增量）
+    if (prev === null) {
+      prev = s;
+      continue;
+    }
+
+    const delta = {
+      input: Math.max(0, s.input - prev.input),
+      cached: Math.max(0, s.cached - prev.cached),
+      cacheWrite: Math.max(0, s.cacheWrite - prev.cacheWrite),
+      output: Math.max(0, s.output - prev.output),
+      reasoning: Math.max(0, s.reasoning - prev.reasoning),
+    };
+
     // since 行级过滤：该增量段结束于 since 前则跳过（prev 仍前进保持累计基线）
     if (since && s.ts < since) {
       prev = s;
