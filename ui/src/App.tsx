@@ -7,6 +7,7 @@ import { Trends } from "@/pages/Trends";
 import { Services } from "@/pages/Services";
 import { SettingsPage } from "@/pages/Settings";
 import { PricingPage } from "@/pages/Pricing";
+import { PetPage } from "@/pages/Pet";
 
 /** 按路由 key 重挂载内容区，触发 page-fade 淡入动画 */
 function AnimatedRoutes() {
@@ -25,16 +26,26 @@ function AnimatedRoutes() {
   );
 }
 
+function AppShell() {
+  const location = useLocation();
+  if (location.pathname === "/pet") {
+    return <PetPage />;
+  }
+  return (
+    <div className="flex h-full">
+      <BackgroundLayer />
+      <Sidebar />
+      <main className="relative z-10 flex-1 overflow-auto">
+        <AnimatedRoutes />
+      </main>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <HashRouter>
-      <div className="flex h-full">
-        <BackgroundLayer />
-        <Sidebar />
-        <main className="relative z-10 flex-1 overflow-auto">
-          <AnimatedRoutes />
-        </main>
-      </div>
+      <AppShell />
     </HashRouter>
   );
 }

@@ -35,6 +35,7 @@ interface AppState {
   proxyCustomUrl: string;
   proxyBypassRules: string;
   requestTimeout: string;
+  petEnabled: boolean;
   proxyTesting: boolean;
   proxyTestResult: ProxyTestResult | null;
   usageRecords: UsageRecord[];
@@ -58,6 +59,7 @@ interface AppState {
   saveProxyCustomUrl: (url: string) => Promise<void>;
   saveProxyBypassRules: (rules: string) => Promise<void>;
   saveRequestTimeout: (sec: string) => Promise<void>;
+  savePetEnabled: (on: boolean) => Promise<void>;
   testProxy: (override?: {
     mode?: string;
     customUrl?: string;
@@ -91,6 +93,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   proxyCustomUrl: "",
   proxyBypassRules: DEFAULT_BYPASS,
   requestTimeout: "15",
+  petEnabled: false,
   proxyTesting: false,
   proxyTestResult: null,
   usageRecords: [],
@@ -110,6 +113,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       proxyCustomUrl,
       proxyBypassRules,
       requestTimeout,
+      petEnabled,
     ] = await Promise.all([
       ipc.listDefinitions(),
       ipc.listServices(),
@@ -118,6 +122,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       ipc.getSetting("proxyCustomUrl"),
       ipc.getSetting("proxyBypassRules"),
       ipc.getSetting("requestTimeout"),
+      ipc.getPetEnabled(),
     ]);
     set({
       definitions,
@@ -127,6 +132,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       proxyCustomUrl: proxyCustomUrl ?? "",
       proxyBypassRules: proxyBypassRules ?? DEFAULT_BYPASS,
       requestTimeout: requestTimeout ?? "15",
+      petEnabled,
       loaded: true,
     });
 
@@ -233,6 +239,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   saveRequestTimeout: async (sec) => {
     await ipc.setSetting("requestTimeout", sec);
     set({ requestTimeout: sec });
+  },
+
+  savePetEnabled: async (on) => {
+    await ipc.setPetEnabled(on);
+    set({ petEnabled: on });
   },
 
   testProxy: async (override) => {

@@ -7,6 +7,7 @@ import { setMainWindow, startScheduler } from "./scheduler";
 import { buildCsp, safeOpenExternal, applySessionProxy } from "./lib/http";
 import { initLogger, logError, logWarn } from "./lib/logger";
 import { redactUrl } from "./lib/redact";
+import { closePetWindow, openPetIfEnabled, preparePetQuit } from "./pet/window";
 
 let win: BrowserWindow | null = null;
 
@@ -77,6 +78,8 @@ function createWindow() {
     win?.focus();
   });
   win.on("closed", () => {
+    preparePetQuit();
+    closePetWindow();
     win = null;
     setMainWindow(null);
   });
@@ -136,14 +139,22 @@ if (!gotLock) {
     registerIpc();
     createWindow();
     startScheduler();
+    openPetIfEnabled();
 
   });
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();
   });
   // 防抖持久化的数据在退出前落盘，避免丢最后一笔快照/设置
-  app.on("before-quit", () => flushDb());
+  app.on("before-quit", () => {
+    preparePetQuit();
+    closePetWindow();
+    flushDb();
+  });
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+      openPetIfEnabled();
+    }
   });
 }

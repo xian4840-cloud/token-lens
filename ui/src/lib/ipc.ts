@@ -14,6 +14,8 @@ import type {
   ProxyMode,
   ProxyTestResult,
   ProxyTestTargetResult,
+  PetActivity,
+  PetSpendSummary,
 } from "@/types";
 
 
@@ -61,6 +63,18 @@ export const ipc = {
     customUrl?: string;
     bypassRules?: string;
   }) => window.tokenLens.testProxy(override),
+
+  getPetEnabled: () => window.tokenLens.getPetEnabled(),
+  setPetEnabled: (enabled: boolean) => window.tokenLens.setPetEnabled(enabled),
+  petTodaySpend: () => window.tokenLens.petTodaySpend(),
+  getPetActivity: () => window.tokenLens.getPetActivity(),
+  petDragStart: () => window.tokenLens.petDragStart(),
+  petDragMove: () => window.tokenLens.petDragMove(),
+  petDragEnd: () => window.tokenLens.petDragEnd(),
+  onPetActivity: (cb: (activity: PetActivity) => void) =>
+    window.tokenLens.onPetActivity(cb),
+  onPetSpendUpdated: (cb: (summary: PetSpendSummary) => void) =>
+    window.tokenLens.onPetSpendUpdated(cb),
 };
 
 export type {

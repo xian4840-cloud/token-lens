@@ -150,3 +150,70 @@
     background: transparent;
   }
 }
+
+/* 宠物窗口：必须透明，否则无边框窗口会铺一层奶油底挡住桌面 */
+html.pet-window,
+html.pet-window body,
+html.pet-window #root {
+  background: transparent !important;
+  background-color: transparent !important;
+  overflow: hidden;
+}
+
+@keyframes pet-idle-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+@keyframes pet-work-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1.5deg);
+  }
+  50% {
+    transform: translateY(-9px) rotate(1.5deg);
+  }
+}
+.pet-bob-idle {
+  animation: pet-idle-bob 2.6s ease-in-out infinite;
+}
+.pet-bob-work {
+  animation: pet-work-bob 0.55s ease-in-out infinite;
+}
+@keyframes pet-hop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-18px);
+  }
+  70% {
+    transform: translateY(-4px);
+  }
+}
+@keyframes pet-tilt {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  40% {
+    transform: rotate(-8deg);
+  }
+  70% {
+    transform: rotate(6deg);
+  }
+}
+.pet-act-hop {
+  animation: pet-hop 0.7s ease-in-out;
+}
+.pet-act-look {
+  animation: pet-tilt 1.1s ease-in-out;
+}
+.pet-act-wave {
+  animation: pet-idle-bob 0.8s ease-in-out;
+}

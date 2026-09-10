@@ -189,6 +189,30 @@ export interface LocalDailyUsageRecord {
   scannedAt: string;
 }
 
+export type PetActivityStatus = "idle" | "working";
+
+export interface PetActivity {
+  status: PetActivityStatus;
+  source?: LocalSource;
+}
+
+export interface PetSourceSpend {
+  source: LocalSource;
+  label: string;
+  cost: number | null;
+  tokens: number;
+  unpriced: boolean;
+}
+
+export interface PetSpendSummary {
+  date: string;
+  cost: number | null;
+  currency: string;
+  tokens: number;
+  bySource: PetSourceSpend[];
+  hasUnpriced: boolean;
+}
+
 export interface ScanLocalUsageResult {
   rows: LocalUsageRow[];
   unavailable: { source: LocalSource; reason: string }[];

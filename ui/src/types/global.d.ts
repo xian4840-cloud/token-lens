@@ -4,6 +4,8 @@ import type {
   LocalDailyUsageRecord,
   LogEntry,
   ModelPricing,
+  PetActivity,
+  PetSpendSummary,
   PricingRowDisplay,
   ScanLocalUsageResult,
   ServiceDefinition,
@@ -80,6 +82,15 @@ declare global {
       revealLogFile: () => Promise<boolean>;
       clearLogs: () => Promise<boolean>;
       reportRendererError: (message: string) => Promise<boolean>;
+      getPetEnabled: () => Promise<boolean>;
+      setPetEnabled: (enabled: boolean) => Promise<boolean>;
+      petTodaySpend: () => Promise<PetSpendSummary>;
+      getPetActivity: () => Promise<PetActivity>;
+      petDragStart: () => void;
+      petDragMove: () => void;
+      petDragEnd: () => void;
+      onPetActivity: (cb: (activity: PetActivity) => void) => () => void;
+      onPetSpendUpdated: (cb: (summary: PetSpendSummary) => void) => () => void;
     };
 
   }

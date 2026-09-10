@@ -45,6 +45,7 @@ import {
   clearLocalDailyUsage,
 } from "./local-usage/clear-cache";
 import type { BalanceResult, BalanceSnapshot, ServiceRecord } from "./types";
+import { registerPetIpc } from "./pet/ipc";
 
 
 /** 按服务定义把表单字段拆分为非敏感 config 与敏感 secrets */
@@ -222,6 +223,8 @@ export function registerIpc(): void {
   });
 
   // 本地用量缓存清理（统计逻辑修复后需要重新统计）
+  registerPetIpc();
+
   ipcMain.handle("local-usage:clear-cache", async () => {
     try {
       clearUsageScanCache();

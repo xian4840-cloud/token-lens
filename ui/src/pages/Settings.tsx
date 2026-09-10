@@ -12,6 +12,7 @@ import {
   ChevronUp,
   RotateCw,
   Trash2,
+  PawPrint,
 } from "lucide-react";
 import { DiagnosticsCard } from "@/components/DiagnosticsCard";
 import { PageHeader } from "@/components/PageHeader";
@@ -75,6 +76,8 @@ export function SettingsPage() {
   const saveProxyBypassRules = useAppStore((s) => s.saveProxyBypassRules);
   const saveRequestTimeout = useAppStore((s) => s.saveRequestTimeout);
   const testProxy = useAppStore((s) => s.testProxy);
+  const petEnabled = useAppStore((s) => s.petEnabled);
+  const savePetEnabled = useAppStore((s) => s.savePetEnabled);
 
   const loaded = useAppStore((s) => s.loaded);
   const init = useAppStore((s) => s.init);
@@ -164,6 +167,36 @@ export function SettingsPage() {
                       {o.label}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-display text-lg font-medium flex items-center gap-2">
+              <PawPrint className="size-5 text-primary" />
+              桌面宠物
+            </CardTitle>
+            <CardDescription>
+              开启后桌面上会出现一只可拖动的小雷姆，本地 agent 在干活时她会跟着忙。点击她显示今日本地 agent
+              的花费估算。关闭本应用时宠物一起关掉。
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">显示宠物</span>
+              <Select
+                value={petEnabled ? "1" : "0"}
+                onValueChange={(v) => void savePetEnabled(v === "1")}
+              >
+                <SelectTrigger className="w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">关闭</SelectItem>
+                  <SelectItem value="1">开启</SelectItem>
                 </SelectContent>
               </Select>
             </div>

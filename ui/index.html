@@ -4,6 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Token Lens</title>
+    <style>
+      html.pet-window,
+      html.pet-window body {
+        background: transparent !important;
+      }
+    </style>
+    <script>
+      if (location.hash === "#/pet") {
+        document.documentElement.classList.add("pet-window");
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
