@@ -61,10 +61,14 @@
 - **删掉过时的 `node:sqlite` 类型存根**：`@types/node` 22.20.1 早已自带该模块
   的类型，存根反而把真类型盖住了，还让 `tsconfig.electron.json` 与
   `tsconfig.test.json` 对同一份源码得出不同结论。
-- **补齐测试覆盖**：新增 `db.test.ts`(18)、`local-usage/index.test.ts`(5)、
+- **不再落盘没有数字的余额快照**：快照唯一的消费者是趋势页，而它明确跳过
+  `balance == null` 的点，这类行永远画不出来、只占体积。而三家仅校验 Key 的
+  适配器每次刷新都产生一行空值，按默认间隔与 7 天全量保留算能堆出六千行，
+  而整份 JSON 每落盘一次都要全量重写。`NaN` / `Infinity` 一并挡掉。
+- **补齐测试覆盖**：新增 `db.test.ts`(21)、`local-usage/index.test.ts`(5)、
   `local-usage/persist.test.ts`(3)、`scheduler.test.ts`(3)、`validation.test.ts`(18)、
-  `lib/http.test.ts`(8)、`adapters/anthropic.test.ts`(6)，共 61 例，
-  用例总数 204 → 265。`db.ts` 此前一个测试都没有——用户的全部服务配置、密钥
+  `lib/http.test.ts`(8)、`adapters/anthropic.test.ts`(6)，共 64 例，
+  用例总数 204 → 268。`db.ts` 此前一个测试都没有——用户的全部服务配置、密钥
   密文与历史数据都在它手上，而它因为依赖 Electron 的 `app.getPath` 完全测不了；
   现拆出 `initDbAt(路径)` 使其可用临时文件测试。上述「缺字段」那条正是写完
   测试才暴露出来的。`validation.ts` 是 IPC 信任边界，同样此前零覆盖。
