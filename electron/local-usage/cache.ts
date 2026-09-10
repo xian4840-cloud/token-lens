@@ -122,6 +122,19 @@ function emptyCache(): ScanCacheData {
   };
 }
 
+/**
+ * 丢弃内存中的缓存，下次 getScanCache 会重新读盘。
+ *
+ * 「清除用量缓存」那次操作必须先调这个再删文件。缓存是常驻内存的单例，
+ * 只删文件的话本次会话内扫描照旧命中旧缓存——把各会话文件按旧口径算出的
+ * 聚合原样写回，等于什么都没重算。而这个按钮存在的唯一理由就是
+ * 「统计口径修好了，把历史按新口径重算一遍」，它却要重启应用才生效。
+ */
+export function resetScanCache(): void {
+  cache = null;
+  cachePath = "";
+}
+
 /** 懒加载缓存（首次调用时读盘），之后返回内存中的同一份引用。 */
 export function getScanCache(): ScanCacheData {
   if (cache) return cache;

@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  clearAllLocalDailyUsage,
   flushDb,
   initDbAt,
   deleteServiceRow,
@@ -435,5 +436,46 @@ describe("余额快照的落盘条件", () => {
     const snaps = listBalanceSnapshots();
     expect(snaps).toHaveLength(1);
     expect(snaps[0].id).toBe(1);
+  });
+});
+
+describe("clearAllLocalDailyUsage", () => {
+  beforeEach(() => initDbAt(file));
+
+  it("清空全部来源的桶", () => {
+    upsertLocalDailyUsage([
+      row("codex", "m1", "2026-09-01"),
+      row("opencode", "m2", "2026-09-01"),
+    ]);
+    expect(listLocalDailyUsage()).toHaveLength(2);
+
+    clearAllLocalDailyUsage();
+    flushDb();
+    expect(listLocalDailyUsage()).toEqual([]);
+  });
+
+  it("落盘结果也变空（走内存状态而非直接改写文件）", () => {
+    // 旧实现直接读改写 token-lens-data.json，绕过 db 的内存状态：
+    // 文件被清空了，内存里还是旧的，随后任何一次 persist 都会盖回去
+    upsertLocalDailyUsage([row("codex", "m1", "2026-09-01")]);
+    clearAllLocalDailyUsage();
+    flushDb();
+
+    const raw = JSON.parse(fs.readFileSync(file, "utf8")) as {
+      localDailyUsage: unknown[];
+    };
+    expect(raw.localDailyUsage).toEqual([]);
+  });
+
+  it("不影响设置与服务（只清用量桶）", () => {
+    insertService(service("a"));
+    setSetting("refreshInterval", "15");
+    upsertLocalDailyUsage([row("codex", "m1", "2026-09-01")]);
+
+    clearAllLocalDailyUsage();
+    flushDb();
+
+    expect(listServices().map((s) => s.id)).toEqual(["a"]);
+    expect(getSetting("refreshInterval")).toBe("15");
   });
 });

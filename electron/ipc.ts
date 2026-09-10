@@ -10,6 +10,7 @@ import {
   listBalanceSnapshots,
   listUsageRecords,
   listLocalDailyUsage,
+  clearAllLocalDailyUsage,
   getSetting,
   setSetting,
 } from "./db";
@@ -41,10 +42,7 @@ import {
   logError,
   write as writeLog,
 } from "./lib/logger";
-import {
-  clearUsageScanCache,
-  clearLocalDailyUsage,
-} from "./local-usage/clear-cache";
+import { clearUsageScanCache } from "./local-usage/clear-cache";
 import type { BalanceResult, BalanceSnapshot, ServiceRecord } from "./types";
 import { registerPetIpc } from "./pet/ipc";
 
@@ -235,8 +233,11 @@ export function registerIpc(): void {
   // 本地用量缓存清理（统计逻辑修复后需要重新统计）
   ipcMain.handle("local-usage:clear-cache", async () => {
     try {
+      // 三件事缺一不可：丢内存缓存、删缓存文件、清历史桶。
+      // 前两件在 clearUsageScanCache 里，第三件走 db 的内存状态——
+      // 直接改写数据文件会与内存分叉，随后的 persist 会把清除结果盖回去。
       clearUsageScanCache();
-      clearLocalDailyUsage();
+      clearAllLocalDailyUsage();
       // 清除后立即重新扫描
       await scanAndPersistLocalUsage();
       return { success: true };

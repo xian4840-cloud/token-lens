@@ -430,6 +430,20 @@ export function replaceLocalDailyUsageBySource(
   upsertLocalDailyUsage(rows);
 }
 
+/**
+ * 清空全部本地每日用量桶（设置页「清除用量缓存」用）。
+ *
+ * 必须走这里，不能像原先那样直接读改写 token-lens-data.json：那份数据的权威
+ * 副本是 db 的内存状态，绕过它写盘会让文件与内存各持一份不同内容，之后任何
+ * 一次 persist（防抖 250ms 就会触发）都会把内存里的旧数据盖回去，
+ * 清除结果变成时序抽奖。
+ */
+export function clearAllLocalDailyUsage(): void {
+  if (!data) data = defaultData();
+  data.localDailyUsage = [];
+  persist();
+}
+
 /** 本地日期键 YYYY-MM-DD */
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
