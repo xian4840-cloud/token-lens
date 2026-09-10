@@ -198,6 +198,32 @@ export const scnetTokenPlanAdapter: Adapter = {
       .filter((t): t is string => t != null)
       .sort()[0];
 
+    // 卡片主数字取自 breakdown 的第一条（总览页的约定：第一条当主数字，
+    // 其余进展开面板），而上面的 remaining/total/used 是多套餐的合计。
+    // 多个套餐时若不把合计补成第一条，主数字会变成第一个套餐的余量，
+    // 与趋势页记录的合计对不上。只有一个套餐时合计就是它本身，不必重复。
+    const breakdown =
+      plans.length > 1
+        ? [
+            {
+              label: "合计",
+              used,
+              total,
+              remaining,
+              unit: plans[0].unit,
+              resetAt: expiresAt,
+            },
+            ...plans.map((p) => ({
+              label: p.label,
+              used: p.used,
+              total: p.total,
+              remaining: p.remaining,
+              unit: p.unit,
+              resetAt: p.expiresAt,
+            })),
+          ]
+        : undefined;
+
     return {
       remaining,
       total,
@@ -206,14 +232,7 @@ export const scnetTokenPlanAdapter: Adapter = {
       expiresAt,
       fetchedAt: new Date().toISOString(),
       raw: json,
-      breakdown: plans.map((p) => ({
-        label: p.label,
-        used: p.used,
-        total: p.total,
-        remaining: p.remaining,
-        unit: p.unit,
-        resetAt: p.expiresAt,
-      })),
+      breakdown,
     };
   },
 };

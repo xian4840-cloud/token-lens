@@ -153,6 +153,22 @@ export const volcenginePlanAdapter: Adapter = {
     const used = quota.Percent;
     const remaining = Math.max(0, cap - used);
 
+    // breakdown 的第一条会被总览页当作卡片主数字（展开面板显示其余的），
+    // 所以必须把上面选中的那条排到最前。直接按接口返回顺序排的话，主数字会变成
+    // 返回的第一条——很可能是个 5 小时窗口，而 remaining/total/used 以及趋势页
+    // 记录的却是这里选中的月配额，同一张卡片两个口径。
+    const ordered = [quota, ...quotas.filter((q) => q !== quota)];
+    const breakdown = ordered.map((q) => ({
+      label: LEVEL_LABEL[q.Level] ?? q.Level,
+      used: q.Percent,
+      total: q.Cap,
+      remaining: Math.max(0, (q.Cap ?? 100) - q.Percent),
+      unit: "%",
+      resetAt: q.ResetTimestamp
+        ? new Date(q.ResetTimestamp * 1000).toISOString()
+        : undefined,
+    }));
+
     return {
       remaining,
       total: cap,
@@ -163,16 +179,8 @@ export const volcenginePlanAdapter: Adapter = {
         : undefined,
       fetchedAt: new Date().toISOString(),
       raw: json,
-      breakdown: quotas.map((q) => ({
-        label: LEVEL_LABEL[q.Level] ?? q.Level,
-        used: q.Percent,
-        total: q.Cap,
-        remaining: Math.max(0, (q.Cap ?? 100) - q.Percent),
-        unit: "%",
-        resetAt: q.ResetTimestamp
-          ? new Date(q.ResetTimestamp * 1000).toISOString()
-          : undefined,
-      })),
+      // 只有一条时它就是主数字本身，列出来只会让卡片少掉「已用 X」那行说明
+      breakdown: breakdown.length > 1 ? breakdown : undefined,
     };
   },
 };
