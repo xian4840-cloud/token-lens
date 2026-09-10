@@ -1,18 +1,39 @@
 import type { Adapter, BalanceResult, UsageResult } from "../types";
 import { fetchWithTimeout } from "../lib/http";
+import { toFiniteNumber } from "../lib/amount";
 
 const BASE = "https://api.openai.com/v1/organization";
 
+/**
+ * costs 接口的一个时间桶。
+ *
+ * 结构以官方文档为准（GET /organization/costs）：
+ *   { object: "page",
+ *     data: [ { object: "bucket", start_time, end_time,
+ *               results: [ { object: "organization.costs.result",
+ *                            amount: { value: 0.06, currency: "usd" },
+ *                            line_item, project_id, model } ] } ],
+ *     has_more, next_page }
+ *
+ * 两个容易写错的点：data 是**时间桶数组**（桶内含 results），
+ * 以及金额是嵌套的 amount.value 而不是结果对象上的裸 cost。
+ * 此前按 { data: { data: [...] } } 解析，取到的恒为 undefined，
+ * 经 ?? [] 落成空数组——于是不管实际花了多少，卡片一律显示 $0。
+ */
+interface CostsBucket {
+  results?: Array<{
+    /** 请求带 group_by[]=model 时才有 */
+    model?: string;
+    line_item?: string | null;
+    amount?: { value?: number; currency?: string };
+  }>;
+}
+
 interface CostsResponse {
-  data?: {
-    object: string;
-    data: Array<{
-      object: string;
-      line_item: string;
-      model: string;
-      results: Array<{ name: string; cost: number }>;
-    }>;
-  };
+  object?: string;
+  data?: CostsBucket[];
+  has_more?: boolean;
+  next_page?: string | null;
 }
 
 /** 当前自然月的 unix 起止（秒） */
@@ -52,12 +73,34 @@ async function fetchCosts(
   return (await res.json()) as CostsResponse;
 }
 
+/**
+ * 跨时间桶按模型汇总花费。
+ *
+ * 必须按模型再聚合一次：同一个月内每个模型会出现在多个时间桶里，
+ * 逐桶列出会在用量明细里出现大量同名的重复行。
+ *
+ * data 不是数组时抛可读错误而不是返回 0：返回 0 会让卡片显示
+ * 「本月累计花费 $0.00」——一个用户无从分辨真假的静默错误答案。
+ */
 function sumCosts(json: CostsResponse): { model: string; cost: number }[] {
-  const items = json?.data?.data ?? [];
-  return items.map((it) => ({
-    model: it.model,
-    cost: it.results.reduce((sum, r) => sum + (r?.cost ?? 0), 0),
-  }));
+  const buckets = json?.data;
+  if (!Array.isArray(buckets)) {
+    throw new Error("OpenAI costs 响应缺少 data 数组（接口可能已变更）");
+  }
+
+  const byModel = new Map<string, number>();
+  for (const bucket of buckets) {
+    for (const r of bucket?.results ?? []) {
+      const cost = toFiniteNumber(r?.amount?.value);
+      if (cost == null) continue;
+      const key =
+        typeof r?.model === "string" && r.model.trim()
+          ? r.model
+          : (r?.line_item ?? "未分组");
+      byModel.set(key, (byModel.get(key) ?? 0) + cost);
+    }
+  }
+  return [...byModel.entries()].map(([model, cost]) => ({ model, cost }));
 }
 
 /**
