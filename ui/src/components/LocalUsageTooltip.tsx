@@ -92,10 +92,17 @@ export function LocalUsageTooltip({
         value={formatTokensCn(row.output ?? 0)}
         dot="var(--muted-foreground)"
       />
-      {typeof row.cache === "number" && row.cache > 0 && (
+      {typeof row.cacheRead === "number" && row.cacheRead > 0 && (
         <Row
           label="缓存读"
-          value={formatTokensCn(row.cache)}
+          value={formatTokensCn(row.cacheRead)}
+          dot="var(--muted-foreground)"
+        />
+      )}
+      {typeof row.cacheCreation === "number" && row.cacheCreation > 0 && (
+        <Row
+          label="缓存写"
+          value={formatTokensCn(row.cacheCreation)}
           dot="var(--muted-foreground)"
         />
       )}

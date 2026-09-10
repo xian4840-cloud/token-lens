@@ -28,13 +28,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAppStore } from "@/store/app";
 import { LocalUsageTooltip } from "@/components/LocalUsageTooltip";
-import { visibleTokens } from "@/lib/format";
 import {
   LOCAL_SOURCES as CHART_SOURCES,
   LOCAL_SOURCE_COLORS as CHART_COLORS,
-  type DailyUsageRow,
+  pivotDailyUsage,
 } from "@/lib/local-sources";
-import type { BalanceSnapshot, LocalDailyUsageRecord } from "@/types";
+import type { BalanceSnapshot } from "@/types";
 
 type Range = "7d" | "30d" | "all";
 type Metric = "tokens" | "cost";
@@ -155,50 +154,6 @@ function pivot(
   });
 }
 
-/** 透视本地 agent 每日用量为宽表：[{ date, [source]: metric, input, output, total, models }]，按 source 堆叠 */
-function pivotLocal(
-  records: LocalDailyUsageRecord[],
-  metric: Metric,
-): DailyUsageRow[] {
-  const byDate = new Map<string, DailyUsageRow>();
-  for (const r of records) {
-    const total = visibleTokens(r);
-    const val = metric === "tokens" ? total : r.cost ?? 0;
-    const row =
-      byDate.get(r.date) ?? {
-        date: r.date.length >= 10 ? r.date.slice(5) : r.date,
-      };
-    const cur = (row[r.source] as number | undefined) ?? 0;
-    row[r.source] = cur + val;
-    if (metric === "tokens") {
-      row.input = (row.input ?? 0) + r.inputTokens;
-      row.output =
-        (row.output ?? 0) + r.outputTokens + r.reasoningTokens;
-      row.cache = ((row.cache as number | undefined) ?? 0) + r.cacheReadTokens;
-      row.total = (row.total ?? 0) + total;
-      const models = row.models ?? {};
-      const list = models[r.source] ?? [];
-      const found = list.find((m) => m.model === r.model);
-      if (found) found.tokens += total;
-      else list.push({ model: r.model, tokens: total });
-      models[r.source] = list;
-      row.models = models;
-    }
-    byDate.set(r.date, row);
-  }
-  return [...byDate.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([, v]) => ({
-      ...v,
-      models: Object.fromEntries(
-        Object.entries(v.models ?? {}).map(([source, list]) => [
-          source,
-          [...list].sort((a, b) => b.tokens - a.tokens),
-        ]),
-      ),
-    }));
-}
-
 export function Trends() {
   const services = useAppStore((s) => s.services);
   const snapshots = useAppStore((s) => s.snapshots);
@@ -245,7 +200,7 @@ export function Trends() {
   }, [snapshots, services]);
 
   const localChartData = useMemo(
-    () => pivotLocal(localDailyRecords, metric),
+    () => pivotDailyUsage(localDailyRecords, metric),
     [localDailyRecords, metric],
   );
 

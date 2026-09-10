@@ -78,6 +78,11 @@ export function visibleTokens(r: {
   );
 }
 
+/** 日期键 YYYY-MM-DD -> MM-DD 展示（图表轴与分组标题共用） */
+export function formatDateKey(date: string): string {
+  return date.length >= 10 ? date.slice(5) : date;
+}
+
 /** token 数量简写：1.2K / 3.4M / 5.6B */
 export function formatTokens(n: number | undefined): string {
   if (n == null || Number.isNaN(n)) return "—";

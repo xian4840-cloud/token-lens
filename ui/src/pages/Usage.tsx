@@ -24,14 +24,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bot, Coins, ChevronDown, ChevronRight } from "lucide-react";
 import { useAppStore } from "@/store/app";
 import { LocalUsageTooltip } from "@/components/LocalUsageTooltip";
-import { formatTokensCn, visibleTokens } from "@/lib/format";
+import { formatDateKey, formatTokensCn, visibleTokens } from "@/lib/format";
 import {
   LOCAL_SOURCES as CHART_SOURCES,
   LOCAL_SOURCE_COLORS as CHART_COLORS,
   LOCAL_SOURCE_LABEL as SOURCE_LABEL,
-  type DailyUsageRow,
+  pivotDailyUsage,
 } from "@/lib/local-sources";
-import type { LocalDailyUsageRecord } from "@/types";
 
 type Range = "month" | "7d" | "30d" | "all";
 
@@ -100,11 +99,6 @@ function formatTime(iso: string | undefined): string {
   return `${mm}-${dd} ${hh}:${mi}`;
 }
 
-/** 日期键 YYYY-MM-DD -> MM-DD 展示 */
-function formatDateKey(date: string): string {
-  return date.length >= 10 ? date.slice(5) : date;
-}
-
 /** 当日区间：同日显示 HH:mm~HH:mm */
 function formatDayRange(
   firstAt?: string | null,
@@ -121,43 +115,6 @@ function formatDayRange(
   if (f) return hhmm(f);
   if (l) return hhmm(l);
   return "-";
-}
-
-/** 透视每日用量为 Recharts 宽表：[{ date, [source]: tokens, input, output, total, models }]，按 source 堆叠 */
-function pivotDaily(records: LocalDailyUsageRecord[]): DailyUsageRow[] {
-  const byDate = new Map<string, DailyUsageRow>();
-  for (const r of records) {
-    const total = visibleTokens(r);
-    const row =
-      byDate.get(r.date) ?? { date: formatDateKey(r.date) };
-    const cur = (row[r.source] as number | undefined) ?? 0;
-    row[r.source] = cur + total;
-    row.input = (row.input ?? 0) + r.inputTokens;
-    row.output =
-      (row.output ?? 0) + r.outputTokens + r.reasoningTokens;
-    row.cache = ((row.cache as number | undefined) ?? 0) + r.cacheReadTokens;
-    row.total = (row.total ?? 0) + total;
-    const models = row.models ?? {};
-    const list = models[r.source] ?? [];
-    const found = list.find((m) => m.model === r.model);
-    if (found) found.tokens += total;
-    else list.push({ model: r.model, tokens: total });
-    models[r.source] = list;
-    row.models = models;
-    byDate.set(r.date, row);
-  }
-  // 模型分项按用量降序，最常用的排前面
-  return [...byDate.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([, v]) => ({
-      ...v,
-      models: Object.fromEntries(
-        Object.entries(v.models ?? {}).map(([source, list]) => [
-          source,
-          [...list].sort((a, b) => b.tokens - a.tokens),
-        ]),
-      ),
-    }));
 }
 
 export function Usage() {
@@ -273,7 +230,7 @@ export function Usage() {
     [localRows],
   );
 
-  const dailyChartData = useMemo(() => pivotDaily(localDailyRecords), [localDailyRecords]);
+  const dailyChartData = useMemo(() => pivotDailyUsage(localDailyRecords), [localDailyRecords]);
 
   return (
     <div>
