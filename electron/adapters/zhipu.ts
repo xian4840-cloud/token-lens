@@ -304,17 +304,23 @@ export const zhipuAdapter: Adapter = {
       return fallbackValidateKey(base, apiKey, currency, fetchedAt, cashResult.reason);
     }
 
-    const cnyPacks = packs.filter((p) => p.unit === "CNY" || p.unit === "USD");
-    const otherPacks = packs.filter((p) => p.unit !== "CNY" && p.unit !== "USD" && p.remaining > 0);
-    const cnyPackSum = cnyPacks.reduce((s, p) => s + p.remaining, 0);
+    // 只汇总与本区域记账币种一致的钱包类资源包。
+    // 此前是 `unit === "CNY" || unit === "USD"` 一起加，等于把两种货币求和后
+    // 当作单一币种显示——而 currency 是按区域定的（国内 CNY / 国际 USD），
+    // 混进来的另一种货币既没换算也没标注。宁可少一个数字，也不能给错数字。
+    const walletPacks = packs.filter((p) => p.unit === currency);
+    const otherPacks = packs.filter(
+      (p) => p.unit !== currency && p.remaining > 0,
+    );
+    const walletPackSum = walletPacks.reduce((s, p) => s + p.remaining, 0);
     const remaining = pickZhipuWallet(
       cash?.available,
-      cnyPackSum,
-      cnyPacks.length > 0,
+      walletPackSum,
+      walletPacks.length > 0,
     );
 
     const parts: BreakdownItem[] = [];
-    for (const p of cnyPacks) {
+    for (const p of walletPacks) {
       if (p.label === "通用" || p.label === "资源包") continue;
       parts.push({ label: p.label, remaining: p.remaining, unit: p.unit });
     }
