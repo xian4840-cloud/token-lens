@@ -288,9 +288,10 @@ export async function scanAntigravity(since?: string): Promise<AntigravityResult
     }
     let rows: StepRow[];
     try {
+      // 同 opencode.ts：all() 返回 Record<string, SQLOutputValue>[]，按查询列断言形状
       rows = db
         .prepare("SELECT step_type, metadata FROM steps WHERE step_type = ?")
-        .all(STEP_TYPE_MODEL_RESPONSE) as StepRow[];
+        .all(STEP_TYPE_MODEL_RESPONSE) as unknown as StepRow[];
     } catch (e) {
       // 表结构异常（损坏/新版 schema 变更），跳过该会话
       dbOpenFailures += 1;

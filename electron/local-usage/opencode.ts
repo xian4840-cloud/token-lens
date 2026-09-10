@@ -78,11 +78,13 @@ export async function scanOpenCode(since?: string): Promise<OpenCodeResult> {
 
   let rows: SessionRow[];
   try {
+    // all() 的返回类型是 Record<string, SQLOutputValue>[]，这里按查询列的形状断言。
+    // 必须经 unknown 中转：两者没有足够的重叠，直接 as 会被 TS 判为笔误。
     rows = db
       .prepare(
         "SELECT model, cost, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write, time_created FROM session",
       )
-      .all() as SessionRow[];
+      .all() as unknown as SessionRow[];
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     db.close();
