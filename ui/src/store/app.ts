@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { ipc } from "@/lib/ipc";
+import { DEFAULT_BYPASS_RULES as DEFAULT_BYPASS } from "@/lib/proxy";
 import type {
   BalanceResult,
   BalanceSnapshot,
@@ -18,9 +19,6 @@ import type {
 
 /** 防止自动刷新监听重复注册（React StrictMode / 多页 init） */
 let balanceListenerRegistered = false;
-
-const DEFAULT_BYPASS =
-  "<local>,*.cn,*.aliyuncs.com,*.volcengineapi.com,*.volcengine.com,*.moonshot.cn,*.minimax.chat,*.minimaxi.com,*.xiaomimimo.com,*.scnet.cn,*.siliconflow.cn";
 
 interface AppState {
   definitions: ServiceDefinition[];

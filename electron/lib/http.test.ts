@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_BYPASS_RULES, shouldBypassProxy } from "./http";
+import { DEFAULT_BYPASS_RULES as UI_DEFAULT_BYPASS_RULES } from "../../ui/src/lib/proxy";
 
 /**
  * 代理直连旁路规则。
@@ -64,5 +65,20 @@ describe("shouldBypassProxy", () => {
   it("默认规则本身包含本机与国内域名", () => {
     expect(DEFAULT_BYPASS_RULES).toContain("<local>");
     expect(DEFAULT_BYPASS_RULES).toContain("*.cn");
+  });
+});
+
+describe("默认规则的跨进程一致性", () => {
+  it("主进程实际生效的那份与界面展示的那份是同一套（回归）", () => {
+    // 用户没设置过时，设置页显示界面侧的那份，而应用按主进程侧的那份分流。
+    // 两份一旦不同，用户看到的就是一套不生效的规则，且无从察觉。
+    expect(UI_DEFAULT_BYPASS_RULES).toBe(DEFAULT_BYPASS_RULES);
+  });
+
+  it("两份都不能为空且都要覆盖本机直连", () => {
+    for (const rules of [DEFAULT_BYPASS_RULES, UI_DEFAULT_BYPASS_RULES]) {
+      expect(rules.trim()).not.toBe("");
+      expect(rules).toContain("<local>");
+    }
   });
 });
