@@ -11,6 +11,7 @@ import type {
 } from "./types";
 import type { LocalSource, LocalUsageRow } from "./local-usage/types";
 import { toDateKey } from "./local-usage/date";
+import { logWarn } from "./lib/logger";
 
 /**
  * 基于 JSON 文件的数据存储（无需 native 依赖）。
@@ -129,17 +130,48 @@ function compactData(): void {
   }
 }
 
+/**
+ * 读取数据文件；文件存在但不可用时，先改名留档再以空数据启动。
+ *
+ * 直接 `data = defaultData()` 的代价是用户全部服务配置与已加密的密钥静默消失，
+ * 而且下一次落盘就把坏文件覆盖掉，连人工抢救的机会都没有。改名留档之后，
+ * 至少还留着一份原始文件，用户拿着它有机会把密钥捞回来。
+ *
+ * 结构不全也算不可用：services 是所有读写的前提，缺了它应用会在第一次
+ * listServices 就抛异常，表现成窗口打开即报错。
+ */
+function loadDataFile(): StoreData {
+  if (!fs.existsSync(filePath)) return defaultData();
+
+  let reason = "";
+  try {
+    const parsed = JSON.parse(
+      fs.readFileSync(filePath, "utf8"),
+    ) as Partial<StoreData>;
+    if (parsed && typeof parsed === "object" && Array.isArray(parsed.services)) {
+      return parsed as StoreData;
+    }
+    reason = "结构不符（services 不是数组）";
+  } catch (e) {
+    reason = e instanceof Error ? e.message : String(e);
+  }
+
+  const backup = `${filePath}.corrupt-${new Date()
+    .toISOString()
+    .replace(/[:.]/g, "-")}`;
+  try {
+    fs.renameSync(filePath, backup);
+    logWarn("db", `数据文件不可用（${reason}），已留档到 ${backup}，以空数据启动`);
+  } catch (e) {
+    // 留档失败也必须能启动：一个坏文件不该把应用卡在启动阶段
+    logWarn("db", `数据文件不可用（${reason}）且留档失败，以空数据启动: ${String(e)}`);
+  }
+  return defaultData();
+}
+
 export function initDb(): void {
   filePath = path.join(app.getPath("userData"), "token-lens-data.json");
-  if (fs.existsSync(filePath)) {
-    try {
-      data = JSON.parse(fs.readFileSync(filePath, "utf8")) as StoreData;
-    } catch {
-      data = defaultData();
-    }
-  } else {
-    data = defaultData();
-  }
+  data = loadDataFile();
   // 兼容旧数据文件：缺 localDailyUsage 字段时补默认
   if (!data.localDailyUsage) data.localDailyUsage = [];
   if (!data.counters) data.counters = { balanceSnapshot: 0, usageRecord: 0, localDailyUsage: 0 };
@@ -354,14 +386,29 @@ export function replaceLocalDailyUsageBySource(
   upsertLocalDailyUsage(rows);
 }
 
+/** 本地日期键 YYYY-MM-DD */
+const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * 把范围参数归一成本地日期键。
+ *
+ * 已经是日期键的原样返回：toDateKey 走 `new Date("YYYY-MM-DD")`，那是按 UTC 零点
+ * 解析的，在 UTC 以西的时区取本地年月日会退回前一天，范围查询就会少一天。
+ * 注释一直写着「支持 ISO 或 dateKey」，但实现只对 ISO 成立。
+ */
+function toRangeKey(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  return DATE_KEY_RE.test(value) ? value : toDateKey(value);
+}
+
 /** 查询本地 agent 每日用量（按 date 范围；since/until 支持 ISO 或 dateKey） */
 export function listLocalDailyUsage(
   since?: string,
   until?: string,
 ): LocalDailyUsageRecord[] {
-  // since/until 是 UTC ISO，需转本地日期键与 r.date（本地键）一致，避免边界多一天
-  const sinceKey = since ? toDateKey(since) : undefined;
-  const untilKey = until ? toDateKey(until) : undefined;
+  // r.date 是本地日期键，故范围也要转成本地日期键，避免边界多一天
+  const sinceKey = toRangeKey(since);
+  const untilKey = toRangeKey(until);
   return data.localDailyUsage.filter((r) => {
     if (sinceKey && r.date < sinceKey) return false;
     if (untilKey && r.date > untilKey) return false;

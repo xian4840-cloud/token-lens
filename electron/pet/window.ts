@@ -39,7 +39,9 @@ export function sendToPet(channel: string, payload: unknown): void {
 
 export function currentSpendSummary(): PetSpendSummary {
   const date = toDateKey(Date.now()) ?? "";
-  return summarizeLocalSpend(listLocalDailyUsage(), date);
+  // 只查当天：不带范围会把 365 天的桶全读出来再在内存里筛掉，
+  // 而点击气泡、15 秒节流刷新都会走到这里
+  return summarizeLocalSpend(listLocalDailyUsage(date, date), date);
 }
 
 async function refreshSpendAndPush(): Promise<void> {

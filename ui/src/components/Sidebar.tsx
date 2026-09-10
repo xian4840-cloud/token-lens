@@ -44,7 +44,9 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
-      <div className="px-5 py-4 text-xs text-muted-foreground">v0.1.0</div>
+      <div className="px-5 py-4 text-xs text-muted-foreground">
+        v{__APP_VERSION__}
+      </div>
     </aside>
   );
 }

@@ -222,9 +222,9 @@ export function registerIpc(): void {
     return true;
   });
 
-  // 本地用量缓存清理（统计逻辑修复后需要重新统计）
   registerPetIpc();
 
+  // 本地用量缓存清理（统计逻辑修复后需要重新统计）
   ipcMain.handle("local-usage:clear-cache", async () => {
     try {
       clearUsageScanCache();
