@@ -16,7 +16,7 @@ import {
 } from "./db";
 import { isEncryptionAvailable } from "./secrets";
 import { listDefinitions, getDefinition } from "./adapters";
-import { getPricingTable, parseOverrides } from "./adapters/pricing";
+import { getPricingTable, parseOverrides, pruneDefaultOverrides } from "./adapters/pricing";
 import { scanAndPersistLocalUsage } from "./local-usage";
 import { openVolcengineLogin } from "./auth/volcengine-login";
 import { openScnetLogin } from "./auth/scnet-login";
@@ -188,7 +188,9 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle("pricing:set", (_e, value: unknown) => {
-    const overrides = validatePricingOverrides(value);
+    // 存之前先剔掉与内置值相同的项：设置页会把整张表回传（它展示的是合并后的
+    // 有效值），不剔就等于把内置价表冻在保存当天的数值上
+    const overrides = pruneDefaultOverrides(validatePricingOverrides(value));
     setSetting("pricingOverrides", JSON.stringify(overrides));
     return true;
   });

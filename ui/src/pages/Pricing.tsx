@@ -89,8 +89,9 @@ export function PricingPage() {
               <CardTitle className="font-display text-lg font-medium">价格明细</CardTitle>
               <CardDescription>
                 改完点保存生效。内置价格照各家官方定价页录入，核对日期
-                2026-08-25，此后厂商调价不会自动同步，请以官网为准。
+                2026-09-04，此后厂商调价不会自动同步，请以官网为准。
                 取标准档非折扣价；分档定价（长短上下文、峰谷时段）取常用档。
+                只保存你改动过的行，其余仍跟随版本更新。
               </CardDescription>
             </CardHeader>
             <CardContent>

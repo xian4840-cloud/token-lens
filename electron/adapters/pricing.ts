@@ -101,7 +101,47 @@ export function getPricingTable(
   });
 }
 
-/** 从 setting 原始字符串解析 overrides，容错 */
+/**
+ * 剔除与内置表取值完全相同的覆盖项。
+ *
+ * 设置页保存时会把整张表（81 行）都当作覆盖写回来——它展示的本来就是合并后的
+ * 有效值，无从区分哪几行是用户真改过的。不清理的话，用户只改一个模型的价格，
+ * 其余 80 行也被一并钉死在当天的数值上：此后版本更新内置价表，对这些行永远
+ * 不再生效。而且界面上完全看不出来——合并后的显示值仍然是那些覆盖值——
+ * 也没有「恢复默认」可点，用户没有任何办法退回去。
+ *
+ * 取值确有差异的覆盖一律保留；内置表里查不到的 key（旧版本遗留）也无从比较，
+ * 原样留下。
+ */
+export function pruneDefaultOverrides(
+  overrides: Record<string, Partial<ModelPricing>>,
+): Record<string, Partial<ModelPricing>> {
+  const byKey = new Map(DEFAULT_PRICING.map((r) => [r.key, r]));
+  const out: Record<string, Partial<ModelPricing>> = {};
+  for (const [key, o] of Object.entries(overrides)) {
+    const row = byKey.get(key);
+    if (!row) {
+      out[key] = o;
+      continue;
+    }
+    const same =
+      (o.inputPerM ?? row.inputPerM) === row.inputPerM &&
+      (o.outputPerM ?? row.outputPerM) === row.outputPerM &&
+      (o.cacheReadPerM ?? row.cacheReadPerM ?? 0) === (row.cacheReadPerM ?? 0) &&
+      (o.cacheWritePerM ?? row.cacheWritePerM ?? 0) ===
+        (row.cacheWritePerM ?? 0) &&
+      (o.currency ?? row.currency ?? USD) === (row.currency ?? USD);
+    if (!same) out[key] = o;
+  }
+  return out;
+}
+
+/**
+ * 从 setting 原始字符串解析 overrides，容错。
+ *
+ * 这是唯一把存储字符串变成对象的入口（设置页展示与用量换算都经过它），
+ * 所以冗余项的剔除放在这里做：存量数据也能在下次读取时自愈。
+ */
 export function parseOverrides(
   raw: string | undefined,
 ): Record<string, Partial<ModelPricing>> {
@@ -109,7 +149,9 @@ export function parseOverrides(
   try {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object") {
-      return parsed as Record<string, Partial<ModelPricing>>;
+      return pruneDefaultOverrides(
+        parsed as Record<string, Partial<ModelPricing>>,
+      );
     }
   } catch {
     // 损坏 JSON 忽略，回退默认
