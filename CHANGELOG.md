@@ -104,6 +104,16 @@
   整数都能越界。项目里 5 处各自构造，只有 `antigravity` 一处做了上界检查。症状
   不是时间显示错，是金额明明解析成功了、用户却只看到一句英文报错。现抽出
   `lib/time.ts`，越界一律返回 `undefined`。
+- **OpenAI 卡片不管实际花多少都显示 $0**：`costs` 接口的响应结构搞错了。按官方
+  文档，`data` 是**时间桶数组**、金额在 `results[].amount.value`，而代码读的是
+  `json.data.data` —— 真实响应里它恒为 `undefined`，经 `?? []` 永远落成空数组，
+  `used` 恒为 0。这张卡片从上线起就没显示过真实数字，而「本月累计花费 $0.00」
+  是个用户无从分辨真假的静默错误答案。顺带改为跨时间桶按模型再聚合（否则用量
+  明细会出现大量同名重复行），并在结构不认识时抛可读错误而不是静默返回 0。
+- **OpenRouter 响应结构异常时抛 TypeError 或给出 NaN**：`json.data.total_credits`
+  没有可选链，响应不合预期时用户看到一句「Cannot read properties of undefined」；
+  金额字段缺失或非数字则得到 NaN 并显示成 `-`。现缺 `data` 抛可读错误、金额走
+  `toFiniteNumber`、两个数都在时才推算剩余。
 
 ### 其他
 
