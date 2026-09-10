@@ -285,11 +285,23 @@ export function saveBalanceSnapshot(
   balance: number | undefined,
   currency: string,
 ): void {
+  // 没有数字就不落盘。
+  //
+  // 快照唯一的消费者是趋势页，而它明确跳过 balance == null 的点
+  // （Trends.tsx 的 pivot 里第一句就是 continue）——也就是说这类行永远画不出来，
+  // 只占体积。而它们来得并不少：仅校验 Key 的三家适配器（Gemini / Groq /
+  // Together）每次刷新都走到这里且恒无数字，按默认 5 分钟间隔、7 天全量保留算，
+  // 光它们就能堆出六千行空值，而整份 JSON 每落盘一次都要全量重写。
+  //
+  // NaN 一并挡掉：JSON.stringify(NaN) 会写成 null，落盘等于记了个空值，
+  // 但计数器已经加过，看着像存了其实没存。0 是合法余额，必须放行。
+  if (balance == null || !Number.isFinite(balance)) return;
+
   data.counters.balanceSnapshot += 1;
   data.balanceSnapshots.push({
     id: data.counters.balanceSnapshot,
     serviceId,
-    balance: balance ?? null,
+    balance,
     currency,
     recordedAt: new Date().toISOString(),
   });

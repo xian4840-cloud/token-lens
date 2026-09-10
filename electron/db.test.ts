@@ -404,3 +404,36 @@ describe("设置与落盘", () => {
     expect(after.services).toHaveLength(1);
   });
 });
+
+describe("余额快照的落盘条件", () => {
+  beforeEach(() => initDbAt(file));
+
+  it("没有数字的刷新不落盘（趋势页本来就不画这些点）", () => {
+    // 仅校验 Key 的适配器（Gemini / Groq / Together）每次刷新都走到这里且恒无数字
+    saveBalanceSnapshot("s1", undefined, "USD");
+    saveBalanceSnapshot("s1", Number.NaN, "USD");
+    saveBalanceSnapshot("s1", Number.POSITIVE_INFINITY, "USD");
+    flushDb();
+
+    expect(listBalanceSnapshots()).toHaveLength(0);
+  });
+
+  it("0 是合法余额，必须落盘", () => {
+    saveBalanceSnapshot("s1", 0, "CNY");
+    flushDb();
+
+    const snaps = listBalanceSnapshots();
+    expect(snaps).toHaveLength(1);
+    expect(snaps[0].balance).toBe(0);
+  });
+
+  it("跳过时不消耗计数器，落盘的数字仍然连续", () => {
+    saveBalanceSnapshot("s1", undefined, "USD");
+    saveBalanceSnapshot("s1", 12.5, "USD");
+    flushDb();
+
+    const snaps = listBalanceSnapshots();
+    expect(snaps).toHaveLength(1);
+    expect(snaps[0].id).toBe(1);
+  });
+});
