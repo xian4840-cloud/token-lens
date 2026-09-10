@@ -74,14 +74,16 @@ async function fetchReport(
   return (await res.json()) as UsageReportResponse;
 }
 
-function sumTokens(rows: UsageReportRow[] | undefined): number {
-  return (rows ?? []).reduce(
-    (sum, r) => sum + (r.input_tokens ?? 0) + (r.output_tokens ?? 0),
-    0,
-  );
-}
-
-function groupByModel(rows: UsageReportRow[] | undefined): UsageItem[] {
+/**
+ * 把 usage_reports 的行按模型聚合成用量项。
+ *
+ * 卡片主数字与用量明细都走这一个函数，两处口径不可能再分叉。
+ *
+ * 此前卡片用的是另一个只加 input + output 的 sumTokens，把缓存读写整个漏掉。
+ * 而 Claude Code 的缓存读取常常比输入本身大一个数量级，于是同一份
+ * usage_reports，卡片上的「本月累计 token」会远小于明细页的合计。
+ */
+export function groupByModel(rows: UsageReportRow[] | undefined): UsageItem[] {
   const map = new Map<
     string,
     { input: number; output: number; cacheCreation: number; cacheRead: number }
@@ -148,8 +150,13 @@ export const anthropicAdapter: Adapter = {
     const start = fmtDate(new Date(now.getFullYear(), now.getMonth(), 1));
     const end = fmtDate(now);
     const json = await fetchReport(config, secrets, start, end);
+    // 与用量明细共用同一套聚合（含缓存读写），避免同一份数据在两个页面两个数
+    const used = groupByModel(json.data).reduce(
+      (sum, it) => sum + (it.totalTokens ?? 0),
+      0,
+    );
     return {
-      used: sumTokens(json.data),
+      used,
       currency: "tokens",
       fetchedAt: new Date().toISOString(),
       raw: json,
