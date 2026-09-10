@@ -12,6 +12,8 @@ import { volcengineAdapter } from "./volcengine";
 import { volcenginePlanAdapter } from "./volcengine_plan";
 import { scnetTokenPlanAdapter } from "./scnet_token_plan";
 import { kimiAdapter } from "./kimi";
+import { zhipuAdapter } from "./zhipu";
+import { zhipuPlanAdapter } from "./zhipu_plan";
 
 /**
  * 适配器注册表。新增服务只需：写一个 adapter 文件 -> 在此 import 并注册。
@@ -50,4 +52,6 @@ export function registerAllAdapters(): void {
   registerAdapter(volcenginePlanAdapter);
   registerAdapter(scnetTokenPlanAdapter);
   registerAdapter(kimiAdapter);
+  registerAdapter(zhipuAdapter);
+  registerAdapter(zhipuPlanAdapter);
 }

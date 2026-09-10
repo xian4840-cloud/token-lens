@@ -110,7 +110,7 @@ export function Dashboard() {
                                 className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                               >
                                 <ChevronDown className={expanded.has(s.id) ? "size-3 rotate-180" : "size-3"} />
-                                {expanded.has(s.id) ? "收起" : "展开周/月"}
+                                {expanded.has(s.id) ? "收起" : "展开明细"}
                               </button>
                             )}
                             <div className="text-xs text-muted-foreground">

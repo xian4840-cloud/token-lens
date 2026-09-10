@@ -34,6 +34,8 @@ export const CSP_CONNECT_DOMAINS: readonly string[] = [
   "console.volcengine.com",
   "api.moonshot.cn",
   "www.scnet.cn",
+  "open.bigmodel.cn",
+  "api.z.ai",
 ];
 
 /** 默认请求超时（ms）。远端未响应则中止，避免调度器卡死。 */
@@ -307,6 +309,7 @@ export const TEST_TARGETS = [
   { name: "Google Gemini", url: "https://generativelanguage.googleapis.com" },
   { name: "DeepSeek", url: "https://api.deepseek.com" },
   { name: "硅基流动 (国内直连)", url: "https://api.siliconflow.cn" },
+  { name: "智谱 GLM (国内直连)", url: "https://open.bigmodel.cn" },
 ];
 
 /** 一键探测网络连通性与响应延迟 */
