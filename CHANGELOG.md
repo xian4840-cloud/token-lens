@@ -46,6 +46,15 @@
 - **刷新间隔为非数值时会退化成 1 毫秒轮询**：`NaN <= 0` 为 false，于是走到
   `setInterval(fn, NaN)`，Node 把非数值延迟当作 1 毫秒——变成每毫秒把所有
   服务商的 API 轮询一遍。设置项就存在用户可以手工编辑的数据文件里。
+- **Anthropic 卡片的本月累计 token 少报九成**：卡片主数字走的是只加
+  `input + output` 的求和，而用量明细的口径还含缓存读写。同一个 `usage_reports`
+  在两个页面给出两个数，而 Claude Code 的缓存读取常比输入本身大一个数量级
+  （实测形状的数据：卡片 2000、明细 31050）。现让卡片直接复用明细的聚合函数，
+  两份实现并存才是这个 bug 的成因。
+- **本机 IPv6 地址不命中代理直连旁路**：`new URL("http://[::1]/").hostname`
+  返回的是带方括号的 `"[::1]"`，而 `<local>` 规则拿它和 `"::1"` 直接相等比较，
+  永远不匹配，环回地址会被推去走代理。实际影响有限（适配器只访问公网域名），
+  但这是路由判定，误判方向是「该直连的走了代理」。
 
 ### 其他
 
@@ -53,11 +62,12 @@
   的类型，存根反而把真类型盖住了，还让 `tsconfig.electron.json` 与
   `tsconfig.test.json` 对同一份源码得出不同结论。
 - **补齐测试覆盖**：新增 `db.test.ts`(18)、`local-usage/index.test.ts`(5)、
-  `local-usage/persist.test.ts`(3)、`scheduler.test.ts`(3)，共 29 例，
-  用例总数 204 → 233。`db.ts` 此前一个测试都没有——用户的全部服务配置、密钥
+  `local-usage/persist.test.ts`(3)、`scheduler.test.ts`(3)、`validation.test.ts`(18)、
+  `lib/http.test.ts`(8)、`adapters/anthropic.test.ts`(6)，共 61 例，
+  用例总数 204 → 265。`db.ts` 此前一个测试都没有——用户的全部服务配置、密钥
   密文与历史数据都在它手上，而它因为依赖 Electron 的 `app.getPath` 完全测不了；
   现拆出 `initDbAt(路径)` 使其可用临时文件测试。上述「缺字段」那条正是写完
-  测试才暴露出来的。
+  测试才暴露出来的。`validation.ts` 是 IPC 信任边界，同样此前零覆盖。
 
 ## 0.1.10（2026-09-09）
 
