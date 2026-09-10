@@ -4,6 +4,7 @@ import readline from "node:readline";
 import { GROK_SESSIONS_DIR } from "./paths";
 import { listJsonlFilesWithStat } from "./files";
 import { toDateKey } from "./date";
+import { secToIso } from "../lib/time";
 import {
   getScanCache,
   isGrokEntryValid,
@@ -82,12 +83,6 @@ function usageParts(u: GrokUsage): {
     cacheRead: u.cachedReadTokens ?? 0,
     reasoning,
   };
-}
-
-/** epoch 秒 -> ISO 字符串；非法值返回 undefined（调用方跳过该行）。 */
-function toIso(sec: number | undefined): string | undefined {
-  if (typeof sec !== "number" || !Number.isFinite(sec) || sec <= 0) return undefined;
-  return new Date(sec * 1000).toISOString();
 }
 
 /** 把一条 turn_completed 的 usage 按 modelUsage 分项累加进聚合。
@@ -257,7 +252,7 @@ export async function scanGrokBuild(since?: string): Promise<GrokScanResult> {
       }
       const update = obj.params?.update;
       if (!update || update.sessionUpdate !== "turn_completed") continue;
-      const ts = toIso(obj.timestamp);
+      const ts = secToIso(obj.timestamp);
       if (!ts || !update.usage) continue;
       addTurn(agg, file.path, ts, update.usage, since, newEntry);
     }

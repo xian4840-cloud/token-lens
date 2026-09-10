@@ -1,5 +1,6 @@
 import type { Adapter, BalanceResult } from "../types";
 import { fetchWithTimeout } from "../lib/http";
+import { secToIso } from "../lib/time";
 import { BROWSER_UA } from "../lib/user-agent";
 
 const USAGE_URL =
@@ -163,9 +164,7 @@ export const volcenginePlanAdapter: Adapter = {
       total: q.Cap,
       remaining: Math.max(0, (q.Cap ?? 100) - q.Percent),
       unit: "%",
-      resetAt: q.ResetTimestamp
-        ? new Date(q.ResetTimestamp * 1000).toISOString()
-        : undefined,
+      resetAt: secToIso(q.ResetTimestamp),
     }));
 
     return {
@@ -173,9 +172,7 @@ export const volcenginePlanAdapter: Adapter = {
       total: cap,
       used,
       currency: "%",
-      expiresAt: quota.ResetTimestamp
-        ? new Date(quota.ResetTimestamp * 1000).toISOString()
-        : undefined,
+      expiresAt: secToIso(quota.ResetTimestamp),
       fetchedAt: new Date().toISOString(),
       raw: json,
       // 只有一条时它就是主数字本身，列出来只会让卡片少掉「已用 X」那行说明

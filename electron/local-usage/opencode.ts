@@ -1,5 +1,6 @@
 import { findOpenCodeDb } from "./paths";
 import { toDateKey } from "./date";
+import { msToIso } from "../lib/time";
 import type { LocalUsageRow } from "./types";
 
 interface SessionRow {
@@ -28,12 +29,6 @@ function parseModelId(raw: string | null): string {
   } catch {
     return "unknown";
   }
-}
-
-/** 毫秒时间戳 -> ISO 字符串 */
-function msToIso(ms: number | null): string | undefined {
-  if (ms == null) return undefined;
-  return new Date(ms).toISOString();
 }
 
 /**

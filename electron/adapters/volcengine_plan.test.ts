@@ -55,6 +55,28 @@ describe("火山方舟套餐的卡片主数字", () => {
     expect(bal.breakdown?.[0].label).toBe("月度");
   });
 
+  it("重置时间越界时只丢弃该字段，不抛 RangeError（回归）", async () => {
+    // 脏的重置时间戳（纳秒级、单位写错、损坏的整数）会让
+    // new Date(...).toISOString() 抛 RangeError，把整张卡片带崩——
+    // 而百分比明明解析成功了
+    const quotas = QUOTA.Result.QuotaUsage as { ResetTimestamp: number }[];
+    const original = quotas.map((q) => q.ResetTimestamp);
+    quotas.forEach((q) => (q.ResetTimestamp = 1.7e18));
+    try {
+      const bal = await volcenginePlanAdapter.fetchBalance(
+        { xWebId: "w" },
+        { cookie: "csrfToken=abc" },
+      );
+      expect(bal.expiresAt).toBeUndefined();
+      expect(bal.breakdown?.every((b) => b.resetAt === undefined)).toBe(true);
+      // 关键：用量照常给出
+      expect(bal.used).toBe(60);
+      expect(bal.remaining).toBe(40);
+    } finally {
+      quotas.forEach((q, i) => (q.ResetTimestamp = original[i]));
+    }
+  });
+
   it("其余配额按顺序跟在后面，一条不漏", async () => {
     const bal = await volcenginePlanAdapter.fetchBalance(
       { xWebId: "w" },

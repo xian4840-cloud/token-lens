@@ -1,6 +1,7 @@
 import type { Adapter, BalanceResult } from "../types";
 import { fetchWithTimeout } from "../lib/http";
 import { pickNumber } from "../lib/amount";
+import { epochToIso } from "../lib/time";
 import { BROWSER_UA } from "../lib/user-agent";
 
 const USAGE_URL =
@@ -67,8 +68,10 @@ function pickTime(
   for (const k of keys) {
     const v = obj[k];
     if (typeof v === "number" && v > 0) {
-      const ms = v > 1e12 ? v : v * 1000;
-      return new Date(ms).toISOString();
+      // 走 epochToIso 而不是直接 new Date().toISOString()：越界值（纳秒级
+      // 时间戳、单位写错的数、损坏的整数）会让 toISOString 抛 RangeError，
+      // 一个可选的到期时间字段不该把整张卡片带崩
+      return epochToIso(v);
     }
     if (typeof v === "string" && v.trim() !== "" && /\d/.test(v)) {
       const d = new Date(v);
