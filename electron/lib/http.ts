@@ -119,7 +119,9 @@ function parseBypassRules(rulesStr?: string): string[] {
 export function shouldBypassProxy(targetUrl: string, rulesStr?: string): boolean {
   try {
     const { hostname } = new URL(targetUrl);
-    const host = hostname.toLowerCase();
+    // WHATWG URL 的 hostname 对 IPv6 字面量是带方括号的（"[::1]"），
+    // 不去掉的话下面那串本机判断一个都匹配不上，环回地址会被推去走代理
+    const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
     const rules = parseBypassRules(rulesStr);
 
     for (const rule of rules) {
