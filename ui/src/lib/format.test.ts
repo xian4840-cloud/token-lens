@@ -7,9 +7,24 @@ import {
   formatTokens,
   formatTokensCn,
   usedPercent,
+  visibleTokens,
   // 走 @ alias 而非相对路径：顺带守卫 vitest.config.mts 的 alias 配置，
   // 配错了这里会直接解析失败，而不是等到某个组件测试才暴露
 } from "@/lib/format";
+
+describe("visibleTokens", () => {
+  it("含缓存读取一次，不把缓存再加进 input", () => {
+    expect(
+      visibleTokens({
+        inputTokens: 100,
+        outputTokens: 20,
+        cacheCreationTokens: 3,
+        cacheReadTokens: 4,
+        reasoningTokens: 5,
+      }),
+    ).toBe(132);
+  });
+});
 
 describe("formatTokens", () => {
   it("千以下原样输出", () => {

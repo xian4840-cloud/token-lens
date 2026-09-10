@@ -5,7 +5,7 @@ import { scanAntigravity } from "./antigravity";
 import { scanGrokBuild } from "./grok-build";
 import { persistScanCache } from "./cache";
 import { computeCost, parseOverrides, type TokenUsage } from "../adapters/pricing";
-import { getSetting, upsertLocalDailyUsage } from "../db";
+import { getSetting, replaceLocalDailyUsageBySource } from "../db";
 import type { LocalSource, LocalUsageRow, ScanLocalUsageResult } from "./types";
 
 /**
@@ -136,6 +136,23 @@ export async function scanAndPersistLocalUsage(
   since?: string,
 ): Promise<ScanLocalUsageResult> {
   const result = await scanLocalUsage(since);
-  upsertLocalDailyUsage(result.rows);
+  const grouped = new Map<LocalSource, LocalUsageRow[]>();
+  for (const r of result.rows) {
+    const list = grouped.get(r.source);
+    if (list) list.push(r);
+    else grouped.set(r.source, [r]);
+  }
+  const unavailable = new Set(result.unavailable.map((u) => u.source));
+  const sources: LocalSource[] = [
+    "claude-code",
+    "codex",
+    "opencode",
+    "antigravity",
+    "grok-build",
+  ];
+  for (const source of sources) {
+    if (unavailable.has(source)) continue;
+    replaceLocalDailyUsageBySource(source, grouped.get(source) ?? []);
+  }
   return result;
 }

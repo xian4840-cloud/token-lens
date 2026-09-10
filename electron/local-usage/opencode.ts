@@ -127,10 +127,14 @@ export async function scanOpenCode(since?: string): Promise<OpenCodeResult> {
     };
     cur.sessions += 1;
     cur.input += r.tokens_input ?? 0;
-    cur.output += r.tokens_output ?? 0;
+    const reasoning = r.tokens_reasoning ?? 0;
+    let output = r.tokens_output ?? 0;
+    // 若 output 已含 reasoning（OpenAI 口径），拆开以免 UI 总量双计
+    if (reasoning > 0 && reasoning <= output) output -= reasoning;
+    cur.output += output;
     cur.cacheCreation += r.tokens_cache_write ?? 0;
     cur.cacheRead += r.tokens_cache_read ?? 0;
-    cur.reasoning += r.tokens_reasoning ?? 0;
+    cur.reasoning += reasoning;
     cur.cost += r.cost ?? 0;
     if (iso) {
       if (!cur.firstAt || iso < cur.firstAt) cur.firstAt = iso;

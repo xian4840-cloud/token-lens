@@ -7,7 +7,7 @@ import {
   getScanCache,
   isCodexEntryValid,
   type CodexFileEntry,
-  type CodexSample,
+  type CodexIncrement,
 } from "./cache";
 import type { LocalUsageRow } from "./types";
 
@@ -17,20 +17,90 @@ interface TotalTokenUsage {
   cache_write_input_tokens?: number;
   output_tokens?: number;
   reasoning_output_tokens?: number;
+  total_tokens?: number;
 }
 
 interface CodexLine {
   type?: string;
   timestamp?: string;
   payload?: {
+    type?: string;
     thread_source?: string;
-    info?: { total_token_usage?: TotalTokenUsage };
+    model?: string;
+    info?: {
+      total_token_usage?: TotalTokenUsage;
+      last_token_usage?: TotalTokenUsage;
+    };
+    usage?: TotalTokenUsage;
+    response_id?: string;
   };
 }
 
 interface CodexConfig {
   model?: string;
   subagentModel?: string;
+}
+
+export interface CodexUsage {
+  input: number;
+  cached: number;
+  cacheWrite: number;
+  output: number;
+  reasoning: number;
+}
+
+export type { CodexIncrement };
+
+function readUsage(u: TotalTokenUsage | undefined): CodexUsage | null {
+  if (!u) return null;
+  return {
+    input: u.input_tokens ?? 0,
+    cached: u.cached_input_tokens ?? 0,
+    cacheWrite: u.cache_write_input_tokens ?? 0,
+    output: u.output_tokens ?? 0,
+    reasoning: u.reasoning_output_tokens ?? 0,
+  };
+}
+
+function totalOf(u: TotalTokenUsage): number {
+  if (typeof u.total_tokens === "number" && Number.isFinite(u.total_tokens)) {
+    return u.total_tokens;
+  }
+  return (u.input_tokens ?? 0) + (u.output_tokens ?? 0);
+}
+
+function subtractUsage(cur: CodexUsage, prev: CodexUsage): CodexUsage {
+  return {
+    input: Math.max(0, cur.input - prev.input),
+    cached: Math.max(0, cur.cached - prev.cached),
+    cacheWrite: Math.max(0, cur.cacheWrite - prev.cacheWrite),
+    output: Math.max(0, cur.output - prev.output),
+    reasoning: Math.max(0, cur.reasoning - prev.reasoning),
+  };
+}
+
+function usageNonZero(u: CodexUsage): boolean {
+  return u.input + u.cached + u.cacheWrite + u.output + u.reasoning > 0;
+}
+
+/**
+ * OpenAI 口径：input 含 cache，output 含 reasoning。
+ * 存盘时拆开，UI 的 input+output+cache+reasoning 才能加总而不双计。
+ */
+export function splitCodexUsage(u: CodexUsage): {
+  input: number;
+  output: number;
+  cacheCreation: number;
+  cacheRead: number;
+  reasoning: number;
+} {
+  return {
+    input: Math.max(0, u.input - u.cached),
+    output: Math.max(0, u.output - u.reasoning),
+    cacheCreation: u.cacheWrite,
+    cacheRead: u.cached,
+    reasoning: u.reasoning,
+  };
 }
 
 /** 从 config.toml 读主模型与 subagent 模型（正则，避免依赖 toml 库）。 */
@@ -43,7 +113,6 @@ function readCodexConfig(): CodexConfig {
     return {};
   }
   const cfg: CodexConfig = {};
-  // 顶层 model = "..."（不匹配 default_subagent_model，因正则要求行首 model 紧跟 =）
   const m1 = text.match(/^\s*model\s*=\s*"([^"]+)"/m);
   if (m1) cfg.model = m1[1];
   const m2 = text.match(/default_subagent_model\s*=\s*"([^"]+)"/);
@@ -73,100 +142,161 @@ function freshAgg(): ModelDayAgg {
   };
 }
 
-/**
- * 把一段 diff 增量（相邻 total_token_usage 采样点之差）累加进 (model, date) 桶。
- * date 取结束采样点的本地日期；firstAt/lastAt 用结束采样点时间。
- */
-function addDelta(
+function addIncrement(
   agg: Map<string, ModelDayAgg>,
   model: string,
   filePath: string,
-  endTs: string,
-  delta: {
-    input: number;
-    cached: number;
-    cacheWrite: number;
-    output: number;
-    reasoning: number;
-  },
+  ts: string,
+  usage: CodexUsage,
 ): void {
-  const date = toDateKey(endTs);
+  const date = toDateKey(ts);
   if (!date) return;
+  const split = splitCodexUsage(usage);
+  if (
+    split.input +
+      split.output +
+      split.cacheCreation +
+      split.cacheRead +
+      split.reasoning ===
+    0
+  ) {
+    return;
+  }
   const key = `${model}|${date}`;
   const cur = agg.get(key) ?? freshAgg();
   cur.sessions.add(filePath);
-  cur.input += delta.input;
-  cur.output += delta.output;
-  cur.cacheCreation += delta.cacheWrite;
-  cur.cacheRead += delta.cached;
-  cur.reasoning += delta.reasoning;
-  if (!cur.firstAt || endTs < cur.firstAt) cur.firstAt = endTs;
-  if (!cur.lastAt || endTs > cur.lastAt) cur.lastAt = endTs;
+  cur.input += split.input;
+  cur.output += split.output;
+  cur.cacheCreation += split.cacheCreation;
+  cur.cacheRead += split.cacheRead;
+  cur.reasoning += split.reasoning;
+  if (!cur.firstAt || ts < cur.firstAt) cur.firstAt = ts;
+  if (!cur.lastAt || ts > cur.lastAt) cur.lastAt = ts;
   agg.set(key, cur);
 }
 
 /**
- * 对 session 内 total_token_usage 采样序列做差分，按结束采样点日期落桶。
- * samples 按 ts 升序；**只计算相邻采样点的差分，跳过首个点**（避免将累计值误作增量）。
- * 累计值非单调时 diff 取 max(0, ...) 兜底，避免负数。
- * since 行级过滤：结束采样点 ts < since 的增量跳过（但 prev 仍前进，保持累计基线）。
+ * 从会话事件抽出「每次 API 调用的增量」。
  *
- * 修复说明：原逻辑将首个采样点的值当作增量，但会话重启或恢复检查点时该值可能
- * 是累计值，导致重复计算。修正为只累加相邻点的差值，首个点作为基线不计入。
- *
- * 注：跨日 diff 归到结束采样点日期，是 session 内最大精度；按时间比例拆分到两天属
- * 过度工程，且 Codex 单次会话通常不跨日，此近似可接受。
+ * - 优先 token_usage_record.usage（单次请求增量，用 response_id 去重）
+ * - 否则只认 event_msg / token_count：累计值未前进则跳过（UI 刷新重放），
+ *   回退则重置基线（fork / 子代理回放父会话），前进时用 last_token_usage，
+ *   没有则对累计字段做差。
+ * - 子代理文件的第一条 token_count 是继承的父会话快照，只作基线不计费。
  */
-function diffSamples(
-  agg: Map<string, ModelDayAgg>,
-  model: string,
-  filePath: string,
-  samples: CodexSample[],
-  since?: string,
-): void {
-  const sorted = [...samples].sort((a, b) => a.ts.localeCompare(b.ts));
-  let prev: CodexSample | null = null;
-  for (const s of sorted) {
-    // 首个采样点作为基线，不计入统计（避免累计值被误作增量）
-    if (prev === null) {
-      prev = s;
+export function extractCodexIncrements(events: CodexLine[]): {
+  threadSource?: string;
+  modelHint?: string;
+  increments: CodexIncrement[];
+} {
+  let threadSource: string | undefined;
+  let modelHint: string | undefined;
+  const records: CodexIncrement[] = [];
+  const counts: CodexIncrement[] = [];
+  const seenRecord = new Set<string>();
+
+  let prevTotal: number | null = null;
+  let prevUsage: CodexUsage | null = null;
+  let subagentBaselineTaken = false;
+
+  for (const obj of events) {
+    const p = obj.payload;
+    if (obj.type === "session_meta" && p?.thread_source) {
+      threadSource = p.thread_source;
+    }
+    if (obj.type === "turn_context" && typeof p?.model === "string" && p.model) {
+      modelHint = p.model;
+    }
+
+    if (obj.type === "token_usage_record") {
+      const usage = readUsage(p?.usage);
+      const ts = obj.timestamp;
+      if (!usage || !ts) continue;
+      const responseId = p?.response_id;
+      if (responseId) {
+        if (seenRecord.has(responseId)) continue;
+        seenRecord.add(responseId);
+      }
+      if (!usageNonZero(usage)) continue;
+      records.push({
+        ts,
+        responseId,
+        model: modelHint,
+        input: usage.input,
+        cached: usage.cached,
+        cacheWrite: usage.cacheWrite,
+        output: usage.output,
+        reasoning: usage.reasoning,
+      });
       continue;
     }
 
-    const delta = {
-      input: Math.max(0, s.input - prev.input),
-      cached: Math.max(0, s.cached - prev.cached),
-      cacheWrite: Math.max(0, s.cacheWrite - prev.cacheWrite),
-      output: Math.max(0, s.output - prev.output),
-      reasoning: Math.max(0, s.reasoning - prev.reasoning),
-    };
+    if (obj.type !== "event_msg" || p?.type !== "token_count") continue;
+    const totRaw = p.info?.total_token_usage;
+    if (!totRaw || !obj.timestamp) continue;
+    const tt = totalOf(totRaw);
+    const tot = readUsage(totRaw);
+    const last = readUsage(p.info?.last_token_usage);
 
-    // since 行级过滤：该增量段结束于 since 前则跳过（prev 仍前进保持累计基线）
-    if (since && s.ts < since) {
-      prev = s;
+    if (threadSource === "subagent" && !subagentBaselineTaken) {
+      subagentBaselineTaken = true;
+      prevTotal = tt;
+      prevUsage = tot;
       continue;
     }
-    if (
-      delta.input + delta.cached + delta.cacheWrite + delta.output + delta.reasoning >
-      0
-    ) {
-      addDelta(agg, model, filePath, s.ts, delta);
+
+    if (prevTotal == null) {
+      // 主会话：从 0 起算，第一条 last_token_usage 就是第一轮增量
+      const inc = last ?? tot;
+      if (inc && usageNonZero(inc)) {
+        counts.push({
+          ts: obj.timestamp,
+          model: modelHint,
+          input: inc.input,
+          cached: inc.cached,
+          cacheWrite: inc.cacheWrite,
+          output: inc.output,
+          reasoning: inc.reasoning,
+        });
+      }
+      prevTotal = tt;
+      prevUsage = tot;
+      continue;
     }
-    prev = s;
+
+    if (tt === prevTotal) continue;
+    if (tt < prevTotal) {
+      prevTotal = tt;
+      prevUsage = tot;
+      continue;
+    }
+
+    let inc: CodexUsage | null = last;
+    if (!inc && tot && prevUsage) inc = subtractUsage(tot, prevUsage);
+    if (inc && usageNonZero(inc)) {
+      counts.push({
+        ts: obj.timestamp,
+        model: modelHint,
+        input: inc.input,
+        cached: inc.cached,
+        cacheWrite: inc.cacheWrite,
+        output: inc.output,
+        reasoning: inc.reasoning,
+      });
+    }
+    prevTotal = tt;
+    prevUsage = tot;
   }
+
+  return {
+    threadSource,
+    modelHint,
+    increments: records.length > 0 ? records : counts,
+  };
 }
 
 /**
- * 扫描 Codex 会话记录：收集 session 内 total_token_usage 采样序列，差分按天落桶。
- * 按 session_meta.thread_source 分派主模型（user）与 subagent 模型（subagent）。
- *
- * token 语义：input_tokens 已含 cached_input_tokens（OpenAI 习惯）。
- * **存储时拆分**：inputTokens 存为不含缓存的纯输入，cacheReadTokens 单独存，
- * 避免 UI 显示总量时双重计算（inputTokens + cacheReadTokens 会重复）。
- * cost 换算在 index.ts 中处理，已正确拆分。
- *
- * 性能：mtime 未变的文件走缓存（存采样序列，命中后内存 diff 不重读）；
- * 带 since 时旧文件按 mtime 整体跳过，跨界文件用缓存序列 + since 过滤 diff。
+ * 扫描 Codex 会话。token 语义：input 含 cache、output 含 reasoning，落盘时拆开。
  */
 export async function scanCodex(since?: string): Promise<LocalUsageRow[]> {
   const files = listJsonlFilesWithStat(CODEX_SESSIONS_DIR);
@@ -177,89 +307,75 @@ export async function scanCodex(since?: string): Promise<LocalUsageRow[]> {
   const sinceMs = since ? Date.parse(since) : Number.NaN;
 
   const agg = new Map<string, ModelDayAgg>();
+  const seenResponse = new Set<string>();
 
   for (const file of files) {
-    // A 类：mtime 早于 since（留 60s 临界余量）-> 整文件排除
     if (!Number.isNaN(sinceMs) && file.mtimeMs + 60_000 < sinceMs) continue;
+
+    let increments: CodexIncrement[];
+    let threadSource: string | undefined;
+    let modelHint: string | undefined;
 
     const entry = cache.codex[file.path];
     if (entry && entry.mtimeMs === file.mtimeMs && isCodexEntryValid(entry)) {
-      if (entry.samples.length === 0) continue; // 无 token 记录的文件
-      // 用缓存存的模型（避免 config 变更后重派导致 upsert 双计）；旧缓存无 model 才重派
-      const model =
-        entry.model ??
-        (entry.threadSource === "subagent" ? subModel : mainModel);
-      // B 类：全量扫描，或文件最早采样点已在界内 -> 复用缓存序列内存 diff（不过滤）
-      if (
-        since === undefined ||
-        (entry.firstTs !== undefined && entry.firstTs >= since)
-      ) {
-        diffSamples(agg, model, file.path, entry.samples, undefined);
-        continue;
-      }
-      // C 类：跨界文件，用缓存序列 + since 过滤 diff（无需重读文件）
-      if (entry.firstTs !== undefined && entry.firstTs < since) {
-        diffSamples(agg, model, file.path, entry.samples, since);
-        continue;
-      }
-      // firstTs 缺失（罕见）：落到下方逐行读重扫
-    }
-
-    // 逐行读构建采样序列（无缓存或缓存无效），同时写缓存
-    const samples: CodexSample[] = [];
-    let threadSource: string | undefined;
-    let firstTs: string | undefined;
-    let lastTs: string | undefined;
-    let rl: readline.Interface;
-    try {
-      rl = readline.createInterface({
-        input: fs.createReadStream(file.path, { encoding: "utf8" }),
-        crlfDelay: Infinity,
-      });
-    } catch {
-      continue;
-    }
-    for await (const line of rl) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      let obj: CodexLine;
+      increments = entry.increments;
+      threadSource = entry.threadSource;
+      modelHint = entry.model;
+    } else {
+      const events: CodexLine[] = [];
+      let rl: readline.Interface;
       try {
-        obj = JSON.parse(trimmed) as CodexLine;
+        rl = readline.createInterface({
+          input: fs.createReadStream(file.path, { encoding: "utf8" }),
+          crlfDelay: Infinity,
+        });
       } catch {
         continue;
       }
-      if (obj.timestamp) {
-        if (!firstTs || obj.timestamp < firstTs) firstTs = obj.timestamp;
-        if (!lastTs || obj.timestamp > lastTs) lastTs = obj.timestamp;
+      for await (const line of rl) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          events.push(JSON.parse(trimmed) as CodexLine);
+        } catch {
+          // 坏行跳过
+        }
       }
-      if (obj.type === "session_meta" && obj.payload?.thread_source) {
-        threadSource = obj.payload.thread_source;
-      }
-      const u = obj.payload?.info?.total_token_usage;
-      if (u && obj.timestamp) {
-        samples.push({
-          ts: obj.timestamp,
-          input: u.input_tokens ?? 0,
-          cached: u.cached_input_tokens ?? 0,
-          cacheWrite: u.cache_write_input_tokens ?? 0,
-          output: u.output_tokens ?? 0,
-          reasoning: u.reasoning_output_tokens ?? 0,
-        });
-      }
+      const extracted = extractCodexIncrements(events);
+      increments = extracted.increments;
+      threadSource = extracted.threadSource;
+      modelHint = extracted.modelHint;
+      const firstTs = increments[0]?.ts;
+      const lastTs = increments[increments.length - 1]?.ts;
+      cache.codex[file.path] = {
+        mtimeMs: file.mtimeMs,
+        v: 2,
+        threadSource,
+        model: modelHint,
+        firstTs,
+        lastTs,
+        increments,
+      };
     }
 
-    const model = threadSource === "subagent" ? subModel : mainModel;
-    cache.codex[file.path] = {
-      mtimeMs: file.mtimeMs,
-      threadSource,
-      model,
-      firstTs,
-      lastTs,
-      samples,
-    };
+    const fallbackModel =
+      modelHint ??
+      (threadSource === "subagent" ? subModel : mainModel);
 
-    if (samples.length === 0) continue;
-    diffSamples(agg, model, file.path, samples, since);
+    for (const inc of increments) {
+      if (since && inc.ts < since) continue;
+      if (inc.responseId) {
+        if (seenResponse.has(inc.responseId)) continue;
+        seenResponse.add(inc.responseId);
+      }
+      addIncrement(agg, inc.model ?? fallbackModel, file.path, inc.ts, {
+        input: inc.input,
+        cached: inc.cached,
+        cacheWrite: inc.cacheWrite,
+        output: inc.output,
+        reasoning: inc.reasoning,
+      });
+    }
   }
 
   return Array.from(agg.entries()).map(([key, v]) => {
@@ -269,8 +385,7 @@ export async function scanCodex(since?: string): Promise<LocalUsageRow[]> {
       model,
       date,
       sessions: v.sessions.size,
-      // Codex 的 input 含 cached（OpenAI 语义），拆分避免 UI 显示总量时双计
-      inputTokens: Math.max(0, v.input - v.cacheRead),
+      inputTokens: v.input,
       outputTokens: v.output,
       cacheCreationTokens: v.cacheCreation,
       cacheReadTokens: v.cacheRead,

@@ -34,9 +34,11 @@ export interface ClaudeFileEntry {
   models: Record<string, Record<string, ClaudeModelDayAgg>>;
 }
 
-/** Codex：session 内 total_token_usage 采样点（按 ts 升序存储，命中后 diff） */
-export interface CodexSample {
+/** Codex：单次 API 调用增量（已从累计值/重放里拆出来） */
+export interface CodexIncrement {
   ts: string;
+  responseId?: string;
+  model?: string;
   input: number;
   cached: number;
   cacheWrite: number;
@@ -46,14 +48,14 @@ export interface CodexSample {
 
 export interface CodexFileEntry {
   mtimeMs: number;
+  /** 增量缓存格式标记。缺省或非 2 视为旧的 cumulative samples，强制重扫。 */
+  v?: 2;
   threadSource?: string;
-  /** 扫描时按 threadSource + 当时的 config.toml 派生的模型。缓存命中时直接用，
-   *  避免 config 模型变更后重派导致 upsert 双计（同会话用量被记到新模型 key）。 */
+  /** 扫描时按 turn_context / threadSource 派生的模型。 */
   model?: string;
   firstTs?: string;
   lastTs?: string;
-  /** 文件内所有 total_token_usage 采样点；空数组表示文件无 token 记录 */
-  samples: CodexSample[];
+  increments: CodexIncrement[];
 }
 
 /** Antigravity：某模型某日的全量聚合（缓存用，不做时间过滤） */
@@ -93,7 +95,11 @@ export interface GrokFileEntry {
   models: Record<string, Record<string, GrokModelDayAgg>>;
 }
 
+/** 解析口径变更时 +1，旧缓存整份作废，避免修过的虚高结果继续命中。 */
+const CACHE_FORMAT_VERSION = 2;
+
 interface ScanCacheData {
+  version?: number;
   claude: Record<string, ClaudeFileEntry>;
   codex: Record<string, CodexFileEntry>;
   antigravity: Record<string, AntigravityFileEntry>;
@@ -107,7 +113,13 @@ let cache: ScanCacheData | null = null;
 let cachePath = "";
 
 function emptyCache(): ScanCacheData {
-  return { claude: {}, codex: {}, antigravity: {}, grok: {} };
+  return {
+    version: CACHE_FORMAT_VERSION,
+    claude: {},
+    codex: {},
+    antigravity: {},
+    grok: {},
+  };
 }
 
 /** 懒加载缓存（首次调用时读盘），之后返回内存中的同一份引用。 */
@@ -117,9 +129,12 @@ export function getScanCache(): ScanCacheData {
   try {
     const parsed = JSON.parse(fs.readFileSync(cachePath, "utf8")) as Partial<ScanCacheData>;
     cache =
-      parsed && typeof parsed.claude === "object" && typeof parsed.codex === "object"
+      parsed &&
+      parsed.version === CACHE_FORMAT_VERSION &&
+      typeof parsed.claude === "object" &&
+      typeof parsed.codex === "object"
         ? {
-            // 新增来源段缺失时补空对象，避免升级时整份缓存作废（旧段全量重扫）
+            version: CACHE_FORMAT_VERSION,
             claude: parsed.claude,
             codex: parsed.codex,
             antigravity:
@@ -136,6 +151,7 @@ export function getScanCache(): ScanCacheData {
 /** 扫描结束后落盘。写失败不影响主流程（下次重扫而已）。 */
 export function persistScanCache(): void {
   if (!cache || !cachePath) return;
+  cache.version = CACHE_FORMAT_VERSION;
   for (const key of ["claude", "codex", "antigravity", "grok"] as const) {
     const entries = Object.entries(cache[key]);
     if (entries.length > MAX_ENTRIES_PER_SOURCE) {
@@ -172,9 +188,9 @@ export function isClaudeEntryValid(entry: ClaudeFileEntry): boolean {
   return true;
 }
 
-/** 类型守卫：Codex 缓存条目是否为新版 samples 结构（旧版单值 usage 视为未命中） */
+/** 类型守卫：Codex 缓存须为增量结构（旧版 cumulative samples 视为未命中） */
 export function isCodexEntryValid(entry: CodexFileEntry): boolean {
-  return Array.isArray(entry.samples);
+  return entry.v === 2 && Array.isArray(entry.increments);
 }
 
 /** 类型守卫：Antigravity 缓存条目是否为新版 per-model-per-day 结构 */

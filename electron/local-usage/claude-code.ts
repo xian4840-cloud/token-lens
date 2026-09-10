@@ -22,7 +22,7 @@ interface AssistantUsage {
 interface ClaudeLine {
   type?: string;
   timestamp?: string;
-  message?: { model?: string; usage?: AssistantUsage };
+  message?: { id?: string; model?: string; usage?: AssistantUsage };
 }
 
 interface ModelDayAgg {
@@ -112,6 +112,12 @@ export async function scanClaudeCode(since?: string): Promise<LocalUsageRow[]> {
     } catch {
       continue;
     }
+    // 同一 message.id 会写多次（流式中间态 + 终态）。只留最后一条，否则用量翻倍。
+    const lastByMsg = new Map<
+      string,
+      { model: string; usage: AssistantUsage; ts?: string }
+    >();
+    let anon = 0;
     for await (const line of rl) {
       const trimmed = line.trim();
       if (!trimmed) continue;
@@ -125,7 +131,10 @@ export async function scanClaudeCode(since?: string): Promise<LocalUsageRow[]> {
       const model = obj.message?.model;
       const usage = obj.message?.usage;
       if (!model || !usage) continue;
-      const ts = obj.timestamp;
+      const id = obj.message?.id ?? `__anon_${anon++}`;
+      lastByMsg.set(id, { model, usage, ts: obj.timestamp });
+    }
+    for (const { model, usage, ts } of lastByMsg.values()) {
       const date = toDateKey(ts);
       if (!date) continue;
 

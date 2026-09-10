@@ -83,17 +83,24 @@ export function LocalUsageTooltip({
       ))}
       {sources.length > 0 && <div className="my-1 border-t border-border/60" />}
       <Row
-        label="Input"
+        label="输入"
         value={formatTokensCn(row.input ?? 0)}
         dot="var(--muted-foreground)"
       />
       <Row
-        label="Output"
+        label="输出"
         value={formatTokensCn(row.output ?? 0)}
         dot="var(--muted-foreground)"
       />
+      {typeof row.cache === "number" && row.cache > 0 && (
+        <Row
+          label="缓存读"
+          value={formatTokensCn(row.cache)}
+          dot="var(--muted-foreground)"
+        />
+      )}
       <Row
-        label="总 tokens"
+        label="合计"
         value={formatTokensCn(row.total ?? 0)}
         dot="var(--muted-foreground)"
       />

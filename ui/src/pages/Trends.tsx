@@ -28,6 +28,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAppStore } from "@/store/app";
 import { LocalUsageTooltip } from "@/components/LocalUsageTooltip";
+import { visibleTokens } from "@/lib/format";
 import {
   LOCAL_SOURCES as CHART_SOURCES,
   LOCAL_SOURCE_COLORS as CHART_COLORS,
@@ -161,12 +162,7 @@ function pivotLocal(
 ): DailyUsageRow[] {
   const byDate = new Map<string, DailyUsageRow>();
   for (const r of records) {
-    const total =
-      r.inputTokens +
-      r.outputTokens +
-      r.cacheCreationTokens +
-      r.cacheReadTokens +
-      r.reasoningTokens;
+    const total = visibleTokens(r);
     const val = metric === "tokens" ? total : r.cost ?? 0;
     const row =
       byDate.get(r.date) ?? {
@@ -178,6 +174,7 @@ function pivotLocal(
       row.input = (row.input ?? 0) + r.inputTokens;
       row.output =
         (row.output ?? 0) + r.outputTokens + r.reasoningTokens;
+      row.cache = ((row.cache as number | undefined) ?? 0) + r.cacheReadTokens;
       row.total = (row.total ?? 0) + total;
       const models = row.models ?? {};
       const list = models[r.source] ?? [];

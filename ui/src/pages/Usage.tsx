@@ -24,7 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bot, Coins, ChevronDown, ChevronRight } from "lucide-react";
 import { useAppStore } from "@/store/app";
 import { LocalUsageTooltip } from "@/components/LocalUsageTooltip";
-import { formatTokensCn } from "@/lib/format";
+import { formatTokensCn, visibleTokens } from "@/lib/format";
 import {
   LOCAL_SOURCES as CHART_SOURCES,
   LOCAL_SOURCE_COLORS as CHART_COLORS,
@@ -127,12 +127,7 @@ function formatDayRange(
 function pivotDaily(records: LocalDailyUsageRecord[]): DailyUsageRow[] {
   const byDate = new Map<string, DailyUsageRow>();
   for (const r of records) {
-    const total =
-      r.inputTokens +
-      r.outputTokens +
-      r.cacheCreationTokens +
-      r.cacheReadTokens +
-      r.reasoningTokens;
+    const total = visibleTokens(r);
     const row =
       byDate.get(r.date) ?? { date: formatDateKey(r.date) };
     const cur = (row[r.source] as number | undefined) ?? 0;
@@ -140,6 +135,7 @@ function pivotDaily(records: LocalDailyUsageRecord[]): DailyUsageRow[] {
     row.input = (row.input ?? 0) + r.inputTokens;
     row.output =
       (row.output ?? 0) + r.outputTokens + r.reasoningTokens;
+    row.cache = ((row.cache as number | undefined) ?? 0) + r.cacheReadTokens;
     row.total = (row.total ?? 0) + total;
     const models = row.models ?? {};
     const list = models[r.source] ?? [];
@@ -283,7 +279,7 @@ export function Usage() {
     <div>
       <PageHeader
         title="用量明细"
-        description="跨服务按模型汇总的用量与支出；本地 agent 按天扫描本机使用记录换算"
+        description="跨服务按模型汇总的用量与支出；本地 agent 按天扫描本机使用记录换算。总量含缓存读取，但不把缓存再算进输入。"
       />
 
       <div className="px-8">
@@ -478,7 +474,7 @@ export function Usage() {
                   <Card>
                     <CardContent className="py-4">
                       <div className="mb-3 text-sm font-medium text-muted-foreground">
-                        每日用量（按来源堆叠，tokens）
+                        每日用量（按来源堆叠；输入已拆出缓存，总量含缓存一次）
                       </div>
                       <ResponsiveContainer width="100%" height={240}>
                         <BarChart data={dailyChartData}>
@@ -544,13 +540,7 @@ export function Usage() {
                             {[...groupedByDate.entries()].map(([date, rows]) => {
                               const isExpanded = expandedDates.has(date);
                               const dailyTotal = rows.reduce(
-                                (sum, r) =>
-                                  sum +
-                                  r.inputTokens +
-                                  r.outputTokens +
-                                  r.cacheCreationTokens +
-                                  r.cacheReadTokens +
-                                  r.reasoningTokens,
+                                (sum, r) => sum + visibleTokens(r),
                                 0,
                               );
                               const dailyCost = rows.reduce(
@@ -591,12 +581,7 @@ export function Usage() {
                                   {/* 展开的明细行 */}
                                   {isExpanded &&
                                     rows.map((r) => {
-                                      const total =
-                                        r.inputTokens +
-                                        r.outputTokens +
-                                        r.cacheCreationTokens +
-                                        r.cacheReadTokens +
-                                        r.reasoningTokens;
+                                      const total = visibleTokens(r);
                                       return (
                                         <tr
                                           key={`${r.source}-${r.model}-${r.date}`}
@@ -616,10 +601,12 @@ export function Usage() {
                                             <div className="space-y-0.5">
                                               <div>{formatTokensCn(total)}</div>
                                               <div className="text-[10px] text-muted-foreground">
-                                                In: {formatTokensCn(r.inputTokens)} / Out:{" "}
+                                                输入 {formatTokensCn(r.inputTokens)} / 输出{" "}
                                                 {formatTokensCn(r.outputTokens + r.reasoningTokens)}
                                                 {r.cacheReadTokens > 0 &&
-                                                  ` / Cache: ${formatTokensCn(r.cacheReadTokens)}`}
+                                                  ` / 缓存读 ${formatTokensCn(r.cacheReadTokens)}`}
+                                                {r.cacheCreationTokens > 0 &&
+                                                  ` / 缓存写 ${formatTokensCn(r.cacheCreationTokens)}`}
                                               </div>
                                             </div>
                                           </td>

@@ -33,6 +33,8 @@ export interface DailyUsageRow {
   input?: number;
   /** 当日全部来源合计 output（含推理） */
   output?: number;
+  /** 当日全部来源合计缓存读取 */
+  cache?: number;
   /** 当日全部来源合计总 tokens */
   total?: number;
   /** 各来源当日按模型分项（按用量降序） */

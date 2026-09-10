@@ -57,6 +57,27 @@ export function balanceCaption(b: {
   return "该服务无余额查询 API";
 }
 
+/**
+ * 界面默认的 token 总量（CCSwitch 口径）：
+ * 未缓存输入 + 输出 + 缓存写入 + 缓存读取 + 推理。
+ * 输入在采集时已拆出 cache，这里再加 cacheRead 不会重复计。
+ */
+export function visibleTokens(r: {
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens?: number;
+  cacheReadTokens?: number;
+  reasoningTokens?: number;
+}): number {
+  return (
+    r.inputTokens +
+    r.outputTokens +
+    (r.cacheCreationTokens ?? 0) +
+    (r.cacheReadTokens ?? 0) +
+    (r.reasoningTokens ?? 0)
+  );
+}
+
 /** token 数量简写：1.2K / 3.4M / 5.6B */
 export function formatTokens(n: number | undefined): string {
   if (n == null || Number.isNaN(n)) return "—";

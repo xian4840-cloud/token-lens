@@ -9,7 +9,7 @@ import type {
   UsageItem,
   LocalDailyUsageRecord,
 } from "./types";
-import type { LocalUsageRow } from "./local-usage/types";
+import type { LocalSource, LocalUsageRow } from "./local-usage/types";
 import { toDateKey } from "./local-usage/date";
 
 /**
@@ -339,6 +339,19 @@ export function upsertLocalDailyUsage(rows: LocalUsageRow[]): void {
     }
   }
   persist();
+}
+
+/**
+ * 用一次全量扫描结果替换某来源的全部每日桶。
+ * 只 upsert 会留下「新口径下不再出现的日期」，虚高历史清不掉。
+ */
+export function replaceLocalDailyUsageBySource(
+  source: LocalSource,
+  rows: LocalUsageRow[],
+): void {
+  if (!data) data = defaultData();
+  data.localDailyUsage = data.localDailyUsage.filter((r) => r.source !== source);
+  upsertLocalDailyUsage(rows);
 }
 
 /** 查询本地 agent 每日用量（按 date 范围；since/until 支持 ISO 或 dateKey） */
