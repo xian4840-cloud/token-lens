@@ -6,6 +6,10 @@
  * 只有 x-acs- 前缀头与 host、content-type 参与签名），改动 signing.ts 后请跑此脚本。
  *
  *   npm run build:electron && npm run verify:signing
+ *
+ * 注：同一条向量也已进 electron/adapters/signing.test.ts，npm test 会跑。
+ * 那个测试查源码，这个脚本查构建产物——两者的用途不同，
+ * 但向量值必须一致，改动时两处都要改。
  */
 const { signAcs3 } = require("../electron-dist/adapters/signing.js");
 
