@@ -1,5 +1,6 @@
 import type { Adapter, BalanceResult } from "../types";
 import { fetchWithTimeout } from "../lib/http";
+import { pickNumber } from "../lib/amount";
 
 const BASE = "https://api.moonshot.cn/v1";
 
@@ -8,19 +9,6 @@ interface BalanceResponse {
   data?: Record<string, unknown>;
   available_balance?: number;
   balance?: number;
-}
-
-/** 从对象中按优先级取首个数值字段 */
-function pickNumber(obj: Record<string, unknown>, keys: string[]): number | undefined {
-  for (const k of keys) {
-    const v = obj[k];
-    if (typeof v === "number") return v;
-    if (typeof v === "string") {
-      const n = Number(v);
-      if (!Number.isNaN(n)) return n;
-    }
-  }
-  return undefined;
 }
 
 /**

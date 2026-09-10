@@ -1,5 +1,7 @@
 import { fetchWithTimeout } from "../lib/http";
 
+export { pickNumber } from "../lib/amount";
+
 /** 智谱开放平台业务接口的统一信封 */
 export interface ZhipuEnvelope {
   code?: number | string;
@@ -29,23 +31,6 @@ export function resolveZhipuBase(config: Record<string, unknown>): string {
 
 export function resolveZhipuRegion(config: Record<string, unknown>): ZhipuRegion {
   return resolveZhipuBase(config).includes("z.ai") ? "global" : "cn";
-}
-
-/** 从对象中按优先级取首个有限数字（兼容 number 与数字字符串） */
-export function pickNumber(
-  obj: Record<string, unknown> | undefined,
-  keys: string[],
-): number | undefined {
-  if (!obj) return undefined;
-  for (const k of keys) {
-    const v = obj[k];
-    if (typeof v === "number" && Number.isFinite(v)) return v;
-    if (typeof v === "string" && v.trim() !== "") {
-      const n = Number(v.replace(/,/g, "").trim());
-      if (Number.isFinite(n)) return n;
-    }
-  }
-  return undefined;
 }
 
 /**

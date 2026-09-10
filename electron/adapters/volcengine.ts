@@ -1,5 +1,6 @@
 import type { Adapter, BalanceResult } from "../types";
 import { fetchWithTimeout } from "../lib/http";
+import { toFiniteNumber } from "../lib/amount";
 import {
   signSigV4,
   formatSigV4Date,
@@ -100,9 +101,9 @@ export const volcengineAdapter: Adapter = {
       const e = json.ResponseMetadata.Error;
       throw new Error(`火山引擎 ${e.Code ?? "错误"}: ${e.Message ?? ""}`);
     }
-    const balance = json.Result?.AvailableBalance;
+    const balance = toFiniteNumber(json.Result?.AvailableBalance);
     return {
-      remaining: balance != null ? Number(balance) : undefined,
+      remaining: balance,
       currency: "CNY",
       fetchedAt: new Date().toISOString(),
       raw: json,

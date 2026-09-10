@@ -1,5 +1,6 @@
 import type { Adapter, BalanceResult } from "../types";
 import { fetchWithTimeout } from "../lib/http";
+import { toFiniteNumber } from "../lib/amount";
 import { signAcs3 } from "./signing";
 
 const HOST = "business.aliyuncs.com";
@@ -20,13 +21,6 @@ interface BalanceResponse {
     MybankCreditAmount?: string;
     Currency?: string;
   };
-}
-
-/** 金额字符串转数字。阿里云返回形如 "1,234.56"，需先去掉千分位分隔符 */
-function parseAmount(v: string | undefined): number | undefined {
-  if (v == null) return undefined;
-  const n = Number(String(v).replace(/,/g, "").trim());
-  return Number.isFinite(n) ? n : undefined;
 }
 
 /**
@@ -107,10 +101,11 @@ export const bailianAdapter: Adapter = {
     }
 
     const data = json.Data;
+    // 阿里云返回形如 "1,234.56" 的金额字符串，toFiniteNumber 会去掉千分位
     const remaining =
-      parseAmount(data?.AvailableAmount) ??
-      parseAmount(data?.AvailableCashAmount) ??
-      parseAmount(data?.Balance);
+      toFiniteNumber(data?.AvailableAmount) ??
+      toFiniteNumber(data?.AvailableCashAmount) ??
+      toFiniteNumber(data?.Balance);
 
     return {
       remaining,

@@ -1,5 +1,6 @@
 import type { Adapter, BalanceResult } from "../types";
 import { fetchWithTimeout } from "../lib/http";
+import { toFiniteNumber } from "../lib/amount";
 
 interface DeepSeekBalanceResponse {
   balance_infos: Array<{
@@ -41,7 +42,10 @@ export const deepseekAdapter: Adapter = {
     }
     const json = (await res.json()) as DeepSeekBalanceResponse;
     const info = json.balance_infos?.[0];
-    const total = info ? Number(info.total_balance) : undefined;
+    // 用 toFiniteNumber 而非 Number()：字段缺失时 Number(undefined) 是 NaN，
+    // 会一路带进界面（卡片显示 "-"，副行却写「该服务无余额查询 API」，
+    // 而 DeepSeek 是有余额接口的）。取不到就当没有。
+    const total = toFiniteNumber(info?.total_balance);
     return {
       total,
       remaining: total,

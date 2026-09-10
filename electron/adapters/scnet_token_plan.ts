@@ -1,5 +1,6 @@
 import type { Adapter, BalanceResult } from "../types";
 import { fetchWithTimeout } from "../lib/http";
+import { pickNumber } from "../lib/amount";
 
 const USAGE_URL =
   "https://www.scnet.cn/acx/charge/account/currentuser/tokenplan/list";
@@ -57,22 +58,9 @@ interface ScnetResponse {
   data?: ScnetSubscription[];
 }
 
-/** 按候选字段名取数值（兼容 number 与数字字符串） */
-function pickNumber(
-  obj: { [key: string]: unknown },
-  keys: string[],
-): number | undefined {
-  for (const k of keys) {
-    const v = obj[k];
-    if (typeof v === "number" && !Number.isNaN(v)) return v;
-    if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) {
-      return Number(v);
-    }
-  }
-  return undefined;
-}
-
-/** 按候选字段名取时间，返回 ISO 字符串（兼容毫秒/秒级时间戳与日期字符串） */
+/**
+ * 按候选字段名取时间，返回 ISO 字符串（兼容毫秒/秒级时间戳与日期字符串）
+ */
 function pickTime(
   obj: { [key: string]: unknown },
   keys: string[],
