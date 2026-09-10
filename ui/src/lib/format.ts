@@ -83,6 +83,25 @@ export function formatDateKey(date: string): string {
   return date.length >= 10 ? date.slice(5) : date;
 }
 
+/**
+ * 紧凑数字（图表坐标轴用）：1.23M / 12.3K / 123。
+ *
+ * 用量页与趋势页原本各写了一份完全相同的实现。与 formatTokens 的差别只在
+ * 占位符（图表轴用连字符，金额用破折号）——那是既有的展示约定，不在这里动。
+ *
+ * 用 Math.abs 判断量级，负数才会得到 -1.23M 而不是掉进 String(n)。
+ * 另外补了 NaN 判断：此前 Math.abs(NaN) 一路比较不成立，最终
+ * String(NaN) 把「NaN」直接画到坐标轴上。
+ */
+export function formatCompact(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) return "-";
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  return String(n);
+}
+
 /** token 数量简写：1.2K / 3.4M / 5.6B */
 export function formatTokens(n: number | undefined): string {
   if (n == null || Number.isNaN(n)) return "—";

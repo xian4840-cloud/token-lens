@@ -28,6 +28,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAppStore } from "@/store/app";
 import { LocalUsageTooltip } from "@/components/LocalUsageTooltip";
+import { formatCompact } from "@/lib/format";
 import {
   LOCAL_SOURCES as CHART_SOURCES,
   LOCAL_SOURCE_COLORS as CHART_COLORS,
@@ -75,16 +76,6 @@ const COLORS = [
   "#7a8ba0",
   "#b3a25f",
 ];
-
-/** 紧凑数字（图表 Y 轴用）：1.23M / 12.3K / 123 */
-function formatCompact(n: number | null | undefined): string {
-  if (n == null) return "-";
-  const abs = Math.abs(n);
-  if (abs >= 1e9) return (n / 1e9).toFixed(2) + "B";
-  if (abs >= 1e6) return (n / 1e6).toFixed(2) + "M";
-  if (abs >= 1e3) return (n / 1e3).toFixed(1) + "K";
-  return String(n);
-}
 
 /** X 轴时间标签：按天显示 MM-DD，细粒度显示 MM-DD HH:mm */
 function formatAxisTime(iso: string, byDay: boolean): string {

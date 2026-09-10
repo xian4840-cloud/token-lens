@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   balanceCaption,
   formatBalance,
+  formatCompact,
   formatMoney,
   formatTime,
   formatTokens,
@@ -81,6 +82,27 @@ describe("formatBalance", () => {
   it("缺值返回连字符占位", () => {
     expect(formatBalance(undefined, "USD")).toBe("-");
     expect(formatBalance(Number.NaN, "Credits")).toBe("-");
+  });
+});
+
+describe("formatCompact", () => {
+  it("按量级简写，K 留 1 位、M/B 留 2 位", () => {
+    expect(formatCompact(999)).toBe("999");
+    expect(formatCompact(1_500)).toBe("1.5K");
+    expect(formatCompact(1_234_567)).toBe("1.23M");
+    expect(formatCompact(5_000_000_000)).toBe("5.00B");
+  });
+
+  it("负数按绝对值判断量级（回归）", () => {
+    // 此前用 n >= 1e9 而非 abs 判断，负数会掉到 String(n)，坐标轴上是一串长数字
+    expect(formatCompact(-1_500_000_000)).toBe("-1.50B");
+    expect(formatCompact(-2_500)).toBe("-2.5K");
+  });
+
+  it("缺值与 NaN 都返回占位符，不会把 NaN 画到坐标轴上（回归）", () => {
+    expect(formatCompact(null)).toBe("-");
+    expect(formatCompact(undefined)).toBe("-");
+    expect(formatCompact(Number.NaN)).toBe("-");
   });
 });
 
