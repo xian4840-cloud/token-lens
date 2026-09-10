@@ -264,6 +264,18 @@ export async function applySessionProxy(): Promise<void> {
 }
 
 /**
+ * 解析用户配置的请求超时（ms）。未设置或不可解析时取默认值。
+ *
+ * 抽出来是为了让「真实请求」与「测试连接」用同一个超时：两者若不一致，
+ * 测试的结论就不代表实际行为，而用户正是拿它来判断代理配好没有的。
+ */
+export function resolveRequestTimeoutMs(): number {
+  const s = getSetting("requestTimeout");
+  const n = Number(s);
+  return Number.isFinite(n) && n > 0 ? n * 1000 : DEFAULT_TIMEOUT_MS;
+}
+
+/**
  * 带 AbortController 超时与代理分发的 fetch 包装。
  * 超时则 abort 并抛出「请求超时」错误；若调用方传入 init.signal 则尊重之。
  */
@@ -272,12 +284,7 @@ export async function fetchWithTimeout(
   init: RequestInit = {},
   timeoutMs?: number,
 ): Promise<Response> {
-  const configuredTimeout = (() => {
-    if (timeoutMs != null) return timeoutMs;
-    const s = getSetting("requestTimeout");
-    const n = Number(s);
-    return Number.isFinite(n) && n > 0 ? n * 1000 : DEFAULT_TIMEOUT_MS;
-  })();
+  const configuredTimeout = timeoutMs ?? resolveRequestTimeoutMs();
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), configuredTimeout);
@@ -318,13 +325,22 @@ export const TEST_TARGETS = [
 export async function testNetworkConnectivity(
   override?: ProxyConfigOverride,
 ): Promise<ProxyTestResult> {
+  // 与真实请求用同一个超时。
+  //
+  // 此前这里硬编码 10 秒，而真实请求走的是用户配置值（默认 15 秒，连接超时还有
+  // 20 秒下限）。也就是说测试比实际更严：连接在 12 秒内完成时应用能成功、测试却
+  // 报失败。而国内端点握手慢是已知问题（Kimi 的余额端点实测 3~9 秒），
+  // MIN_CONNECT_TIMEOUT_MS 那个 20 秒下限就是为它加的——「给太短等于把偶发抖动
+  // 直接判成故障」。测试却仍在做这件事，用户拿着它的结论去修一个本来没问题的代理。
+  const timeoutMs = resolveRequestTimeoutMs();
+
   const results = await Promise.all(
     TEST_TARGETS.map(async (target) => {
       const start = Date.now();
       try {
         const dispatcher = await getDispatcherForUrl(target.url, override);
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 10_000);
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
         try {
           const res = await fetch(target.url, {
             method: "GET",
@@ -346,12 +362,20 @@ export async function testNetworkConnectivity(
       } catch (e) {
         const latencyMs = Date.now() - start;
         const msg = e instanceof Error ? e.message : String(e);
+        // 判断中止要看 e.name，不能看 message：AbortController.abort() 让 fetch
+        // 以一个 name 为 "AbortError"、message 为 "This operation was aborted"
+        // 的 DOMException 拒绝，后者并不含 "AbortError" 字样。此前按 message
+        // 判断，这个分支从来没进过，用户在连通性面板上看到的是那句英文原文。
+        const aborted = e instanceof Error && e.name === "AbortError";
         return {
           name: target.name,
           url: target.url,
           ok: false,
           latencyMs,
-          error: msg.includes("AbortError") ? "连接超时 (10s)" : msg,
+          // 报出实际用的秒数，便于用户判断该不该调大超时
+          error: aborted
+            ? `连接超时 (${Math.round(timeoutMs / 1000)}s)`
+            : msg,
         };
       }
     }),

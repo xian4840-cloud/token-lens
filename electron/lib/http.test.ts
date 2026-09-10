@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { DEFAULT_BYPASS_RULES, shouldBypassProxy } from "./http";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  DEFAULT_BYPASS_RULES,
+  DEFAULT_TIMEOUT_MS,
+  resolveRequestTimeoutMs,
+  shouldBypassProxy,
+  testNetworkConnectivity,
+} from "./http";
+import { setSetting, flushDb } from "../db";
 import { DEFAULT_BYPASS_RULES as UI_DEFAULT_BYPASS_RULES } from "../../ui/src/lib/proxy";
 
 /**
@@ -65,6 +72,65 @@ describe("shouldBypassProxy", () => {
   it("默认规则本身包含本机与国内域名", () => {
     expect(DEFAULT_BYPASS_RULES).toContain("<local>");
     expect(DEFAULT_BYPASS_RULES).toContain("*.cn");
+  });
+});
+
+describe("resolveRequestTimeoutMs", () => {
+  afterEach(() => {
+    // 清掉 setSetting 触发的防抖落盘定时器，避免悬挂
+    flushDb();
+  });
+
+  it("未设置时取默认值", () => {
+    setSetting("requestTimeout", "");
+    expect(resolveRequestTimeoutMs()).toBe(DEFAULT_TIMEOUT_MS);
+  });
+
+  it("按用户配置的秒数换算成毫秒", () => {
+    setSetting("requestTimeout", "30");
+    expect(resolveRequestTimeoutMs()).toBe(30_000);
+    setSetting("requestTimeout", "60");
+    expect(resolveRequestTimeoutMs()).toBe(60_000);
+  });
+
+  it("不可解析或非正数时退回默认值，而不是 0 / NaN", () => {
+    // 退回 0 会让 setTimeout 立刻触发，把每次请求都判成超时
+    for (const bad of ["abc", "0", "-5", "  "]) {
+      setSetting("requestTimeout", bad);
+      expect(resolveRequestTimeoutMs(), `输入 ${JSON.stringify(bad)}`).toBe(
+        DEFAULT_TIMEOUT_MS,
+      );
+    }
+  });
+
+  it("与 fetchWithTimeout 用的是同一个解析（同源）", () => {
+    // 抽这个函数出来就是为了让「测试连接」和真实请求共用一个值。
+    // 这里钉住它确实读的是设置项，而不是某个写死的常量。
+    setSetting("requestTimeout", "45");
+    expect(resolveRequestTimeoutMs()).toBe(45_000);
+    expect(resolveRequestTimeoutMs()).not.toBe(10_000);
+  });
+
+  it("连通性测试用配置的超时，而不是写死的 10 秒（回归）", async () => {
+    // 旧实现这里硬编码 10 秒，而真实请求走用户配置值。于是测试比实际更严：
+    // 连接在 12 秒内完成时应用能成功、测试却报失败，用户拿着它的结论去修一个
+    // 本来没问题的代理。国内端点握手慢是已知问题（Kimi 余额端点实测 3~9 秒）。
+    setSetting("requestTimeout", "45");
+    const abortErr = Object.assign(new Error("This operation was aborted"), {
+      name: "AbortError",
+    });
+    const spy = vi.spyOn(globalThis, "fetch").mockRejectedValue(abortErr);
+    try {
+      const res = await testNetworkConnectivity({ mode: "direct" });
+      expect(res.targets.length).toBeGreaterThan(0);
+      for (const t of res.targets) {
+        expect(t.ok).toBe(false);
+        expect(t.error, `${t.name} 报的是写死的那档超时`).toContain("(45s)");
+        expect(t.error).not.toContain("(10s)");
+      }
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
