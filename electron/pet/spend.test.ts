@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { rowTokens, summarizeLocalSpend, type SpendRow } from "./spend";
+import { visibleTokens } from "../../ui/src/lib/format";
 
 function row(partial: Partial<SpendRow> & Pick<SpendRow, "source" | "date">): SpendRow {
   return {
@@ -29,6 +30,29 @@ describe("rowTokens", () => {
         }),
       ),
     ).toBe(132);
+  });
+
+  it("与界面侧的 visibleTokens 逐项相等", () => {
+    // 「token 总量」在项目里有三份实现：界面侧的 visibleTokens、这里的
+    // rowTokens、以及计费侧的 toCostTokens。它们必须给出同一个数——这个模式
+    // 已经咬过一次（OpenCode 拆出 reasoning 后计费侧忘了加回来，导致界面显示
+    // 的总量含推理、费用却不含）。每条跨模块的边界都钉一下，别只靠注释约定。
+    const sample = row({
+      source: "grok-build",
+      date: "2026-09-04",
+      inputTokens: 1_234,
+      outputTokens: 567,
+      cacheCreationTokens: 89,
+      cacheReadTokens: 10_000,
+      reasoningTokens: 321,
+    });
+    expect(rowTokens(sample)).toBe(visibleTokens(sample));
+  });
+
+  it("全零行两边都是 0", () => {
+    const zero = row({ source: "codex", date: "2026-09-04" });
+    expect(rowTokens(zero)).toBe(0);
+    expect(visibleTokens(zero)).toBe(0);
   });
 });
 
