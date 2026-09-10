@@ -30,6 +30,7 @@ import {
 } from "./validation";
 import {
   applySessionProxy,
+  clearProxyAgentCache,
   testNetworkConnectivity,
   type ProxyConfigOverride,
 } from "./lib/http";
@@ -136,6 +137,13 @@ export function registerIpc(): void {
       validKey === "proxyBypassRules"
     ) {
       void applySessionProxy();
+    }
+    if (validKey === "requestTimeout") {
+      // undici 的 connectTimeout 在 Agent 构造时就固定了，缓存里的 Agent 不重建
+      // 就一直是旧值。而 connectTimeout 恰恰是国内端点握手最容易撞上的那道限制
+      // （见 lib/http 的 MIN_CONNECT_TIMEOUT_MS：默认值会盖过用户配置）。
+      // 不失效缓存的话，用户把超时从 15 秒调到 60 秒要等下次重启才生效。
+      clearProxyAgentCache();
     }
     return true;
   });
