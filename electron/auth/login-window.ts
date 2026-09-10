@@ -70,8 +70,9 @@ function getHeader(
 }
 
 /** 判断 URL hostname 是否在允许域内 */
-function isAllowedUrl(url: string, allowedDomains: string[]): boolean {
+export function isAllowedUrl(url: string, allowedDomains: string[]): boolean {
   try {
+    // URL 会把 hostname 规范成小写，故这里不必再转
     const h = new URL(url).hostname;
     return allowedDomains.some((d) => h === d || h.endsWith("." + d));
   } catch {
@@ -132,6 +133,13 @@ export function openLoginWindow(
     // 安全加固：登录窗口内拒绝新窗口；导航仅限允许域，防被诱导跳转到第三方站点
     win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     win.webContents.on("will-navigate", (e, url) => {
+      if (!isAllowedUrl(url, allowedDomains)) e.preventDefault();
+    });
+    // will-navigate 只覆盖页面自身发起的跳转；服务端 301/302 走的是 will-redirect，
+    // 不一起挡的话，控制台（或其中被注入的页面）一次重定向就能把登录窗口带到任意
+    // 站点，而窗口标题还写着「登录 XX - 登录成功后自动获取凭证」——用户很可能就
+    // 在那儿把账号密码打进去了。凭证提取本身按域过滤，不会外泄，但钓鱼页要防。
+    win.webContents.on("will-redirect", (e, url) => {
       if (!isAllowedUrl(url, allowedDomains)) e.preventDefault();
     });
 
