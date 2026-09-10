@@ -169,17 +169,49 @@ function loadDataFile(): StoreData {
   return defaultData();
 }
 
-export function initDb(): void {
-  filePath = path.join(app.getPath("userData"), "token-lens-data.json");
+/**
+ * 用指定路径初始化存储。
+ *
+ * 与 initDb 拆开是为了能在测试里指向临时文件——否则这个模块的每一行逻辑都
+ * 要先满足 Electron 的 app.getPath 才能跑，而它恰恰是最不该没有测试的模块：
+ * 用户的全部服务配置、密钥密文和历史数据都在它手上。
+ */
+export function initDbAt(dbFilePath: string): void {
+  filePath = dbFilePath;
   data = loadDataFile();
-  // 兼容旧数据文件：缺 localDailyUsage 字段时补默认
-  if (!data.localDailyUsage) data.localDailyUsage = [];
-  if (!data.counters) data.counters = { balanceSnapshot: 0, usageRecord: 0, localDailyUsage: 0 };
+
+  // 兼容旧数据文件：逐个补齐缺失的集合字段。
+  //
+  // 必须补全，不能只补当初想到的那两个（localDailyUsage / counters）：
+  // compactData 紧接着就会遍历 balanceSnapshots 和 usageRecords，缺任何一个
+  // 都会在启动阶段抛 TypeError，而 app.whenReady().then() 没有 catch——
+  // 用户看到的是「应用打不开」，日志里只有一句类型错误。同样的道理，
+  // counters 的三个计数缺一个就会让 += 1 变成 NaN。
+  //
+  // 这条路是可达的：旧版本写下的文件本就可能少字段，README 还专门教用户
+  // 手工去编辑这个文件来抢救数据。
+  if (!Array.isArray(data.services)) data.services = [];
+  if (!data.secrets || typeof data.secrets !== "object") data.secrets = {};
+  if (!Array.isArray(data.balanceSnapshots)) data.balanceSnapshots = [];
+  if (!Array.isArray(data.usageRecords)) data.usageRecords = [];
+  if (!Array.isArray(data.localDailyUsage)) data.localDailyUsage = [];
+  if (!data.settings || typeof data.settings !== "object") data.settings = {};
+  if (!data.counters || typeof data.counters !== "object") {
+    data.counters = { balanceSnapshot: 0, usageRecord: 0, localDailyUsage: 0 };
+  }
+  if (data.counters.balanceSnapshot == null) data.counters.balanceSnapshot = 0;
+  if (data.counters.usageRecord == null) data.counters.usageRecord = 0;
   if (data.counters.localDailyUsage == null) data.counters.localDailyUsage = 0;
+
   // 启动时压缩一次旧数据并落盘（同时把旧版 pretty-print 格式转成紧凑格式）
   compactData();
   persist();
   flushDb();
+}
+
+/** 应用启动时调用 */
+export function initDb(): void {
+  initDbAt(path.join(app.getPath("userData"), "token-lens-data.json"));
 }
 
 // ---- services ----
