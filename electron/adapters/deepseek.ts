@@ -41,17 +41,32 @@ export const deepseekAdapter: Adapter = {
       throw new Error(`DeepSeek ${res.status}: ${text.slice(0, 200)}`);
     }
     const json = (await res.json()) as DeepSeekBalanceResponse;
-    const info = json.balance_infos?.[0];
+    // balance_infos 是**数组**，而 currency 的取值集合是 {CNY, USD}：
+    // 两处都充过值的账号会拿到两条。此前只取第一条，第二种货币的余额被静默
+    // 丢掉——卡片上永远看不到它。而跨币种求和是错的（智谱那边踩过这个坑），
+    // 所以按项目既有约定：第一条当主数字，其余进 breakdown
+    // （总览页读 breakdown[0] 当主数字、展开面板显示其余的，两者必须一致）。
+    const infos = json.balance_infos ?? [];
+    const info = infos[0];
     // 用 toFiniteNumber 而非 Number()：字段缺失时 Number(undefined) 是 NaN，
     // 会一路带进界面（卡片显示 "-"，副行却写「该服务无余额查询 API」，
     // 而 DeepSeek 是有余额接口的）。取不到就当没有。
     const total = toFiniteNumber(info?.total_balance);
+    const breakdown =
+      infos.length > 1
+        ? infos.map((i) => ({
+            label: i.currency ?? "CNY",
+            remaining: toFiniteNumber(i.total_balance),
+            unit: i.currency ?? "CNY",
+          }))
+        : undefined;
     return {
       total,
       remaining: total,
       currency: info?.currency ?? "CNY",
       fetchedAt: new Date().toISOString(),
       raw: json,
+      breakdown,
     };
   },
 };
