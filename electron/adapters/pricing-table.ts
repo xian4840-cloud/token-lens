@@ -3,7 +3,7 @@ import type { PricingRow } from "./pricing";
 /**
  * 内置模型价格表（USD / 百万 tokens）。单独文件维护，方便增删模型。
  *
- * 价格来源于各家官方定价页，核对日期 2026-08-25，可能滞后或变动，以官网为准。
+ * 价格来源于各家官方定价页，核对日期 2026-09-04，可能滞后或变动，以官网为准。
  * 用户可在设置页覆盖任意条目（存 setting `pricingOverrides`，按 key 索引）。
  *
  * ## 三条录入规则
@@ -33,6 +33,17 @@ export const DEFAULT_PRICING: PricingRow[] = [
   // 长上下文档价格翻倍（sol 8/30、terra 4/18、luna 0.4/1.8），此处取短上下文：
   // 编码 agent 绝大多数请求在阈值以内，按长上下文价算会普遍高估。
   // ==========================================================================
+  {
+    key: "gpt-6-astra",
+    label: "GPT-6 Astra",
+    // 不能写成 gpt-6 宽松匹配，否则会吃掉 gpt-5.6
+    match: /gpt[.\-_]*6[.\-_]*astra|\bgpt-6\b/i,
+    inputPerM: 10,
+    outputPerM: 50,
+    cacheReadPerM: 1,
+    cacheWritePerM: 12.5,
+    currency: "USD",
+  },
   {
     key: "gpt-5.6-sol",
     label: "GPT-5.6 Sol",
@@ -192,6 +203,16 @@ export const DEFAULT_PRICING: PricingRow[] = [
     inputPerM: 0.05,
     outputPerM: 0.4,
     cacheReadPerM: 0.005,
+    cacheWritePerM: 0,
+    currency: "USD",
+  },
+  {
+    key: "gpt-5.3-codex",
+    label: "GPT-5.3 Codex",
+    match: /(?:gpt[.\-_]*)?5[.\-_]*3[.\-_]*codex/i,
+    inputPerM: 1.75,
+    outputPerM: 14,
+    cacheReadPerM: 0.175,
     cacheWritePerM: 0,
     currency: "USD",
   },
@@ -693,6 +714,17 @@ export const DEFAULT_PRICING: PricingRow[] = [
   // 所以带小版本号的必须全部排在它前面。
   // ==========================================================================
   {
+    // 5.1 缓存命中是 0.025× 输入（$0.25），必须排在 Fable 5 之前
+    key: "claude-fable-5-1",
+    label: "Claude Fable 5.1 / Mythos 5.1",
+    match: /claude[.\-_]*(?:fable|mythos)[.\-_]*5[.\-_]*1/i,
+    inputPerM: 10,
+    outputPerM: 50,
+    cacheReadPerM: 0.25,
+    cacheWritePerM: 12.5,
+    currency: "USD",
+  },
+  {
     key: "claude-fable-5",
     label: "Claude Fable 5 / Mythos 5",
     match: /claude[.\-_]*(?:fable|mythos)[.\-_]*5/i,
@@ -738,6 +770,7 @@ export const DEFAULT_PRICING: PricingRow[] = [
     key: "claude-sonnet-5",
     label: "Claude Sonnet 5",
     match: /sonnet[.\-_]*5/i,
+    // 上市促销 $2/$10 已转正，原定 2026-09-01 调到 $3/$15 取消
     inputPerM: 2,
     outputPerM: 10,
     cacheReadPerM: 0.2,
@@ -859,6 +892,16 @@ export const DEFAULT_PRICING: PricingRow[] = [
     inputPerM: 1.25,
     outputPerM: 2.5,
     cacheReadPerM: 0.2,
+    cacheWritePerM: 0,
+    currency: "USD",
+  },
+  {
+    key: "grok-4.1-fast",
+    label: "Grok 4.1 Fast",
+    match: /grok[.\-_]*4[.\-_]*1[.\-_]*fast/i,
+    inputPerM: 0.2,
+    outputPerM: 0.5,
+    cacheReadPerM: 0,
     cacheWritePerM: 0,
     currency: "USD",
   },

@@ -61,6 +61,8 @@ describe("Anthropic 正则顺序", () => {
     ["claude-opus-4-20250514", "claude-opus-4"],
     ["claude-opus-4-1-20250805", "claude-opus-4"],
     ["claude-opus-5", "claude-opus-5"],
+    ["claude-fable-5-1", "claude-fable-5-1"],
+    ["claude-mythos-5-1", "claude-fable-5-1"],
     ["claude-fable-5", "claude-fable-5"],
     ["claude-mythos-5", "claude-fable-5"],
     ["claude-sonnet-5", "claude-sonnet-5"],
@@ -84,6 +86,8 @@ describe("Anthropic 正则顺序", () => {
 
 describe("OpenAI 正则顺序", () => {
   it.each([
+    ["gpt-6-astra", "gpt-6-astra"],
+    ["gpt-6", "gpt-6-astra"],
     ["gpt-5.6-sol", "gpt-5.6-sol"],
     ["daybreak-blue-latest", "gpt-5.6-sol"],
     ["gpt-5.6-terra", "gpt-5.6-terra"],
@@ -95,6 +99,7 @@ describe("OpenAI 正则顺序", () => {
     ["gpt-5.4-mini", "gpt-5.4-mini"],
     ["gpt-5.4-nano", "gpt-5.4-nano"],
     ["gpt-5.4", "gpt-5.4"],
+    ["gpt-5.3-codex", "gpt-5.3-codex"],
     ["gpt-5.2-pro", "gpt-5.2-pro"],
     ["gpt-5-mini", "gpt-5-mini"],
     ["gpt-5-nano", "gpt-5-nano"],
@@ -110,9 +115,10 @@ describe("OpenAI 正则顺序", () => {
     expect(matchKey(model)).toBe(key);
   });
 
-  it("gpt-5.6-sol 不被泛化的 gpt-5 规则吃掉", () => {
+  it("gpt-5.6-sol 不被泛化的 gpt-5 或 gpt-6 规则吃掉", () => {
     // sol 是 $4/$20，gpt-5 是 $1.25/$10，错配会低估三倍
     expect(matchKey("gpt-5.6-sol")).not.toBe("gpt-5");
+    expect(matchKey("gpt-5.6-sol")).not.toBe("gpt-6-astra");
   });
 });
 
@@ -159,6 +165,7 @@ describe("其余厂商正则顺序", () => {
     ["mimo-v2.5-pro", "mimo-v2.5-pro"],
     ["mimo-v2.5", "mimo-v2.5"],
     ["grok-4.6", "grok-4.6"],
+    ["grok-4.1-fast", "grok-4.1-fast"],
     // Grok Build 本地采集上报的模型 id（~/.grok/sessions 的 modelUsage key）
     ["grok-4.6-build", "grok-4.6"],
     ["grok-4.5", "grok-4.5"],
