@@ -7,6 +7,7 @@ import {
   flushDb,
   initDbAt,
   deleteServiceRow,
+  getSecrets,
   getService,
   insertService,
   listBalanceSnapshots,
@@ -20,6 +21,7 @@ import {
   getSetting,
   upsertLocalDailyUsage,
 } from "./db";
+import { getRecentLogs } from "./lib/logger";
 import type { LocalDailyUsageRecord, ServiceRecord } from "./types";
 import type { LocalUsageRow } from "./local-usage/types";
 
@@ -477,5 +479,38 @@ describe("clearAllLocalDailyUsage", () => {
 
     expect(listServices().map((s) => s.id)).toEqual(["a"]);
     expect(getSetting("refreshInterval")).toBe("15");
+  });
+});
+
+describe("密钥解密失败时留痕", () => {
+  it("跳过解不开的字段，并记下是哪个服务的哪个字段（回归）", () => {
+    // 密文解不开（换机器、数据损坏、系统加密不可用）时字段会被跳过，
+    // 适配器随后抛「缺少 API Key」——而用户明明填过。不留痕的话，
+    // 他没有任何线索说明密钥为什么不见了，只会以为是自己没保存或应用坏了。
+    writeStore({
+      services: [service("svc-1")],
+      secrets: { "svc-1": { apiKey: "bm90LWEtcmVhbC1jaXBoZXI=" } },
+    });
+    initDbAt(file);
+
+    expect(getSecrets("svc-1")).toEqual({});
+
+    const entry = getRecentLogs().find(
+      (e) => e.scope === "db" && e.message.includes("解密失败"),
+    );
+    expect(entry, "解密失败没有留下任何日志").toBeDefined();
+    expect(entry?.message).toContain("svc-1");
+    expect(entry?.message).toContain("apiKey");
+    // 只写字段名，不写密文更不写明文
+    expect(entry?.message).not.toContain("bm90LWEtcmVhbC1jaXBoZXI=");
+  });
+
+  it("没有密钥记录的服务不产生日志", () => {
+    writeStore({ services: [service("svc-2")], secrets: {} });
+    initDbAt(file);
+    expect(getSecrets("svc-2")).toEqual({});
+    expect(
+      getRecentLogs().some((e) => e.scope === "db" && e.message.includes("svc-2")),
+    ).toBe(false);
   });
 });

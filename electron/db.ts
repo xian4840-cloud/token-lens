@@ -266,8 +266,16 @@ export function getSecrets(serviceId: string): Record<string, string> {
   for (const [k, b64] of Object.entries(map)) {
     try {
       result[k] = decrypt(Buffer.from(b64, "base64"));
-    } catch {
-      // 解密失败（换机器/损坏）跳过该字段
+    } catch (e) {
+      // 解密失败（换机器、数据损坏、系统加密不可用）时跳过该字段，但必须留痕。
+      //
+      // 不留痕的话，用户看到的是适配器抛出的「缺少 API Key」——他明明填过，
+      // 却没有任何线索说明密钥为什么不见了，只会以为是应用出了问题或自己没保存。
+      // 日志里写清是哪个服务的哪个字段，也只写这些：密文与明文都不落盘。
+      logWarn(
+        "db",
+        `服务 ${serviceId} 的密钥字段 ${k} 解密失败，已跳过：${String(e)}`,
+      );
     }
   }
   return result;

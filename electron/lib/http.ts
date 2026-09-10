@@ -1,8 +1,8 @@
 import { session, shell } from "electron";
 import { Agent, ProxyAgent, Socks5ProxyAgent, type Dispatcher } from "undici";
 import { getSetting } from "../db";
-import { logError } from "./logger";
-import { redactUrl } from "./redact";
+import { logError, logWarn } from "./logger";
+import { redactError, redactUrl } from "./redact";
 import type { ProxyTestResult } from "../types";
 
 /**
@@ -69,7 +69,15 @@ let directAgent: Dispatcher | null = null;
 export function clearProxyAgentCache(): void {
   agentCache.clear();
   directAgent = null;
+  // 代理配置变了，允许再记一次解析失败的警告
+  proxyResolveWarned = false;
 }
+
+/**
+ * 系统代理解析失败是否已记过日志。
+ * 这条路径每次请求都会走到，逐次记录会把日志刷爆，反而丢掉别的线索。
+ */
+let proxyResolveWarned = false;
 
 /** 连接超时：取用户配置的总超时与下限中的较大者 */
 function connectTimeoutMs(): number {
@@ -224,8 +232,19 @@ export async function getDispatcherForUrl(
         }
       }
     }
-  } catch {
-    // resolveProxy 失败时尝试读取环境变量兜底
+  } catch (e) {
+    // resolveProxy 失败时尝试读取环境变量兜底。
+    //
+    // 但必须留痕：兜底之后请求照发，用户完全看不出「跟随系统代理」实际没生效——
+    // 设置与实际行为不一致，而且没有任何痕迹。只记一次：这条路径每次请求都会
+    // 走到，逐次记录会把日志刷爆，反而丢掉别的线索。
+    if (!proxyResolveWarned) {
+      proxyResolveWarned = true;
+      logWarn(
+        "proxy",
+        `系统代理解析失败，已退回环境变量或直连（代理设置实际未生效）：${redactError(e)}`,
+      );
+    }
   }
 
   const envProxy =

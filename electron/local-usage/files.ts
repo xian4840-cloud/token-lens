@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { logWarn } from "../lib/logger";
 
 export interface JsonlFileStat {
   path: string;
@@ -14,7 +15,12 @@ export function listJsonlFilesWithStat(dir: string): JsonlFileStat[] {
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(d, { withFileTypes: true });
-    } catch {
+    } catch (e) {
+      // 必须留痕：读不到目录与「目录里没有文件」返回的是同一个空数组，
+      // 而前者会让该来源显示成「正常但零用量」——一个静默的错误答案。
+      // 项目在别处已经点明过这个反模式（见 antigravity.ts 的「全部会话都打不开」
+      // 分支），这里补上同等的处理。
+      logWarn("local-usage", `读取目录失败，该目录下的用量将被跳过：${d}（${String(e)}）`);
       return;
     }
     for (const e of entries) {
