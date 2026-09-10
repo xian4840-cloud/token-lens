@@ -10,7 +10,12 @@ import {
   replaceLocalDailyUsageBySource,
   upsertLocalDailyUsage,
 } from "../db";
-import type { LocalSource, LocalUsageRow, ScanLocalUsageResult } from "./types";
+import type {
+  LocalSource,
+  LocalUsageRow,
+  ScanLocalUsageResult,
+} from "./types";
+import { ALL_LOCAL_SOURCES } from "./types";
 
 /**
  * 按 source 构造 computeCost 用的 TokenUsage。
@@ -149,15 +154,8 @@ export async function scanAndPersistLocalUsage(
     else grouped.set(r.source, [r]);
   }
   const unavailable = new Set(result.unavailable.map((u) => u.source));
-  const sources: LocalSource[] = [
-    "claude-code",
-    "codex",
-    "opencode",
-    "antigravity",
-    "grok-build",
-  ];
   const fullScan = since === undefined;
-  for (const source of sources) {
+  for (const source of ALL_LOCAL_SOURCES) {
     if (unavailable.has(source)) continue;
     const rows = grouped.get(source) ?? [];
     if (fullScan) replaceLocalDailyUsageBySource(source, rows);

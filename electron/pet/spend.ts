@@ -1,7 +1,10 @@
-import type { LocalSource } from "../local-usage/types";
+import { ALL_LOCAL_SOURCES, type LocalSource } from "../local-usage/types";
 import type { PetSourceSpend, PetSpendSummary } from "./types";
 
-/** 与 ui/src/lib/local-sources.ts 的展示名保持一致，改动需同步 */
+/**
+ * 与 ui/src/lib/local-sources.ts 的展示名保持一致，改动需同步。
+ * 写成 Record<LocalSource, string> 而非裸数组：新增来源时这里不补会编译报错。
+ */
 const SOURCE_LABEL: Record<LocalSource, string> = {
   "claude-code": "Claude Code",
   codex: "Codex",
@@ -9,14 +12,6 @@ const SOURCE_LABEL: Record<LocalSource, string> = {
   antigravity: "Antigravity",
   "grok-build": "Grok Build",
 };
-
-const SOURCE_ORDER: LocalSource[] = [
-  "claude-code",
-  "codex",
-  "opencode",
-  "antigravity",
-  "grok-build",
-];
 
 /** 花费汇总用的最小行。不绑 LocalDailyUsageRecord，方便单测。 */
 export interface SpendRow {
@@ -82,7 +77,7 @@ export function summarizeLocalSpend(
   let hasUnpriced = false;
   let tokens = 0;
 
-  for (const source of SOURCE_ORDER) {
+  for (const source of ALL_LOCAL_SOURCES) {
     const g = groups.get(source);
     if (!g) continue;
     tokens += g.tokens;

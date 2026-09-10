@@ -1,5 +1,6 @@
 import type { Adapter, BalanceResult } from "../types";
 import { fetchWithTimeout } from "../lib/http";
+import { BROWSER_UA } from "../lib/user-agent";
 
 const USAGE_URL =
   "https://console.volcengine.com/api/top/ark/cn-beijing/2024-01-01/GetCodingPlanUsage";
@@ -7,12 +8,10 @@ const USAGE_URL =
 /** 控制台 origin：控制台 API 的 Referer/Origin 来源校验需要 */
 const CONSOLE_ORIGIN = "https://console.volcengine.com";
 /**
- * 伪装为正常 Chrome UA（与登录窗口 volcengine-login.ts 一致）。
+ * 伪装为正常 Chrome UA，与登录窗口共用同一个常量（见 lib/user-agent）。
  * 火山方舟风控会识别非浏览器 UA（Node/undici 默认 UA）并拒绝请求，
  * 刷新用量时必须同样伪装，否则即便 Cookie 有效也可能返回 401/403。
  */
-const BROWSER_UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 /** 配额级别中文标签 */
 const LEVEL_LABEL: Record<string, string> = {

@@ -3,6 +3,7 @@ import {
   type ExtractedCredentials,
 } from "./login-window";
 import { validateScnetCredentials } from "../adapters/scnet_token_plan";
+import { BROWSER_UA } from "../lib/user-agent";
 
 export interface ScnetCredentials {
   cookie: string;
@@ -12,9 +13,6 @@ const LOGIN_URL = "https://www.scnet.cn/ui/console/index.html";
 // persist: 前缀让 partition 持久化到磁盘，配合 validate 实现跨重启免重登：
 // cookie 有效则复用，过期则 validate 失败、继续等用户重登
 const PARTITION = "persist:scnet-auth";
-// 伪装为正常 Chrome UA，避免控制台风控识别 Electron 而拒绝登录
-const USER_AGENT =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 /**
  * 打开超算互联网登录窗口。用户在窗口内登录控制台后，自动拦截请求提取
@@ -37,7 +35,7 @@ export function openScnetLogin(): Promise<ScnetCredentials | null> {
       h.cookie.split(";").some((c) => c.trim().startsWith("Token=")),
     // 候选凭证须通过真实接口验证，避免残留过期 cookie 被秒返回
     validate: (h) => validateScnetCredentials(h.cookie ?? ""),
-    userAgent: USER_AGENT,
+    userAgent: BROWSER_UA,
   }).then(toScnetCredentials);
 }
 

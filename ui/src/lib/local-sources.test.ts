@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { pivotDailyUsage } from "./local-sources";
+import { LOCAL_SOURCES, pivotDailyUsage } from "./local-sources";
 import { visibleTokens } from "./format";
+import { ALL_LOCAL_SOURCES } from "../../../electron/local-usage/types";
 import type { LocalDailyUsageRecord, LocalSource } from "@/types";
 
 /**
@@ -10,6 +11,25 @@ import type { LocalDailyUsageRecord, LocalSource } from "@/types";
  * 「各分项之和等于合计」这类不变量才有一处可测——它此前不成立：
  * 合计用的是 visibleTokens（含缓存写），而分项只列了缓存读。
  */
+
+describe("来源清单两侧一致", () => {
+  it("界面侧的展示清单与主进程侧的落盘清单是同一批来源", () => {
+    // 两边的 LocalSource 是各自声明的联合类型（主进程一份、界面一份），
+    // 各有 satisfies Record<LocalSource, ...> 兜住「加了联合成员忘了加清单」。
+    // 但兜不住「只给主进程加了新来源」——那边照常落盘，界面这边完全不认识它，
+    // 于是图表里少一条系列，而合计里却含它的量：合计不等于各来源之和。
+    // 这条测试就是那道跨进程的闸。
+    expect(LOCAL_SOURCES.map((s) => s.value).sort()).toEqual(
+      [...ALL_LOCAL_SOURCES].sort(),
+    );
+  });
+
+  it("展示名为空或重复都会被发现", () => {
+    const labels = LOCAL_SOURCES.map((s) => s.label);
+    expect(labels.every((l) => l.trim() !== "")).toBe(true);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+});
 
 function rec(
   partial: Partial<LocalDailyUsageRecord> & { date: string; model: string },

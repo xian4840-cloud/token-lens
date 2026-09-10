@@ -1,6 +1,7 @@
 import type { Adapter, BalanceResult } from "../types";
 import { fetchWithTimeout } from "../lib/http";
 import { pickNumber } from "../lib/amount";
+import { BROWSER_UA } from "../lib/user-agent";
 
 const USAGE_URL =
   "https://www.scnet.cn/acx/charge/account/currentuser/tokenplan/list";
@@ -8,11 +9,9 @@ const USAGE_URL =
 /** 控制台 origin：接口 Referer/Origin 来源校验 */
 const CONSOLE_ORIGIN = "https://www.scnet.cn";
 /**
- * 伪装为正常 Chrome UA（与登录窗口 scnet-login.ts 一致）。
- * 控制台接口带来源校验，刷新用量时同样伪装，避免 Node/undici 默认 UA 被拒。
+ * 伪装为正常 Chrome UA，与登录窗口共用同一个常量（见 lib/user-agent）：
+ * 控制台接口带来源校验，刷新用量时同样要伪装，且必须与抓 cookie 时一致。
  */
-const BROWSER_UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 /** 控制台前端版本号（接口请求头携带，与浏览器一致；SCNet 控制台更新后需同步此值） */
 const CONSOLE_VERSION = "2.3.1";

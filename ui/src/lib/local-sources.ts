@@ -1,14 +1,24 @@
 import type { LocalDailyUsageRecord, LocalSource } from "@/types";
 import { formatDateKey, visibleTokens } from "./format";
 
+/**
+ * 来源展示名。写成 satisfies Record<LocalSource, string> 而非裸数组，
+ * 是为了拿到编译期穷尽性检查：将来给 LocalSource 加成员却忘了加到这里，
+ * tsc 会直接报错。裸数组漏一个成员的后果是静默的——趋势图上少一条系列，
+ * 没有任何报错。
+ */
+const SOURCE_LABELS = {
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  opencode: "OpenCode",
+  antigravity: "Antigravity",
+  "grok-build": "Grok Build",
+} satisfies Record<LocalSource, string>;
+
 /** 本地 agent 来源的展示元数据（图表系列顺序与配色、页面共用） */
-export const LOCAL_SOURCES: { value: LocalSource; label: string }[] = [
-  { value: "claude-code", label: "Claude Code" },
-  { value: "codex", label: "Codex" },
-  { value: "opencode", label: "OpenCode" },
-  { value: "antigravity", label: "Antigravity" },
-  { value: "grok-build", label: "Grok Build" },
-];
+export const LOCAL_SOURCES: { value: LocalSource; label: string }[] = (
+  Object.keys(SOURCE_LABELS) as LocalSource[]
+).map((value) => ({ value, label: SOURCE_LABELS[value] }));
 
 export const LOCAL_SOURCE_COLORS = [
   "var(--chart-1)",
