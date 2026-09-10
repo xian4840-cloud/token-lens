@@ -10,6 +10,7 @@
 - **本地 agent 用量采集**：直接读取本地 agent 产生的会话数据（无需 API key），按天/按模型统计 token 用量并按官网价格估算花费
 - **多日趋势图表**：近 N 天用量趋势、花费走势可视化
 - **内置模型价格表**：覆盖 8 家厂商 80 余款模型，照各家官方定价页录入，可在应用内逐条覆盖
+- **桌面宠物**：可拖动的小雷姆常驻桌面，本地 agent 干活时它跟着忙，点一下看今日花费估算（设置里开关）
 - **数据全本地**：所有配置与数据存储在本机 userData 目录，API key 经 Electron safeStorage 加密，不上传任何服务器
 
 ## 安装
@@ -52,13 +53,28 @@ Google Gemini、Groq、Together。注意这三家均同时提供免费与付费�
 | Antigravity | `~/.gemini/antigravity/conversations` 下的会话库 |
 | Grok Build | `~/.grok/sessions` 下的会话记录（updates.jsonl） |
 
+### 桌面宠物
+
+「设置 → 桌面宠物」打开后，桌面右下角会出现一只可拖动的小雷姆（默认关闭）。
+
+- **状态跟着 agent 走**：它递归监听上面那张表里的五个会话目录，有文件写入就切
+  「工作中」并在脚下标出是哪一家，停止写入 12 秒回到「空闲」。空闲时会随机
+  眨眼、挥手、张望或跳一下。判定靠文件写入时间，不是精确进度，秒级延迟是正常的。
+- **点一下看今天的花费**：气泡里是今日各来源的 token 与花费估算，口径与用量页
+  完全一致（缓存读取计一次，输入不含缓存）。价格表里查不到的模型计入 tokens
+  并标注「部分未标价」，不显示成 $0。
+- **位置会记住**：拖动后坐标存进设置。重开时若该坐标已不在任何显示器的工作区内
+  （比如拔了外接屏），会退回默认位置，而不是消失在屏幕外。
+- **只读，不外发**：宠物只读取会话目录的文件修改时间与既有的用量数据，不解析
+  会话内容，也不新增任何网络请求。主窗口关闭或应用退出时它一并关闭。
+
 ### 费用估算的口径
 
 本地 agent 的会话记录里只有 token 数，没有金额，费用是用内置价格表换算出来的
 **估算值，不是账单**。内置表见 `electron/adapters/pricing-table.ts`，
 在「设置 → 模型价格表」里可以逐条覆盖。几个需要知道的口径：
 
-- 价格照各家官方定价页录入，核对日期 **2026-08-25**。此后厂商调价不会自动同步。
+- 价格照各家官方定价页录入，核对日期 **2026-09-04**。此后厂商调价不会自动同步。
 - 全部折算为 **USD**。趋势页按金额直接求和，混币种会把 ¥ 和 $ 加在一起，
   所以只给人民币价的厂商（如 Kimi）按汇率折算，汇率写在该行注释里。
 - 取**标准档非折扣价**，不用 Batch / Flex / 峰谷优惠。分档定价（长短上下文、
@@ -106,10 +122,12 @@ npm run dist:installer  # NSIS 安装包
 - `electron/` - Electron 主进程（TypeScript，编译到 `electron-dist/`）
 - `ui/` - 前端源码（React + Vite，构建到 `ui/dist/`）
 - `electron/adapters/` - 各服务适配器（余额/用量查询）
-- `electron/local-usage/` - 本地 agent 用量采集器（Claude Code / Codex / OpenCode / Antigravity）
+- `electron/local-usage/` - 本地 agent 用量采集器（Claude Code / Codex / OpenCode / Antigravity / Grok Build）
+- `electron/pet/` - 桌面宠物（独立无边框窗口、会话目录监听、今日花费汇总）
 - `scripts/` - 维护脚本（如 `sanitize-lockfile.cjs`）
 - 测试配置：`vitest.config.mts`（独立于 `vite.config.ts`，后者 `root: "ui"` 会让 `electron/` 下的测试扫不到）
-- 数据存储：`token-lens-data.json`（位于 userData 目录），密钥经 safeStorage 加密
+- 数据存储：`token-lens-data.json`（位于 userData 目录），密钥经 safeStorage 加密；
+  该文件解析失败时不会被静默重建，而是改名成 `.corrupt-<时间戳>` 留档
 
 ## 遇到问题
 
