@@ -5,6 +5,8 @@ import { listJsonlFilesWithStat } from "./files";
 import { toDateKey } from "./date";
 import {
   getScanCache,
+  markScanCacheDirty,
+  pruneScanCache,
   isCodexEntryValid,
   type CodexFileEntry,
   type CodexIncrement,
@@ -304,8 +306,9 @@ export function extractCodexIncrements(events: CodexLine[]): {
  * 扫描 Codex 会话。token 语义：input 含 cache、output 含 reasoning，落盘时拆开。
  */
 export async function scanCodex(since?: string): Promise<LocalUsageRow[]> {
-  const files = listJsonlFilesWithStat(CODEX_SESSIONS_DIR);
+  const files = await listJsonlFilesWithStat(CODEX_SESSIONS_DIR);
   const cache = getScanCache();
+  pruneScanCache("codex", new Set(files.map((f) => f.path)));
   const cfg = readCodexConfig();
   const mainModel = cfg.model ?? "codex";
   const subModel = cfg.subagentModel ?? mainModel;
@@ -365,6 +368,7 @@ export async function scanCodex(since?: string): Promise<LocalUsageRow[]> {
         lastTs,
         increments,
       };
+      markScanCacheDirty();
     }
 
     const fallbackModel =

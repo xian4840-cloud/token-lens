@@ -90,17 +90,17 @@ describe("local sessions", () => {
     expect(JSON.stringify(changed)).not.toContain("private trace");
     expect((await getModelMonitorState(date, root)).records[0].status).toBe("unknown");
   });
-  it("ignores incomplete and untrusted journal rows and recognizes an exited collector", () => {
+  it("ignores incomplete and untrusted journal rows and recognizes an exited collector", async () => {
     const root = fixture(), dir = captureDirectory(root); fs.mkdirSync(dir);
     fs.writeFileSync(path.join(dir, "responses-123.jsonl"), [
       { source: "configured-model", responseId: "resp_1", model: "fake", eventType: "response.completed" },
       { source: "codex-native-trace-v1", responseId: "resp_1", model: "fake", eventType: "response.create" },
       { source: "codex-native-trace-v1", responseId: "resp_1", model: "server-model", eventType: "response.completed" },
     ].map(row => JSON.stringify(row)).join("\n") + '\n{"incomplete":');
-    expect([...readCapturedModels(root).get("resp_1")!]).toEqual(["server-model"]);
+    expect([...(await readCapturedModels(root)).get("resp_1")!]).toEqual(["server-model"]);
     fs.writeFileSync(path.join(dir, "collector.json"), JSON.stringify({ collectorPid: 99999999, responseCount: 3, lastResponseAt: "invalid date" }));
-    expect(getCodexCaptureState(root)).toMatchObject({ active: false, responseCount: 3 });
-    expect(getCodexCaptureState(root).lastResponseAt).toBeUndefined();
+    expect(await getCodexCaptureState(root)).toMatchObject({ active: false, responseCount: 3 });
+    expect((await getCodexCaptureState(root)).lastResponseAt).toBeUndefined();
   });
   it("handles empty folders and accepts only valid calendar dates", async () => {
     const root = fixture(); expect((await getModelMonitorState(undefined, root)).unavailable).toContain("未找到");

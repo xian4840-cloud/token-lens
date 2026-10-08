@@ -21,6 +21,9 @@ const {
   getScanCache,
   persistScanCache,
   resetScanCache,
+  markScanCacheDirty,
+  pruneScanCache,
+  MAX_ENTRIES_PER_SOURCE,
   isCodexEntryValid,
   isClaudeEntryValid,
   isAntigravityEntryValid,
@@ -122,24 +125,64 @@ describe("persistScanCache", () => {
   it("把内存缓存写盘并可被下一次读取还原", () => {
     const cache = getScanCache();
     cache.codex["/b.jsonl"] = entry(42);
-    persistScanCache();
+    markScanCacheDirty();
+    expect(persistScanCache()).toBe(true);
 
     resetScanCache();
     expect(getScanCache().codex["/b.jsonl"].mtimeMs).toBe(42);
   });
 
-  it("条目超过上限时按 mtime 淘汰最旧的", () => {
+  it("没有任何条目变化时不重写缓存文件（回归：此前每轮定时扫描都整份重写）", () => {
+    writeCacheFile({ version: 2, claude: {}, codex: { "/a.jsonl": entry(1) } });
+    const before = fs.statSync(cachePath()).mtimeMs;
+    getScanCache();
+    expect(persistScanCache()).toBe(false);
+    expect(fs.statSync(cachePath()).mtimeMs).toBe(before);
+  });
+
+  it("超过 4000 个会话文件也不再淘汰（回归：旧上限让最旧那批文件每轮都被重读）", () => {
     const cache = getScanCache();
     for (let i = 0; i < 4005; i++) {
       cache.codex[`/f${i}.jsonl`] = entry(i);
     }
+    markScanCacheDirty();
     persistScanCache();
+    expect(Object.keys(getScanCache().codex)).toHaveLength(4005);
+  });
 
+  it("仍保留一个很高的兜底上限，超出按 mtime 淘汰最旧的", () => {
+    const cache = getScanCache();
+    for (let i = 0; i < MAX_ENTRIES_PER_SOURCE + 3; i++) {
+      cache.codex[`/f${i}.jsonl`] = entry(i);
+    }
+    persistScanCache();
     const kept = Object.keys(cache.codex);
-    expect(kept).toHaveLength(4000);
-    // 留下的应该是 mtime 最大的那批
-    expect(kept).toContain("/f4004.jsonl");
+    expect(kept).toHaveLength(MAX_ENTRIES_PER_SOURCE);
+    expect(kept).toContain(`/f${MAX_ENTRIES_PER_SOURCE + 2}.jsonl`);
     expect(kept).not.toContain("/f0.jsonl");
+  });
+});
+
+describe("pruneScanCache", () => {
+  it("删掉磁盘上已不存在的文件条目，并标记需要落盘", () => {
+    writeCacheFile({
+      version: 2,
+      claude: {},
+      codex: { "/keep.jsonl": entry(1), "/gone.jsonl": entry(2) },
+    });
+    getScanCache();
+    pruneScanCache("codex", new Set(["/keep.jsonl"]));
+    expect(Object.keys(getScanCache().codex)).toEqual(["/keep.jsonl"]);
+    expect(persistScanCache()).toBe(true);
+    resetScanCache();
+    expect(Object.keys(getScanCache().codex)).toEqual(["/keep.jsonl"]);
+  });
+
+  it("全部条目都还在时不算改动", () => {
+    writeCacheFile({ version: 2, claude: {}, codex: { "/keep.jsonl": entry(1) } });
+    getScanCache();
+    pruneScanCache("codex", new Set(["/keep.jsonl"]));
+    expect(persistScanCache()).toBe(false);
   });
 });
 
@@ -179,13 +222,19 @@ describe("缓存条目的结构守卫", () => {
 
   it("Claude 认 per-model-per-day 结构，旧的单层聚合视为未命中", () => {
     expect(
-      isClaudeEntryValid({ mtimeMs: 1, models: { m: { "2026-09-01": { input: 1 } } } } as never),
+      isClaudeEntryValid({ mtimeMs: 1, ids: [], models: { m: { "2026-09-01": { input: 1 } } } } as never),
     ).toBe(true);
     // 旧版：models[model] 直接是聚合对象，其属性值是 number
     expect(
-      isClaudeEntryValid({ mtimeMs: 1, models: { m: { input: 1 } } } as never),
+      isClaudeEntryValid({ mtimeMs: 1, ids: [], models: { m: { input: 1 } } } as never),
     ).toBe(false);
-    expect(isClaudeEntryValid({ mtimeMs: 1, models: {} } as never)).toBe(true);
+    expect(isClaudeEntryValid({ mtimeMs: 1, ids: [], models: {} } as never)).toBe(true);
+  });
+
+  it("Claude 没有 ids（跨文件去重之前的缓存）视为未命中，重读一次补上", () => {
+    expect(
+      isClaudeEntryValid({ mtimeMs: 1, models: { m: { "2026-09-01": { input: 1 } } } } as never),
+    ).toBe(false);
   });
 
   it("Antigravity / Grok 认 per-model-per-day 结构", () => {

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { formatCaptureRemoval } from "@/lib/capture-removal";
 import { highRiskNotExecutedMessage } from "@/lib/high-risk";
 import { ipc } from "@/lib/ipc";
+import { MONITOR_POLL_MS, startVisiblePoll } from "@/lib/visible-poll";
 import type { ModelMonitorState, ModelMonitorSource, ModelMonitorRecord, ModelMonitorSessionDay } from "@/types";
 
 const sources: Record<ModelMonitorSource, string> = { codex: "Codex", "claude-code": "Claude Code", opencode: "OpenCode", "grok-build": "Grok Build", antigravity: "Antigravity" };
@@ -65,7 +66,6 @@ export function ModelMonitor() {
 
   useEffect(() => {
     let alive = true;
-    let timer: ReturnType<typeof setTimeout>;
     async function load() {
       if (alive) setBusy(true);
       try {
@@ -76,10 +76,10 @@ export function ModelMonitor() {
       } catch (e) {
         if (alive) setError(e instanceof Error ? e.message : "读取本地会话失败");
       } finally { if (alive) setBusy(false); }
-      if (alive && auto) timer = setTimeout(() => void load(), 3000);
     }
-    void load();
-    return () => { alive = false; clearTimeout(timer); };
+    // 窗口最小化 / 藏到托盘时暂停，重新可见时立刻补一轮
+    const stop = startVisiblePoll(load, { repeat: auto });
+    return () => { alive = false; stop(); };
   }, [date, auto, refresh, source]);
 
   const records = state?.records ?? [];
@@ -141,7 +141,7 @@ export function ModelMonitor() {
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
               <span className="text-muted-foreground">{state?.sessions.length ?? "—"} 个会话 · {state ? days.length : "—"} 天 · {state?.callCount.toLocaleString() ?? "—"} 次请求</span>
               <div className="flex items-center gap-4">
-                <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)} />每 3 秒更新</label>
+                <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)} />每 {MONITOR_POLL_MS / 1000} 秒更新</label>
                 <Button variant="outline" size="sm" disabled={busy} onClick={() => setRefresh(v => v + 1)}><RefreshCw className={`mr-2 size-3.5 ${busy ? "animate-spin" : ""}`} aria-hidden />立即刷新</Button>
               </div>
             </div>

@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import readline from "node:readline";
 import { execFileSync } from "node:child_process";
 import type { ModelMonitorRecord } from "./model-monitor";
 
@@ -317,34 +316,71 @@ export function resetBunOptionsCacheForTest(): void {
 
 const small = (v: unknown): string | undefined => typeof v === "string" && v.length > 0 && v.length <= 256 ? v : undefined;
 const count = (v: unknown) => typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? v : 0;
-const cache = new Map<string, { stamp: string; records: (ModelMonitorRecord & { assistantId?: string })[] }>();
+type CaptureRecord = ModelMonitorRecord & { assistantId?: string };
+/**
+ * 采集日志增量读取状态：记住读到的字节偏移，日志只追加时只读新增部分。
+ * 文件变短、换了 inode（被重写/替换）或 mtime 回退时整份重读。
+ */
+const cache = new Map<string, { ino: number; mtimeMs: number; offset: number; partial: string; byId: Map<string, CaptureRecord>; records: CaptureRecord[] }>();
 export async function readOpenCodeCaptures(dataRoot: string): Promise<(ModelMonitorRecord & { assistantId?: string })[]> {
   return readCaptures(openCodeCapturePaths(dataRoot).journal, true);
 }
 export async function readClaudeCaptures(dataRoot: string): Promise<ModelMonitorRecord[]> {
   return readCaptures(claudeCapturePaths(dataRoot).journal, false);
 }
-async function readCaptures(journal: string, requireSession: boolean): Promise<(ModelMonitorRecord & { assistantId?: string })[]> {
+function parseCaptureLine(line: string, requireSession: boolean): CaptureRecord | undefined {
+  if (!line || line.length > 8192) return undefined;
+  let r: any;
+  try { r = JSON.parse(line); } catch { return undefined; }
+  if (!r || typeof r !== "object") return undefined;
+  const id = small(r.id), sessionId = small(r.sessionId), requestedModel = small(r.requestedModel);
+  if (!id || (requireSession && !sessionId) || typeof r.startedAt !== "string" || !Number.isFinite(Date.parse(r.startedAt))) return undefined;
+  const responseModel = small(r.responseModel);
+  return { id, sessionId, assistantId: small(r.assistantId), startedAt: new Date(r.startedAt).toISOString(), requestedModel, sentModel: small(r.sentModel), responseModel, responseId: small(r.responseId), evidence: "response", status: requestedModel && responseModel ? requestedModel === responseModel ? "match" : "mismatch" : "unknown", inputTokens: count(r.inputTokens), outputTokens: count(r.outputTokens), totalTokens: count(r.inputTokens) + count(r.outputTokens) };
+}
+const pendingCaptureReads = new Map<string, Promise<CaptureRecord[]>>();
+function readCaptures(journal: string, requireSession: boolean): Promise<CaptureRecord[]> {
+  // 增量游标不能并发推进：同一日志同一时刻只读一次，后来者复用结果
+  const pending = pendingCaptureReads.get(journal);
+  if (pending) return pending;
+  const p = readCapturesOnce(journal, requireSession).finally(() => pendingCaptureReads.delete(journal));
+  pendingCaptureReads.set(journal, p);
+  return p;
+}
+async function readCapturesOnce(journal: string, requireSession: boolean): Promise<CaptureRecord[]> {
   let stat: fs.Stats;
-  try { stat = fs.statSync(journal); } catch { return []; }
-  const stamp = `${stat.mtimeMs}:${stat.size}`;
-  const hit = cache.get(journal);
-  if (hit?.stamp === stamp) return hit.records;
-  const records = new Map<string, ModelMonitorRecord & { assistantId?: string }>();
-  const stream = fs.createReadStream(journal, { encoding: "utf8" });
-  const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
+  try { stat = await fs.promises.stat(journal); } catch { cache.delete(journal); return []; }
+  let hit = cache.get(journal);
+  if (hit && hit.ino === stat.ino && hit.offset === stat.size && hit.mtimeMs === stat.mtimeMs) return hit.records;
+  if (!hit || hit.ino !== stat.ino || stat.size < hit.offset || stat.mtimeMs < hit.mtimeMs) {
+    hit = { ino: stat.ino, mtimeMs: 0, offset: 0, partial: "", byId: new Map(), records: [] };
+  }
+  let chunk: string;
   try {
-    for await (const line of lines) {
-      if (line.length > 8192) continue;
-      let r: any;
-      try { r = JSON.parse(line); } catch { continue; }
-      const id = small(r.id), sessionId = small(r.sessionId), requestedModel = small(r.requestedModel);
-      if (!id || (requireSession && !sessionId) || typeof r.startedAt !== "string" || !Number.isFinite(Date.parse(r.startedAt))) continue;
-      const responseModel = small(r.responseModel);
-      records.set(id, { id, sessionId, assistantId: small(r.assistantId), startedAt: new Date(r.startedAt).toISOString(), requestedModel, sentModel: small(r.sentModel), responseModel, responseId: small(r.responseId), evidence: "response", status: requestedModel && responseModel ? requestedModel === responseModel ? "match" : "mismatch" : "unknown", inputTokens: count(r.inputTokens), outputTokens: count(r.outputTokens), totalTokens: count(r.inputTokens) + count(r.outputTokens) });
-    }
-  } finally { lines.close(); stream.destroy(); }
-  const result = [...records.values()];
-  cache.set(journal, { stamp, records: result });
-  return result;
+    const handle = await fs.promises.open(journal, "r");
+    try {
+      const buf = Buffer.alloc(stat.size - hit.offset);
+      let read = 0;
+      while (read < buf.length) {
+        const { bytesRead } = await handle.read(buf, read, buf.length - read, hit.offset + read);
+        if (bytesRead === 0) break;
+        read += bytesRead;
+      }
+      chunk = hit.partial + buf.subarray(0, read).toString("utf8");
+      hit.offset += read;
+    } finally { await handle.close(); }
+  } catch { return hit.records; }
+  const lines = chunk.split("\n");
+  hit.partial = lines.pop() ?? "";
+  for (const raw of lines) {
+    const record = parseCaptureLine(raw.replace(/\r$/, ""), requireSession);
+    if (record) hit.byId.set(record.id, record);
+  }
+  // 末尾半行若已是完整记录（写入方漏了换行）也先收下；补全后会被同 id 覆盖
+  const tail = parseCaptureLine(hit.partial.replace(/\r$/, ""), requireSession);
+  const byId = tail ? new Map(hit.byId).set(tail.id, tail) : hit.byId;
+  hit.mtimeMs = stat.mtimeMs;
+  hit.records = [...byId.values()];
+  cache.set(journal, hit);
+  return hit.records;
 }

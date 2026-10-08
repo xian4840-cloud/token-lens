@@ -16,11 +16,12 @@ export interface CodexCaptureState {
 export const codexRoot = () => process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 export const captureDirectory = (dataRoot: string) => path.join(dataRoot, "model-capture");
 
-export function getCodexCaptureState(dataRoot: string): CodexCaptureState {
+export async function getCodexCaptureState(dataRoot: string): Promise<CodexCaptureState> {
   const dir = captureDirectory(dataRoot);
-  const state: CodexCaptureState = { supported: process.platform === "win32", ready: fs.existsSync(path.join(dir, "CodexCapture.exe")), active: false, responseCount: 0 };
+  const ready = await fs.promises.access(path.join(dir, "CodexCapture.exe")).then(() => true, () => false);
+  const state: CodexCaptureState = { supported: process.platform === "win32", ready, active: false, responseCount: 0 };
   try {
-    const status = JSON.parse(fs.readFileSync(path.join(dir, "collector.json"), "utf8"));
+    const status = JSON.parse(await fs.promises.readFile(path.join(dir, "collector.json"), "utf8"));
     if (Number.isInteger(status.collectorPid) && status.collectorPid > 0) {
       try { process.kill(status.collectorPid, 0); state.active = true; } catch { /* Last collector has exited. */ }
     }
@@ -31,27 +32,168 @@ export function getCodexCaptureState(dataRoot: string): CodexCaptureState {
   return state;
 }
 
-/** Read only independently captured native response metadata. Session models never enter here. */
-export function readCapturedModels(dataRoot: string): Map<string, Set<string>> {
-  // ponytail: reread metadata per refresh; use incremental reads if large journals become slow.
-  const dir = captureDirectory(dataRoot), models = new Map<string, Set<string>>();
-  let files: string[];
-  try { files = fs.readdirSync(dir).filter(f => /^responses-\d+\.jsonl$/.test(f)); } catch { return models; }
-  for (const name of files) {
+const JOURNAL = /^responses-(\d+)\.jsonl$/;
+/** 已退出后端的采集日志合并到这里（同样的行格式，按 responseId+model 去重） */
+export const ARCHIVE_JOURNAL = "responses-archive.jsonl";
+const CAPTURE_EVENTS = new Set(["response.created", "response.completed", "response.failed", "response.incomplete"]);
+/** 日志最后一次写入距今超过这么久、且对应后端进程已退出，才允许合并 */
+const COMPACT_IDLE_MS = 10 * 60_000;
+/** 两次合并检查的最小间隔 */
+const COMPACT_INTERVAL_MS = 60 * 60_000;
+
+/** 大段日志逐行处理时每这么多行让出一次主线程（合并 / 首次读 archive 时可能有几十万行） */
+const LINES_PER_YIELD = 5000;
+async function eachLine(text: string, fn: (line: string) => void): Promise<string> {
+  const lines = text.split("\n");
+  const tail = lines.pop() ?? "";
+  for (let i = 0; i < lines.length; i++) {
+    if (i > 0 && i % LINES_PER_YIELD === 0) await new Promise<void>(r => setImmediate(r));
+    fn(lines[i]);
+  }
+  return tail;
+}
+
+interface JournalCursor { offset: number; mtimeMs: number; partial: string }
+interface CaptureReader { models: Map<string, Set<string>>; files: Map<string, JournalCursor>; lastCompactAt: number }
+const readers = new Map<string, CaptureReader>();
+
+function acceptRow(models: Map<string, Set<string>>, line: string): void {
+  if (!line) return;
+  try {
+    const row = JSON.parse(line);
+    if (row.source !== "codex-native-trace-v1" || !CAPTURE_EVENTS.has(row.eventType)) return;
+    if (typeof row.responseId !== "string" || !row.responseId || row.responseId.length > 256 || typeof row.model !== "string" || !row.model || row.model.length > 256) return;
+    const values = models.get(row.responseId) ?? new Set<string>();
+    values.add(row.model); models.set(row.responseId, values);
+  } catch { /* Partial append or unsupported record. */ }
+}
+
+async function readRange(file: string, start: number, end: number): Promise<string> {
+  const handle = await fs.promises.open(file, "r");
+  try {
+    const buf = Buffer.alloc(end - start);
+    let read = 0;
+    while (read < buf.length) {
+      const { bytesRead } = await handle.read(buf, read, buf.length - read, start + read);
+      if (bytesRead === 0) break;
+      read += bytesRead;
+    }
+    return buf.subarray(0, read).toString("utf8");
+  } finally { await handle.close(); }
+}
+
+function pidAlive(pid: number): boolean {
+  try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException)?.code === "EPERM"; }
+}
+
+/**
+ * 把已退出后端的 responses-<pid>.jsonl 合并进 responses-archive.jsonl。
+ *
+ * CodexCapture 每个后端进程一份日志、每条响应 created/completed 各一行，此前文件只增不减，
+ * 模型监控每 3 秒把所有日志从头读一遍。合并后同一 (responseId, model) 只留一行，
+ * 合并完的源文件删除。先写临时文件再 rename，删除失败（文件被占用）就留着：
+ * 读取端按集合去重，重复行无害，下一轮再删。
+ */
+export async function compactCaptureJournals(dataRoot: string, now = Date.now()): Promise<number> {
+  const dir = captureDirectory(dataRoot);
+  let names: string[];
+  try { names = await fs.promises.readdir(dir); } catch { return 0; }
+  const victims: string[] = [];
+  for (const name of names) {
+    const m = JOURNAL.exec(name);
+    if (!m) continue;
     try {
-      for (const line of fs.readFileSync(path.join(dir, name), "utf8").split("\n")) {
-        try {
-          const row = JSON.parse(line);
-          if (row.source !== "codex-native-trace-v1" || !["response.created", "response.completed", "response.failed", "response.incomplete"].includes(row.eventType)) continue;
-          if (typeof row.responseId !== "string" || !row.responseId || row.responseId.length > 256 || typeof row.model !== "string" || !row.model || row.model.length > 256) continue;
-          const values = models.get(row.responseId) ?? new Set<string>();
-          values.add(row.model); models.set(row.responseId, values);
-        } catch { /* Partial append or unsupported record. */ }
-      }
+      const st = await fs.promises.stat(path.join(dir, name));
+      if (now - st.mtimeMs < COMPACT_IDLE_MS || pidAlive(Number(m[1]))) continue;
+      victims.push(name);
+    } catch { /* Disappeared meanwhile. */ }
+  }
+  if (!victims.length) return 0;
+  const seen = new Set<string>(), lines: string[] = [];
+  const keep = (line: string) => {
+    const row = (() => { try { return JSON.parse(line); } catch { return undefined; } })();
+    if (!row || row.source !== "codex-native-trace-v1" || !CAPTURE_EVENTS.has(row.eventType) || typeof row.responseId !== "string" || typeof row.model !== "string") return;
+    const key = `${row.responseId}\u0000${row.model}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    lines.push(JSON.stringify({ source: row.source, responseId: row.responseId, model: row.model, observedAt: row.observedAt, eventType: row.eventType }));
+  };
+  const archive = path.join(dir, ARCHIVE_JOURNAL);
+  try {
+    keep(await eachLine(await fs.promises.readFile(archive, "utf8"), keep));
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException)?.code !== "ENOENT") return 0;
+  }
+  for (const name of victims) {
+    try { keep(await eachLine(await fs.promises.readFile(path.join(dir, name), "utf8"), keep)); }
+    catch { return 0; }
+  }
+  const tmp = archive + ".tmp";
+  try {
+    await fs.promises.writeFile(tmp, lines.length ? lines.join("\n") + "\n" : "", "utf8");
+    await fs.promises.rename(tmp, archive);
+  } catch { await fs.promises.rm(tmp, { force: true }).catch(() => undefined); return 0; }
+  let removed = 0;
+  for (const name of victims) {
+    try { await fs.promises.unlink(path.join(dir, name)); removed++; } catch { /* Locked: harmless duplicate, retry next time. */ }
+  }
+  return removed;
+}
+
+/**
+ * Read only independently captured native response metadata. Session models never enter here.
+ *
+ * 增量读取：每个日志记住已读到的字节偏移，只读新追加的部分（末尾半行留到下次）。
+ * 文件变短、消失（被合并或清理）时整体重建，保证不残留已删除的证据。
+ * 返回的 Map 由读取器持有，调用方只读。
+ */
+const pendingReads = new Map<string, Promise<ReadonlyMap<string, ReadonlySet<string>>>>();
+export function readCapturedModels(dataRoot: string): Promise<ReadonlyMap<string, ReadonlySet<string>>> {
+  // 同一目录同一时刻只有一次读取（增量游标与合并都不能并发），后来者复用结果
+  const dir = captureDirectory(dataRoot);
+  const pending = pendingReads.get(dir);
+  if (pending) return pending;
+  const p = readCapturedModelsOnce(dataRoot).finally(() => pendingReads.delete(dir));
+  pendingReads.set(dir, p);
+  return p;
+}
+async function readCapturedModelsOnce(dataRoot: string): Promise<ReadonlyMap<string, ReadonlySet<string>>> {
+  const dir = captureDirectory(dataRoot);
+  let reader = readers.get(dir);
+  if (!reader) { reader = { models: new Map(), files: new Map(), lastCompactAt: 0 }; readers.set(dir, reader); }
+  const now = Date.now();
+  if (now - reader.lastCompactAt >= COMPACT_INTERVAL_MS) {
+    reader.lastCompactAt = now;
+    await compactCaptureJournals(dataRoot, now).catch(() => 0);
+  }
+  let names: string[];
+  try { names = (await fs.promises.readdir(dir)).filter(f => JOURNAL.test(f) || f === ARCHIVE_JOURNAL).sort(); }
+  catch { reader.models = new Map(); reader.files.clear(); return reader.models; }
+  const stats = new Map<string, fs.Stats>();
+  for (const name of names) {
+    try { stats.set(name, await fs.promises.stat(path.join(dir, name))); } catch { /* Disappeared meanwhile. */ }
+  }
+  const rebuild = [...reader.files.keys()].some(name => !stats.has(name)) ||
+    [...stats].some(([name, st]) => st.size < (reader!.files.get(name)?.offset ?? 0));
+  if (rebuild) { reader.models = new Map(); reader.files.clear(); }
+  for (const [name, st] of stats) {
+    const cursor = reader.files.get(name) ?? { offset: 0, mtimeMs: 0, partial: "" };
+    if (st.size === cursor.offset) { reader.files.set(name, cursor); continue; }
+    try {
+      const chunk = cursor.partial + await readRange(path.join(dir, name), cursor.offset, st.size);
+      const models = reader.models;
+      const tail = await eachLine(chunk, line => acceptRow(models, line.trim()));
+      // 半行若已是完整 JSON（写入方漏了换行）先收下；下次拼接后重复收录无害（集合去重）
+      acceptRow(models, tail.trim());
+      // 末尾没有换行的半行：可能是写到一半，留到下一次拼上
+      reader.files.set(name, { offset: st.size, mtimeMs: st.mtimeMs, partial: tail });
     } catch { /* Retry locked/unreadable journals on the next refresh. */ }
   }
-  return models;
+  return reader.models;
 }
+
+/** 测试用：丢弃增量读取状态 */
+export function resetCaptureReaders(): void { readers.clear(); }
 
 export async function launchCapturedCodex(sourceFile: string, dataRoot: string, root = codexRoot()): Promise<CodexCaptureState> {
   if (process.platform !== "win32") throw new Error("桌面实时采集第一版支持 Windows");
@@ -69,7 +211,7 @@ export async function launchCapturedCodex(sourceFile: string, dataRoot: string, 
   fs.mkdirSync(dir, { recursive: true });
   const source = fs.readFileSync(sourceFile, "utf8"), savedSource = path.join(dir, "CodexCapture.cs");
   if (!fs.existsSync(collector) || !fs.existsSync(savedSource) || fs.readFileSync(savedSource, "utf8") !== source) {
-    if (getCodexCaptureState(dataRoot).active) throw new Error("采集器正在使用中，请先退出 Codex 再更新采集器");
+    if ((await getCodexCaptureState(dataRoot)).active) throw new Error("采集器正在使用中，请先退出 Codex 再更新采集器");
     const nextSource = path.join(dir, "CodexCapture.next.cs");
     fs.writeFileSync(nextSource, source);
     const compiler = path.join(process.env.WINDIR || "C:\\Windows", "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");

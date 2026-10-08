@@ -60,12 +60,18 @@ export async function scanLocalUsage(since?: string): Promise<ScanLocalUsageResu
   const overrides = parseOverrides(getSetting("pricingOverrides"));
   const disabled = new Set(parseIdList(getSetting("disabledLocalSources")));
 
+  // 设置里关掉的来源直接不扫：此前是五家全扫完再把关掉的行过滤掉，
+  // 关掉一个几千会话的来源照样每轮把它的目录完整走一遍、逐行读新文件。
+  const skipped: { available: boolean; unavailableReason?: string; rows: LocalUsageRow[] } = {
+    available: true,
+    rows: [],
+  };
   const [claudeRows, codexRows, opencode, antigravity, grok] = await Promise.all([
-    scanClaudeCode(since),
-    scanCodex(since),
-    scanOpenCode(since),
-    scanAntigravity(since),
-    scanGrokBuild(since),
+    disabled.has("claude-code") ? [] : scanClaudeCode(since),
+    disabled.has("codex") ? [] : scanCodex(since),
+    disabled.has("opencode") ? skipped : scanOpenCode(since),
+    disabled.has("antigravity") ? skipped : scanAntigravity(since),
+    disabled.has("grok-build") ? skipped : scanGrokBuild(since),
   ]);
   // 扫描期间更新的文件级缓存统一落盘（写失败仅意味着下次重扫）
   persistScanCache();
