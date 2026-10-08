@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell, webContents } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -53,8 +53,27 @@ import {
   getLogPath,
   getRecentLogs,
   logError,
+  logWarn,
   write as writeLog,
 } from "./lib/logger";
+import {
+  createGuardedIpc,
+  MAIN_AND_PET,
+  MAIN_ONLY,
+  MODEL_MONITOR_HIGH_RISK,
+  windowRoleOf,
+  type GuardConfig,
+  type GuardedIpc,
+  type IpcMainLike,
+} from "./lib/ipc-guard";
+import {
+  optionalId,
+  optionalProxyOverride,
+  optionalTime,
+  requireId,
+  requireSettingKey,
+} from "./lib/ipc-args";
+import { appIndexHtmlPath, devServerUrl } from "./lib/app-paths";
 import { clearUsageScanCache } from "./local-usage/clear-cache";
 import type { AppBootstrap } from "./types";
 import { registerPetIpc } from "./pet/ipc";
@@ -77,15 +96,46 @@ function parseBackupOrThrow(raw: unknown): BackupPayload {
   return parsed.payload;
 }
 
-export function registerIpc(): void {
-  ipcMain.handle("model-monitor:state", (_e, date?: unknown, source?: unknown) => getAgentModelMonitorState(date, source, app.getPath("userData")));
-  ipcMain.handle("model-monitor:enable-opencode", () => enableOpenCodeCapture(path.join(app.getAppPath(), "electron", "agent-capture", "opencode.mjs"), app.getPath("userData")));
-  ipcMain.handle("model-monitor:enable-claude", () => enableClaudeCapture(path.join(app.getAppPath(), "electron", "agent-capture"), app.getPath("userData")));
-  ipcMain.handle("model-monitor:launch-codex", () => singleFlight(captureLaunch, () => launchCapturedCodex(path.join(app.getAppPath(), "electron", "codex-capture", "CodexCapture.cs"), app.getPath("userData"))));
-  ipcMain.handle("app:ping", () => "pong");
-  ipcMain.handle("encryption:available", () => isEncryptionAvailable());
+let guardConfig: GuardConfig | null = null;
+function ipcGuardConfig(): GuardConfig {
+  guardConfig ??= {
+    indexHtmlPath: appIndexHtmlPath(),
+    devServerUrl: devServerUrl(),
+    roleOf: windowRoleOf,
+    isFocused: (id) => {
+      const wc = webContents.fromId(id);
+      const w = wc ? BrowserWindow.fromWebContents(wc) : null;
+      return !!w && !w.isDestroyed() && w.isFocused();
+    },
+  };
+  return guardConfig;
+}
 
-  ipcMain.handle("app:bootstrap", (): AppBootstrap => {
+/**
+ * 注册全部 IPC 通道。每个通道都经 lib/ipc-guard 校验发送方：
+ * 默认只对主窗口开放；桌宠窗口只能调 pet/ipc 里声明的几个通道；
+ * 改注册表、往用户目录装脚本、启动外部程序的通道另加前台与路由限制。
+ * `target` 仅供测试注入假的 ipcMain。
+ */
+export function registerIpc(
+  target: IpcMainLike = ipcMain,
+  getConfig: () => GuardConfig = ipcGuardConfig,
+): GuardedIpc {
+  const guard = createGuardedIpc(target, getConfig, (channel, reason) =>
+    logWarn("ipc", `已拒绝 ${channel}：${reason}`),
+  );
+  const handle = (channel: string, listener: (event: any, ...args: any[]) => unknown) =>
+    guard.handle(channel, MAIN_ONLY, listener);
+  handle("model-monitor:state", (_e, date?: unknown, source?: unknown) => getAgentModelMonitorState(date, source, app.getPath("userData")));
+  // 以下三个会写用户目录 / 用户环境变量（HKCU\Environment）或启动外部程序：
+  // 只接受主窗口、前台、且当前就在「模型监测」页发起的请求
+  guard.handle("model-monitor:enable-opencode", MODEL_MONITOR_HIGH_RISK, () => enableOpenCodeCapture(path.join(app.getAppPath(), "electron", "agent-capture", "opencode.mjs"), app.getPath("userData")));
+  guard.handle("model-monitor:enable-claude", MODEL_MONITOR_HIGH_RISK, () => enableClaudeCapture(path.join(app.getAppPath(), "electron", "agent-capture"), app.getPath("userData")));
+  guard.handle("model-monitor:launch-codex", MODEL_MONITOR_HIGH_RISK, () => singleFlight(captureLaunch, () => launchCapturedCodex(path.join(app.getAppPath(), "electron", "codex-capture", "CodexCapture.cs"), app.getPath("userData"))));
+  handle("app:ping", () => "pong");
+  handle("encryption:available", () => isEncryptionAvailable());
+
+  handle("app:bootstrap", (): AppBootstrap => {
     const today = toDateKey(Date.now());
     const monthStart = monthStartKey(today);
     return {
@@ -109,20 +159,20 @@ export function registerIpc(): void {
     };
   });
 
-  ipcMain.handle("services:definitions", () => listDefinitions());
-  ipcMain.handle("services:list", () => listServices());
+  handle("services:definitions", () => listDefinitions());
+  handle("services:list", () => listServices());
 
-  ipcMain.handle("services:create", (_e, input: unknown) => createServiceFromInput(input));
-  ipcMain.handle("services:update", (_e, id: string, input: unknown) =>
-    updateServiceFromInput(id, input),
+  handle("services:create", (_e, input: unknown) => createServiceFromInput(input));
+  handle("services:update", (_e, id: unknown, input: unknown) =>
+    updateServiceFromInput(requireId(id), input),
   );
-  ipcMain.handle("services:delete", (_e, id: string) => {
-    deleteServiceRow(id);
+  handle("services:delete", (_e, id: unknown) => {
+    deleteServiceRow(requireId(id));
     return true;
   });
 
-  ipcMain.handle("settings:get", (_e, key: string) => getSetting(key));
-  ipcMain.handle("settings:set", (_e, key: unknown, value: unknown) => {
+  handle("settings:get", (_e, key: unknown) => getSetting(requireSettingKey(key)));
+  handle("settings:set", (_e, key: unknown, value: unknown) => {
     const validKey = validateSettingKey(key);
     if (typeof value !== "string") throw new Error("设置值需为字符串");
     if (validKey === "refreshInterval") {
@@ -168,15 +218,16 @@ export function registerIpc(): void {
     return true;
   });
 
-  ipcMain.handle("proxy:test", async (_e, override?: ProxyConfigOverride) =>
-    testNetworkConnectivity(override),
+  handle("proxy:test", async (_e, override?: unknown) =>
+    testNetworkConnectivity(optionalProxyOverride(override) as ProxyConfigOverride | undefined),
   );
 
 
   // 手动刷新失败要留痕：用户点了刷新看到报错，日志里得有对应记录，
   // 否则用户描述「刷新报错」时我们对不上任何上下文。
   // 抛出的错误照旧交给前端展示，只是顺带记一笔。
-  ipcMain.handle("services:refresh", async (_e, id: string) => {
+  handle("services:refresh", async (_e, rawId: unknown) => {
+    const id = requireId(rawId);
     try {
       return await refreshServiceInternal(id);
     } catch (e) {
@@ -186,30 +237,30 @@ export function registerIpc(): void {
     }
   });
 
-  ipcMain.handle(
+  handle(
     "snapshots:list",
-    (_e, serviceId?: string, since?: string) =>
-      listBalanceSnapshots(serviceId, since),
+    (_e, serviceId?: unknown, since?: unknown) =>
+      listBalanceSnapshots(optionalId(serviceId), optionalTime(since)),
   );
 
-  ipcMain.handle(
+  handle(
     "usage:refresh",
-    async (_e, id: string, period: unknown) =>
-      refreshUsageInternal(id, validatePeriod(period)),
+    async (_e, id: unknown, period: unknown) =>
+      refreshUsageInternal(requireId(id), validatePeriod(period)),
   );
 
-  ipcMain.handle(
+  handle(
     "usage:list",
-    (_e, serviceId?: string, since?: string) =>
-      listUsageRecords(serviceId, since),
+    (_e, serviceId?: unknown, since?: unknown) =>
+      listUsageRecords(optionalId(serviceId), optionalTime(since)),
   );
 
-  ipcMain.handle("pricing:get", () => {
+  handle("pricing:get", () => {
     const overrides = parseOverrides(getSetting("pricingOverrides"));
     return getPricingTable(overrides);
   });
 
-  ipcMain.handle("pricing:set", (_e, value: unknown) => {
+  handle("pricing:set", (_e, value: unknown) => {
     // 存之前先剔掉与内置值相同的项：设置页会把整张表回传（它展示的是合并后的
     // 有效值），不剔就等于把内置价表冻在保存当天的数值上
     const overrides = pruneDefaultOverrides(validatePricingOverrides(value));
@@ -217,32 +268,32 @@ export function registerIpc(): void {
     return true;
   });
 
-  ipcMain.handle("local-usage:scan", async (_e, since?: string) =>
-    scanAndPersistLocalUsage(since),
+  handle("local-usage:scan", async (_e, since?: unknown) =>
+    scanAndPersistLocalUsage(optionalTime(since)),
   );
-  ipcMain.handle(
+  handle(
     "local-daily:list",
-    (_e, since?: string, until?: string) =>
-      listLocalDailyUsage(since, until),
+    (_e, since?: unknown, until?: unknown) =>
+      listLocalDailyUsage(optionalTime(since), optionalTime(until)),
   );
 
-  ipcMain.handle("auth:volcengine-login", () => openVolcengineLogin());
-  ipcMain.handle("auth:scnet-login", () => openScnetLogin());
+  handle("auth:volcengine-login", () => openVolcengineLogin());
+  handle("auth:scnet-login", () => openScnetLogin());
 
   // 日志：供「反馈问题」界面展示最近错误、打开日志文件夹、清空日志。
   // 不提供任何上传接口——文件发不发、发给谁，全由用户自己决定。
-  ipcMain.handle("logs:recent", () => getRecentLogs());
-  ipcMain.handle("logs:path", () => getLogPath());
-  ipcMain.handle("logs:reveal", () => {
+  handle("logs:recent", () => getRecentLogs());
+  handle("logs:path", () => getLogPath());
+  handle("logs:reveal", () => {
     // 定位到文件本身而非只打开目录，省得用户在一堆缓存文件夹里找
     shell.showItemInFolder(getLogPath());
     return true;
   });
-  ipcMain.handle("app:reveal-user-data", () => {
+  handle("app:reveal-user-data", () => {
     void shell.openPath(app.getPath("userData"));
     return true;
   });
-  ipcMain.handle("app:backup-json", () => {
+  handle("app:backup-json", () => {
     const payload = buildBackupPayload({
       services: listServices(),
       usageRecords: listUsageRecords(),
@@ -260,25 +311,25 @@ export function registerIpc(): void {
     });
     return JSON.stringify(payload, null, 2);
   });
-  ipcMain.handle("app:preview-backup", (_e, raw: unknown) => {
+  handle("app:preview-backup", (_e, raw: unknown) => {
     const payload = parseBackupOrThrow(raw);
     return backupPreviewStats(payload);
   });
-  ipcMain.handle("app:import-backup", (_e, raw: unknown) =>
+  handle("app:import-backup", (_e, raw: unknown) =>
     applyBackupImport(
       parseBackupOrThrow(raw),
       (provider) => getDefinition(provider)?.kind,
     ),
   );
-  ipcMain.handle("app:stats", () => dataStats());
-  ipcMain.handle("local-usage:import-rows", (_e, rows: unknown) => {
+  handle("app:stats", () => dataStats());
+  handle("local-usage:import-rows", (_e, rows: unknown) => {
     if (!Array.isArray(rows)) throw new Error("无效的导入数据");
     if (rows.length > 50_000) throw new Error("导入行数过多");
     const localRows = toLocalUsageRows(rows);
     upsertLocalDailyUsage(localRows);
     return { imported: localRows.length, skipped: rows.length - localRows.length };
   });
-  ipcMain.handle(
+  handle(
     "app:save-text",
     async (_e, defaultName: unknown, content: unknown) => {
       if (typeof defaultName !== "string" || typeof content !== "string") {
@@ -303,24 +354,25 @@ export function registerIpc(): void {
       return true;
     },
   );
-  ipcMain.handle("logs:clear", () => {
+  handle("logs:clear", () => {
     clearLogs();
     return true;
   });
 
   // 渲染进程的报错也收进同一份日志：此前前端异常只进 devtools 控制台，
   // 用户那边等于完全不可见。
-  ipcMain.handle("logs:report-renderer-error", (_e, message: unknown) => {
+  // 桌宠窗口也会上报前端异常
+  guard.handle("logs:report-renderer-error", MAIN_AND_PET, (_e, message: unknown) => {
     if (typeof message !== "string") return false;
     // 限长，避免超大堆栈把日志文件塞满
     writeLog("error", "renderer", message.slice(0, 4000));
     return true;
   });
 
-  registerPetIpc();
+  registerPetIpc(guard);
 
   // 本地用量缓存清理（统计逻辑修复后需要重新统计）
-  ipcMain.handle("local-usage:clear-cache", async () => {
+  handle("local-usage:clear-cache", async () => {
     try {
       // 三件事缺一不可：丢内存缓存、删缓存文件、清历史桶。
       // 前两件在 clearUsageScanCache 里，第三件走 db 的内存状态——
@@ -336,4 +388,5 @@ export function registerIpc(): void {
       return { success: false, error: msg };
     }
   });
+  return guard;
 }

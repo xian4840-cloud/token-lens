@@ -15,7 +15,6 @@ import type { ModelPricing, PricingRowDisplay } from "./adapters/pricing";
 import type { ScanLocalUsageResult } from "./local-usage/types";
 import type { ProxyConfigOverride } from "./lib/http";
 import type { LogEntry } from "./lib/logger";
-import type { PetActivity, PetSpendSummary } from "./pet/types";
 import type { ModelMonitorState, ModelMonitorSource } from "./model-monitor";
 
 
@@ -152,23 +151,7 @@ const api = {
   getPetEnabled: () => ipcRenderer.invoke("pet:getEnabled") as Promise<boolean>,
   setPetEnabled: (enabled: boolean) =>
     ipcRenderer.invoke("pet:setEnabled", enabled) as Promise<boolean>,
-  petTodaySpend: () =>
-    ipcRenderer.invoke("pet:todaySpend") as Promise<PetSpendSummary>,
-  getPetActivity: () =>
-    ipcRenderer.invoke("pet:getActivity") as Promise<PetActivity>,
-  petDragStart: () => ipcRenderer.send("pet:drag-start"),
-  petDragMove: () => ipcRenderer.send("pet:drag-move"),
-  petDragEnd: () => ipcRenderer.send("pet:drag-end"),
-  onPetActivity: (cb: (activity: PetActivity) => void) => {
-    const handler = (_e: unknown, activity: PetActivity) => cb(activity);
-    ipcRenderer.on("pet:activity", handler);
-    return () => ipcRenderer.removeListener("pet:activity", handler);
-  },
-  onPetSpendUpdated: (cb: (summary: PetSpendSummary) => void) => {
-    const handler = (_e: unknown, summary: PetSpendSummary) => cb(summary);
-    ipcRenderer.on("pet:spend-updated", handler);
-    return () => ipcRenderer.removeListener("pet:spend-updated", handler);
-  },
+  // 桌宠窗口的 API（今日花费、活动、拖动）在 pet-preload.ts，主窗口不需要
 };
 
 

@@ -61,7 +61,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </button>
             <button
               type="button"
-              onClick={() => void window.tokenLens?.revealLogFile()}
+              onClick={() => void window.tokenLens?.revealLogFile?.()}
               className="rounded-md border px-4 py-2 text-sm hover:bg-accent"
             >
               打开日志文件

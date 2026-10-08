@@ -9,6 +9,8 @@ import { buildCsp, safeOpenExternal, applySessionProxy } from "./lib/http";
 import { initLogger, logError, logWarn } from "./lib/logger";
 import { redactUrl } from "./lib/redact";
 import { closePetWindow, openPetIfEnabled, preparePetQuit } from "./pet/window";
+import { appIndexHtmlPath, devServerUrl } from "./lib/app-paths";
+import { registerWindowRole } from "./lib/ipc-guard";
 import {
   clampWindowBounds,
   DEFAULT_WINDOW,
@@ -56,6 +58,7 @@ function createWindow() {
     },
   });
 
+  registerWindowRole(win.webContents, "main");
   setMainWindow(win);
   setRendererNotify((channel, payload) => {
     if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
@@ -87,7 +90,7 @@ function createWindow() {
 
   // 限制主窗口导航：dev 允许 localhost 与 127.0.0.1，生产仅同源；外部链接转系统浏览器
   win.webContents.on("will-navigate", (e, url) => {
-    if (process.env.VITE_DEV_SERVER_URL) {
+    if (devServerUrl()) {
       try {
         const u = new URL(url);
         if (u.hostname === "localhost" || u.hostname === "127.0.0.1") return;
@@ -99,10 +102,11 @@ function createWindow() {
     safeOpenExternal(url);
   });
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    void win.loadURL(process.env.VITE_DEV_SERVER_URL);
+  const dev = devServerUrl();
+  if (dev) {
+    void win.loadURL(dev);
   } else {
-    void win.loadFile(path.join(__dirname, "..", "ui", "dist", "index.html"));
+    void win.loadFile(appIndexHtmlPath());
   }
 
   win.on("ready-to-show", () => {
@@ -151,7 +155,7 @@ if (!gotLock) {
 
     // 注入 CSP：主窗口 default session 所有响应补 Content-Security-Policy 头，
     // 限制脚本来源与外联目标（见 lib/http 的域名白名单）
-    const dev = !!process.env.VITE_DEV_SERVER_URL;
+    const dev = !!devServerUrl();
     const csp = buildCsp(dev);
     session.defaultSession.webRequest.onHeadersReceived((details, cb) => {
       const headers = { ...details.responseHeaders };
