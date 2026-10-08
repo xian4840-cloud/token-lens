@@ -14,7 +14,7 @@ export const KIMI_PRICING: PricingRow[] = [
   {
     key: "kimi-k3",
     label: "Kimi K3",
-    match: /kimi[.\-_\s]*k?3/i,
+    match: /kimi[.\-_\s]*k?3(?!\d)/i,
     inputPerM: 3,
     outputPerM: 15,
     cacheReadPerM: 0.3,
@@ -36,7 +36,7 @@ export const KIMI_PRICING: PricingRow[] = [
     // 2026-10 新增
     key: "kimi-k2.7-code",
     label: "Kimi K2.7 Code",
-    match: /kimi[.\-_\s]*k?2[.\-_]*7/i,
+    match: /kimi[.\-_\s]*k?2[.\-_]*7(?!\d)/i,
     inputPerM: 0.95,
     outputPerM: 4,
     cacheReadPerM: 0.19,
@@ -47,7 +47,7 @@ export const KIMI_PRICING: PricingRow[] = [
     // 2026-10 新增
     key: "kimi-k2.6",
     label: "Kimi K2.6",
-    match: /kimi[.\-_\s]*k?2[.\-_]*6/i,
+    match: /kimi[.\-_\s]*k?2[.\-_]*6(?!\d)/i,
     inputPerM: 0.95,
     outputPerM: 4,
     cacheReadPerM: 0.16,

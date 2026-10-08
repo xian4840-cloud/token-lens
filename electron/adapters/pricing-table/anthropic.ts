@@ -16,7 +16,7 @@ export const ANTHROPIC_PRICING: PricingRow[] = [
     // 5.1 缓存命中是 0.025× 输入（$0.25），必须排在 Fable 5 之前
     key: "claude-fable-5-1",
     label: "Claude Fable 5.1 / Mythos 5.1",
-    match: /claude[.\-_]*(?:fable|mythos)[.\-_]*5[.\-_]*1/i,
+    match: /claude[.\-_]*(?:fable|mythos)[.\-_]*5[.\-_]*1(?!\d)/i,
     inputPerM: 10,
     outputPerM: 50,
     cacheReadPerM: 0.25,
@@ -26,7 +26,7 @@ export const ANTHROPIC_PRICING: PricingRow[] = [
   {
     key: "claude-fable-5",
     label: "Claude Fable 5 / Mythos 5",
-    match: /claude[.\-_]*(?:fable|mythos)[.\-_]*5/i,
+    match: /claude[.\-_]*(?:fable|mythos)[.\-_]*5(?!\d)/i,
     inputPerM: 10,
     outputPerM: 50,
     cacheReadPerM: 1,
@@ -48,7 +48,7 @@ export const ANTHROPIC_PRICING: PricingRow[] = [
   {
     key: "claude-opus-5",
     label: "Claude Opus 5",
-    match: /opus[.\-_]*5/i,
+    match: /opus[.\-_]*5(?!\d)/i,
     inputPerM: 5,
     outputPerM: 25,
     cacheReadPerM: 0.5,
@@ -59,7 +59,7 @@ export const ANTHROPIC_PRICING: PricingRow[] = [
     // 4.5 / 4.6 / 4.7 / 4.8 同价，合成一条规则；必须在 claude-opus-4 之前
     key: "claude-opus-4-5-plus",
     label: "Claude Opus 4.5–4.8",
-    match: /opus[.\-_]*4[.\-_]*[5678]/i,
+    match: /opus[.\-_]*4[.\-_]*[5678](?!\d)/i,
     inputPerM: 5,
     outputPerM: 25,
     cacheReadPerM: 0.5,
@@ -70,7 +70,7 @@ export const ANTHROPIC_PRICING: PricingRow[] = [
     // 仅剩 Opus 4 / 4.1（均已停用，Bedrock、Google Cloud 上仍可用）
     key: "claude-opus-4",
     label: "Claude Opus 4 / 4.1",
-    match: /opus[.\-_]*4/i,
+    match: /opus[.\-_]*4(?!\d)/i,
     inputPerM: 15,
     outputPerM: 75,
     cacheReadPerM: 1.5,
@@ -92,7 +92,7 @@ export const ANTHROPIC_PRICING: PricingRow[] = [
   {
     key: "claude-sonnet-5",
     label: "Claude Sonnet 5",
-    match: /sonnet[.\-_]*5/i,
+    match: /sonnet[.\-_]*5(?!\d)/i,
     // 上市促销 $2/$10 已转正，原定 2026-09-01 调到 $3/$15 取消
     inputPerM: 2,
     outputPerM: 10,
@@ -104,7 +104,7 @@ export const ANTHROPIC_PRICING: PricingRow[] = [
     // Sonnet 4 / 4.5 / 4.6 同价 $3/$15，无需按小版本拆分
     key: "claude-sonnet-4",
     label: "Claude Sonnet 4–4.6",
-    match: /sonnet[.\-_]*4/i,
+    match: /sonnet[.\-_]*4(?!\d)/i,
     inputPerM: 3,
     outputPerM: 15,
     cacheReadPerM: 0.3,
@@ -127,7 +127,7 @@ export const ANTHROPIC_PRICING: PricingRow[] = [
   {
     key: "claude-haiku-4-5",
     label: "Claude Haiku 4.5",
-    match: /haiku[.\-_]*4[.\-_]*5/i,
+    match: /haiku[.\-_]*4[.\-_]*5(?!\d)/i,
     inputPerM: 1,
     outputPerM: 5,
     cacheReadPerM: 0.1,

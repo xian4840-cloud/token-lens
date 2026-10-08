@@ -59,7 +59,7 @@ export const MIMO_PRICING: PricingRow[] = [
     // 2026-10-21 下线
     key: "mimo-v2.5",
     label: "MiMo V2.5 (将下线)",
-    match: /mimo[.\-_]*v?2[.\-_]*5/i,
+    match: /mimo[.\-_]*v?2[.\-_]*5(?!\d)/i,
     inputPerM: 0.14,
     outputPerM: 0.28,
     cacheReadPerM: 0.0028,

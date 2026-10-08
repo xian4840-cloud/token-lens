@@ -34,7 +34,7 @@ export const ZHIPU_PRICING: PricingRow[] = [
   {
     key: "glm-5.3",
     label: "GLM-5.3",
-    match: /glm[.\-_]*5[.\-_]*3/i,
+    match: /glm[.\-_]*5[.\-_]*3(?!\d)/i,
     inputPerM: 1.4,
     outputPerM: 4.4,
     cacheReadPerM: 0.26,
@@ -44,7 +44,7 @@ export const ZHIPU_PRICING: PricingRow[] = [
   {
     key: "glm-5.2",
     label: "GLM-5.2",
-    match: /glm[.\-_]*5[.\-_]*2/i,
+    match: /glm[.\-_]*5[.\-_]*2(?!\d)/i,
     inputPerM: 1.4,
     outputPerM: 4.4,
     cacheReadPerM: 0.26,
@@ -54,7 +54,7 @@ export const ZHIPU_PRICING: PricingRow[] = [
   {
     key: "glm-5.1",
     label: "GLM-5.1",
-    match: /glm[.\-_]*5[.\-_]*1/i,
+    match: /glm[.\-_]*5[.\-_]*1(?!\d)/i,
     inputPerM: 1.4,
     outputPerM: 4.4,
     cacheReadPerM: 0.26,
@@ -106,7 +106,7 @@ export const ZHIPU_PRICING: PricingRow[] = [
   {
     key: "glm-4.7",
     label: "GLM-4.7",
-    match: /glm[.\-_]*4[.\-_]*7/i,
+    match: /glm[.\-_]*4[.\-_]*7(?!\d)/i,
     inputPerM: 0.6,
     outputPerM: 2.2,
     cacheReadPerM: 0.11,

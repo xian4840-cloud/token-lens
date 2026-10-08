@@ -108,7 +108,7 @@ export const OPENAI_PRICING: PricingRow[] = [
   {
     key: "gpt-5.5",
     label: "GPT-5.5",
-    match: /gpt[.\-_]*5[.\-_]*5/i,
+    match: /gpt[.\-_]*5[.\-_]*5(?!\d)/i,
     inputPerM: 5,
     outputPerM: 30,
     cacheReadPerM: 0.5,
@@ -148,7 +148,7 @@ export const OPENAI_PRICING: PricingRow[] = [
   {
     key: "gpt-5.4",
     label: "GPT-5.4",
-    match: /gpt[.\-_]*5[.\-_]*4/i,
+    match: /gpt[.\-_]*5[.\-_]*4(?!\d)/i,
     inputPerM: 2.5,
     outputPerM: 15,
     cacheReadPerM: 0.25,
@@ -168,7 +168,7 @@ export const OPENAI_PRICING: PricingRow[] = [
   {
     key: "gpt-5.2",
     label: "GPT-5.2",
-    match: /gpt[.\-_]*5[.\-_]*2/i,
+    match: /gpt[.\-_]*5[.\-_]*2(?!\d)/i,
     inputPerM: 1.75,
     outputPerM: 14,
     cacheReadPerM: 0.175,
@@ -279,7 +279,7 @@ export const OPENAI_PRICING: PricingRow[] = [
   {
     key: "gpt-4.1",
     label: "GPT-4.1",
-    match: /gpt[.\-_]*4[.\-_]*1/i,
+    match: /gpt[.\-_]*4[.\-_]*1(?!\d)/i,
     inputPerM: 2,
     outputPerM: 8,
     cacheReadPerM: 0.5,

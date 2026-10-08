@@ -258,6 +258,60 @@ describe("其余厂商正则顺序", () => {
   });
 });
 
+describe("带日期后缀的快照名不被相邻小版本吃掉", () => {
+  // 根因：形如 `gpt[.-_]*5[.-_]*2` 的正则，小版本号后面没有 (?!\d)，
+  // 于是 gpt-5-2025-08-07 的「5-2」被当成 5.2、glm-5-20250101 被当成 GLM-5.2。
+  // 各厂商都会发带日期的快照名，所以对每一行都用常见日期格式验一遍。
+  const DATE_SUFFIXES = ["-2025-08-07", "-20250807", "-2026-03-05", "-0309", "-0905-preview"];
+
+  // 只取「key 本身就是一个能命中自己的模型名」的行（如 gpt-5、glm-5、grok-4.20），
+  // 像 claude-opus-4-5-plus 这种合并行的 key 不是真实模型名，跳过
+  const selfMatching = DEFAULT_PRICING.map((r) => r.key).filter((k) => matchKey(k) === k);
+
+  it("能自匹配的行足够多（防止过滤条件失效让下面的用例变成空跑）", () => {
+    expect(selfMatching.length).toBeGreaterThan(60);
+  });
+
+  it.each(selfMatching.flatMap((k) => DATE_SUFFIXES.map((d) => [`${k}${d}`, k])))(
+    "%s → %s",
+    (model, key) => {
+      expect(matchKey(model)).toBe(key);
+    },
+  );
+
+  it.each([
+    // 主版本 + 日期：不能落到同主版本的 x.y 行
+    ["gpt-5-2025-08-07", "gpt-5"],
+    ["gpt-5-mini-2025-08-07", "gpt-5-mini"],
+    ["glm-5-20250101", "glm-5"],
+    ["glm-5-20251231", "glm-5"],
+    ["claude-opus-4-20250514", "claude-opus-4"],
+    ["claude-sonnet-4-20250514", "claude-sonnet-4"],
+    // 小版本号的各种写法仍命中 x.y 行
+    ["gpt-5.2", "gpt-5.2"],
+    ["gpt-5-2", "gpt-5.2"],
+    ["gpt-5.2-2025-12-11", "gpt-5.2"],
+    ["gpt-5-2-2025-12-11", "gpt-5.2"],
+    ["gpt-5.4-2026-03-05", "gpt-5.4"],
+    ["gpt-5.5-2026-04-23", "gpt-5.5"],
+    ["glm-5.2", "glm-5.2"],
+    ["glm-5-2", "glm-5.2"],
+    ["glm-5.1-20260101", "glm-5.1"],
+    ["grok-4.20-0309-reasoning", "grok-4.20"],
+    ["grok-4-20-0309-non-reasoning", "grok-4.20"],
+    ["claude-opus-4-5-20251101", "claude-opus-4-5-plus"],
+    ["claude-haiku-4-5-20251001", "claude-haiku-4-5"],
+  ])("%s → %s", (model, key) => {
+    expect(matchKey(model)).toBe(key);
+  });
+
+  it("没有对应价格行的旧快照不会被错算到相邻小版本", () => {
+    // 之前分别会按 GPT-4.1 与 Grok 4.20 计价；表里没有 GPT-4 / Grok 4 行，应显示「-」
+    expect(matchKey("gpt-4-1106-preview")).toBeUndefined();
+    expect(matchKey("grok-4-20250709")).toBeUndefined();
+  });
+});
+
 describe("匹配不到的模型", () => {
   it("返回 undefined 而不是 0（界面显示「-」而非「免费」）", () => {
     expect(computeCost("x-preview-f-free", { input: 100 })).toBeUndefined();
