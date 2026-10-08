@@ -1,0 +1,6 @@
+# git blame 跳过的提交（纯格式化等不改变逻辑的大范围改动）。
+# GitHub 网页的 blame 会自动读取本文件；本地需执行一次：
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# style: 全量 Prettier 格式化（仅格式，无其他改动）
+dc8a39097e2f4b5f268b4ec6a460ddfb6ac658ce
