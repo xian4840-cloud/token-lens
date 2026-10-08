@@ -26,7 +26,8 @@ import type { PricingRow } from "./pricing";
  *   所以 opus-4.5~4.8 的正则必须排在宽松的 `opus-4` 之前。
  * - `gpt-5.6-*` 三个子型号互不重叠，但都要放在任何泛化的 gpt-5 规则之前。
  */
-export const DEFAULT_PRICING: PricingRow[] = [
+
+const OPENAI_PRICING: PricingRow[] = [
   // ==========================================================================
   // OpenAI — developers.openai.com/api/docs/pricing（标准档、短上下文）
   //
@@ -307,6 +308,9 @@ export const DEFAULT_PRICING: PricingRow[] = [
     cacheWritePerM: 0,
     currency: "USD",
   },
+];
+
+const ZHIPU_PRICING: PricingRow[] = [
   // ==========================================================================
   // 智谱 GLM — docs.z.ai/guides/overview/pricing（海外站，美元）
   //
@@ -484,6 +488,9 @@ export const DEFAULT_PRICING: PricingRow[] = [
     cacheWritePerM: 0,
     currency: "USD",
   },
+];
+
+const DEEPSEEK_PRICING: PricingRow[] = [
   // ==========================================================================
   // DeepSeek — api-docs.deepseek.com/quick_start/pricing
   //
@@ -533,6 +540,9 @@ export const DEFAULT_PRICING: PricingRow[] = [
     cacheWritePerM: 0,
     currency: "USD",
   },
+];
+
+const KIMI_PRICING: PricingRow[] = [
   // ==========================================================================
   // Moonshot Kimi — platform.kimi.com/docs/pricing/chat-k3
   //
@@ -551,6 +561,9 @@ export const DEFAULT_PRICING: PricingRow[] = [
     cacheWritePerM: 0,
     currency: "USD",
   },
+];
+
+const MIMO_PRICING: PricingRow[] = [
   // ==========================================================================
   // 小米 MiMo — mimo.mi.com/docs/en-US/price/pay-as-you-go（海外站，美元）
   //
@@ -577,6 +590,9 @@ export const DEFAULT_PRICING: PricingRow[] = [
     cacheWritePerM: 0,
     currency: "USD",
   },
+];
+
+const GEMINI_PRICING: PricingRow[] = [
   // ==========================================================================
   // Google Gemini — ai.google.dev/gemini-api/docs/pricing（Standard 档）
   //
@@ -703,6 +719,9 @@ export const DEFAULT_PRICING: PricingRow[] = [
     cacheWritePerM: 0,
     currency: "USD",
   },
+];
+
+const ANTHROPIC_PRICING: PricingRow[] = [
   // ==========================================================================
   // Anthropic — platform.claude.com/docs/zh-CN/about-claude/pricing
   //
@@ -849,6 +868,9 @@ export const DEFAULT_PRICING: PricingRow[] = [
     cacheWritePerM: 0.3,
     currency: "USD",
   },
+];
+
+const XAI_PRICING: PricingRow[] = [
   // ==========================================================================
   // xAI Grok — docs.x.ai/docs/models（取 <200k 提示档）
   //
@@ -915,4 +937,16 @@ export const DEFAULT_PRICING: PricingRow[] = [
     cacheWritePerM: 0,
     currency: "USD",
   },
+];
+
+/** 各厂商按下面的顺序拼接；数组顺序就是匹配优先级（见文件头「匹配规则」） */
+export const DEFAULT_PRICING: PricingRow[] = [
+  ...OPENAI_PRICING,
+  ...ZHIPU_PRICING,
+  ...DEEPSEEK_PRICING,
+  ...KIMI_PRICING,
+  ...MIMO_PRICING,
+  ...GEMINI_PRICING,
+  ...ANTHROPIC_PRICING,
+  ...XAI_PRICING,
 ];
