@@ -3,7 +3,7 @@ import { pickTextFile, readFileAsText } from "./pick-file";
 import type { BackupPreview } from "./backup-preview";
 
 export type { BackupPreview } from "./backup-preview";
-export { formatBackupPreviewText } from "./backup-preview";
+export { formatBackupImportResult, formatBackupPreviewText } from "./backup-preview";
 
 export type PrepareBackupResult =
   | { ok: true; raw: string; preview: BackupPreview }

@@ -6,7 +6,6 @@ import {
   listServices,
   getService,
   insertService,
-  updateServiceMeta,
   deleteServiceRow,
   setSecret,
   listBalanceSnapshots,
@@ -17,7 +16,6 @@ import {
   setSetting,
   getLastBalances,
   upsertLocalDailyUsage,
-  appendImportedUsageRecords,
   dataStats,
 } from "./db";
 import { isEncryptionAvailable } from "./secrets";
@@ -68,30 +66,12 @@ import { getAgentModelMonitorState } from "./agent-model-monitor";
 import { launchCapturedCodex } from "./codex-capture";
 import { enableOpenCodeCapture, enableClaudeCapture } from "./agent-response-capture";
 import { singleFlight } from "./lib/inflight";
+import { applyBackupImport } from "./backup-import";
+import { splitFields, updateServiceFromInput } from "./service-update";
 
 const captureLaunch = { current: null as ReturnType<typeof launchCapturedCodex> | null };
 
 
-/** 按服务定义把表单字段拆分为非敏感 config 与敏感 secrets */
-function splitFields(
-  provider: string,
-  fields: Record<string, string>,
-): { config: Record<string, unknown>; secrets: Record<string, string> } {
-  const def = getDefinition(provider);
-  if (!def) throw new Error(`未知服务类型: ${provider}`);
-  const secretKeys = new Set(
-    def.configSchema
-      .filter((f) => f.type === "password" || f.secret)
-      .map((f) => f.key),
-  );
-  const config: Record<string, unknown> = {};
-  const secrets: Record<string, string> = {};
-  for (const [k, v] of Object.entries(fields)) {
-    if (secretKeys.has(k)) secrets[k] = v;
-    else config[k] = v;
-  }
-  return { config, secrets };
-}
 
 function parseBackupOrThrow(raw: unknown): BackupPayload {
   if (typeof raw !== "string") throw new Error("无效的备份内容");
@@ -156,20 +136,8 @@ export function registerIpc(): void {
     for (const [k, v] of Object.entries(secrets)) setSecret(id, k, v);
     return record;
   });
-  ipcMain.handle(
-    "services:update",
-    (_e, id: string, input: unknown) => {
-      const existing = getService(id);
-      if (!existing) throw new Error("服务不存在");
-      const valid = validateServiceInput(input);
-      const { config, secrets } = splitFields(valid.provider, valid.fields);
-      updateServiceMeta(id, valid.name, config);
-      // 密码字段非空才更新；留空表示保留旧值（便于编辑其他字段时不重填密码）
-      for (const [k, v] of Object.entries(secrets)) {
-        if (v) setSecret(id, k, v);
-      }
-      return getService(id);
-    },
+  ipcMain.handle("services:update", (_e, id: string, input: unknown) =>
+    updateServiceFromInput(id, input),
   );
   ipcMain.handle("services:delete", (_e, id: string) => {
     deleteServiceRow(id);
@@ -319,32 +287,12 @@ export function registerIpc(): void {
     const payload = parseBackupOrThrow(raw);
     return backupPreviewStats(payload);
   });
-  ipcMain.handle("app:import-backup", (_e, raw: unknown) => {
-    const payload = parseBackupOrThrow(raw);
-    const localRows = toLocalUsageRows(payload.localDailyUsage);
-    upsertLocalDailyUsage(localRows);
-    const usageN = appendImportedUsageRecords(
-      payload.usageRecords as Parameters<
-        typeof appendImportedUsageRecords
-      >[0],
-    );
-    const s = payload.settings;
-    if (s.monthlyBudgetUsd)
-      setSetting("monthlyBudgetUsd", s.monthlyBudgetUsd);
-    if (s.pricingOverrides)
-      setSetting("pricingOverrides", s.pricingOverrides);
-    if (s.pinnedServiceIds)
-      setSetting(
-        "pinnedServiceIds",
-        JSON.stringify(parseIdList(s.pinnedServiceIds)),
-      );
-    if (s.hiddenServiceIds)
-      setSetting(
-        "hiddenServiceIds",
-        JSON.stringify(parseIdList(s.hiddenServiceIds)),
-      );
-    return { local: localRows.length, usage: usageN };
-  });
+  ipcMain.handle("app:import-backup", (_e, raw: unknown) =>
+    applyBackupImport(
+      parseBackupOrThrow(raw),
+      (provider) => getDefinition(provider)?.kind,
+    ),
+  );
   ipcMain.handle("app:stats", () => dataStats());
   ipcMain.handle("local-usage:import-rows", (_e, rows: unknown) => {
     if (!Array.isArray(rows)) throw new Error("无效的导入数据");

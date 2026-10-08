@@ -1,5 +1,6 @@
 import { getService, getSecrets, saveBalanceSnapshot, saveLastBalance } from "./db";
 import { getAdapter } from "./adapters";
+import { NEEDS_CREDENTIALS_MESSAGE } from "./lib/backup";
 import type { BalanceResult } from "./types";
 
 /**
@@ -11,6 +12,7 @@ export async function refreshServiceInternal(
 ): Promise<BalanceResult> {
   const record = getService(id);
   if (!record) throw new Error("服务不存在");
+  if (record.needsCredentials) throw new Error(NEEDS_CREDENTIALS_MESSAGE);
   const adapter = getAdapter(record.provider);
   if (!adapter) throw new Error(`未注册适配器: ${record.provider}`);
   const secrets = getSecrets(id);

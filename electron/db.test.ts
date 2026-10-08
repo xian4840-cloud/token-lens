@@ -22,7 +22,7 @@ import {
   upsertLocalDailyUsage,
   saveLastBalance,
   getLastBalances,
-  appendImportedUsageRecords,
+  importUsageRecords,
   dataStats,
 } from "./db";
 import { getRecentLogs } from "./lib/logger";
@@ -592,13 +592,17 @@ describe("lastBalance", () => {
 describe("导入与统计", () => {
   beforeEach(() => initDbAt(file));
 
-  it("appendImportedUsageRecords 丢掉没有 serviceId 的行，并分配新 id", () => {
-    const n = appendImportedUsageRecords([
+  it("importUsageRecords 丢掉坏行、没有 serviceId 或本机没有该服务的行，并分配新 id", () => {
+    insertService(service("s1"));
+    const r = importUsageRecords([
       { serviceId: "s1", model: "m", totalTokens: 10, period: "p" },
       { model: "no-service" },
+      null,
+      "not-an-object",
+      { serviceId: "ghost", model: "m", period: "p" },
       { serviceId: "s1", cost: Number.NaN, totalTokens: 2 },
     ]);
-    expect(n).toBe(2);
+    expect(r).toEqual({ imported: 2, skipped: 4 });
     const rows = listUsageRecords();
     expect(rows).toHaveLength(2);
     expect(rows[0]?.id).not.toBe(rows[1]?.id);

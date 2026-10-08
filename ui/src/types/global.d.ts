@@ -17,6 +17,7 @@ import type {
   UsageResult,
   ProxyTestResult,
 } from "@/types";
+import type { BackupImportResult, BackupPreview } from "@/lib/backup-preview";
 
 
 declare global {
@@ -31,10 +32,8 @@ declare global {
       bootstrap: () => Promise<AppBootstrap>;
       revealUserData: () => Promise<boolean>;
       backupJson: () => Promise<string>;
-      previewBackup: (
-        raw: string,
-      ) => Promise<{ local: number; usage: number; exportedAt: string }>;
-      importBackup: (raw: string) => Promise<{ local: number; usage: number }>;
+      previewBackup: (raw: string) => Promise<BackupPreview>;
+      importBackup: (raw: string) => Promise<BackupImportResult>;
       dataStats: () => Promise<{
         services: number;
         usageRecords: number;

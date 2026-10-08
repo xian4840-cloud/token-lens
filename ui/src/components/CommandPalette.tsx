@@ -15,6 +15,7 @@ import { formatDiagnosticSummary } from "@/lib/diagnostics";
 import { copyText } from "@/lib/copy-text";
 import { clampIndex, stepIndex } from "@/lib/command-nav";
 import {
+  formatBackupImportResult,
   formatBackupPreviewText,
   prepareBackupImport,
   type BackupPreview,
@@ -249,8 +250,10 @@ export function CommandPalette({
         setBackupPending(null);
         if (!pending) return;
         void ipc.importBackup(pending.raw).then(
-          (r) =>
-            showToast(`已导入本地 ${r.local} 条、API 用量 ${r.usage} 条`),
+          (r) => {
+            showToast(formatBackupImportResult(r));
+            void useAppStore.getState().reloadAfterBackupImport();
+          },
           (e: unknown) =>
             showToast(e instanceof Error ? e.message : "导入失败", "err"),
         );

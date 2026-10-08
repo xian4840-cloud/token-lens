@@ -5,6 +5,9 @@
 
 import { ALL_LOCAL_SOURCES, type LocalSource, type LocalUsageRow } from "../local-usage/types";
 
+/** 备份恢复的服务在补全密钥前刷新时给出的提示（≤40 字，卡片上原样显示） */
+export const NEEDS_CREDENTIALS_MESSAGE = "从备份恢复的服务，请到管理页重新填写密钥";
+
 export interface BackupService {
   id: string;
   name: string;
@@ -105,13 +108,37 @@ export function toLocalUsageRows(raw: unknown[]): LocalUsageRow[] {
 export function backupPreviewStats(payload: BackupPayload): {
   local: number;
   usage: number;
+  services: number;
   exportedAt: string;
 } {
   return {
     local: toLocalUsageRows(payload.localDailyUsage).length,
     usage: payload.usageRecords.length,
+    services: payload.services.length,
     exportedAt: payload.exportedAt,
   };
+}
+
+/**
+ * 导入时合并置顶 / 隐藏列表：本机原有的保留，备份里的经 idMap 换成本机 id，
+ * 只留本机确实存在的服务，去重保序。用并集而非覆盖，重复导入不会冲掉本机的设置。
+ */
+export function mergeImportedIdList(
+  local: string[],
+  fromBackup: string[],
+  idMap: Map<string, string>,
+  existingIds: Set<string>,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (id: string | undefined) => {
+    if (!id || seen.has(id) || !existingIds.has(id)) return;
+    seen.add(id);
+    out.push(id);
+  };
+  for (const id of local) push(id);
+  for (const id of fromBackup) push(idMap.get(id) ?? id);
+  return out;
 }
 
 export function saveDialogFilters(
@@ -127,9 +154,41 @@ export type ParsedBackup =
   | { ok: true; payload: BackupPayload }
   | { ok: false; error: string };
 
+/** 字段缺省时当空数组（旧备份 / 手工裁剪过的文件）；存在但不是数组则报错。 */
+function optionalArray(
+  obj: Record<string, unknown>,
+  key: string,
+): { ok: true; value: unknown[]; present: boolean } | { ok: false; error: string } {
+  const v = obj[key];
+  if (v === undefined || v === null) return { ok: true, value: [], present: false };
+  if (!Array.isArray(v)) return { ok: false, error: `备份格式无效：${key} 不是数组` };
+  return { ok: true, value: v, present: true };
+}
+
+function normalizeService(s: unknown): BackupService | null {
+  if (!s || typeof s !== "object") return null;
+  const r = s as Record<string, unknown>;
+  if (typeof r.id !== "string" || !r.id) return null;
+  if (typeof r.name !== "string" || typeof r.provider !== "string" || !r.provider) {
+    return null;
+  }
+  return {
+    id: r.id,
+    name: r.name,
+    provider: r.provider,
+    kind: typeof r.kind === "string" ? r.kind : "",
+    createdAt: typeof r.createdAt === "string" ? r.createdAt : "",
+  };
+}
+
 /**
  * 解析备份。含 secrets / 代理 URL 的文件直接拒绝。
  * 导入只信我们自己导出的形状，别的 JSON 不瞎吞。
+ *
+ * 兼容：services / usageRecords / localDailyUsage 任一缺省都按空处理
+ * （0.1.15 之前的手工备份、或用户自己删过字段的文件），但三者至少要有一个，
+ * 否则多半不是备份文件。字段存在却不是数组、服务条目缺字段这类残缺内容：
+ * 前者整份拒绝并说明哪个字段不对，后者逐条丢弃，不让一条坏数据拖垮整份导入。
  */
 export function parseBackupJson(raw: string): ParsedBackup {
   let v: unknown;
@@ -138,38 +197,43 @@ export function parseBackupJson(raw: string): ParsedBackup {
   } catch {
     return { ok: false, error: "不是合法 JSON" };
   }
-  if (!v || typeof v !== "object") return { ok: false, error: "备份格式无效" };
+  if (!v || typeof v !== "object" || Array.isArray(v)) {
+    return { ok: false, error: "备份格式无效" };
+  }
   const obj = v as Record<string, unknown>;
   if ("secrets" in obj) return { ok: false, error: "备份含密钥字段，已拒绝导入" };
   if (obj.app !== "token-lens") return { ok: false, error: "不是 Token Lens 备份" };
-  if (obj.version !== 1) return { ok: false, error: "不支持的备份版本" };
-  if (!Array.isArray(obj.usageRecords) || !Array.isArray(obj.localDailyUsage)) {
+  if (obj.version !== 1) {
+    return { ok: false, error: `不支持的备份版本（${String(obj.version)}）` };
+  }
+  const usage = optionalArray(obj, "usageRecords");
+  if (!usage.ok) return usage;
+  const local = optionalArray(obj, "localDailyUsage");
+  if (!local.ok) return local;
+  const svc = optionalArray(obj, "services");
+  if (!svc.ok) return svc;
+  if (!usage.present && !local.present && !svc.present) {
     return { ok: false, error: "缺少用量数据" };
   }
   const settings =
-    obj.settings && typeof obj.settings === "object"
+    obj.settings && typeof obj.settings === "object" && !Array.isArray(obj.settings)
       ? (obj.settings as Record<string, unknown>)
       : {};
   if (typeof settings.proxyCustomUrl === "string" && settings.proxyCustomUrl) {
     return { ok: false, error: "备份含代理地址，已拒绝导入" };
   }
-  const services = Array.isArray(obj.services) ? obj.services : [];
+  const services = svc.value
+    .map(normalizeService)
+    .filter((s): s is BackupService => s !== null);
   return {
     ok: true,
     payload: {
       app: "token-lens",
       version: 1,
       exportedAt: typeof obj.exportedAt === "string" ? obj.exportedAt : "",
-      services: services.filter(
-        (s): s is BackupService =>
-          !!s &&
-          typeof s === "object" &&
-          typeof (s as BackupService).id === "string" &&
-          typeof (s as BackupService).name === "string" &&
-          typeof (s as BackupService).provider === "string",
-      ) as BackupService[],
-      usageRecords: obj.usageRecords,
-      localDailyUsage: obj.localDailyUsage,
+      services,
+      usageRecords: usage.value,
+      localDailyUsage: local.value,
       settings: {
         refreshInterval:
           typeof settings.refreshInterval === "string"
