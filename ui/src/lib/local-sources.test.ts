@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { LOCAL_SOURCES, pivotDailyUsage } from "./local-sources";
+import {
+  LOCAL_SOURCES,
+  compareLocalWindows,
+  pivotDailyUsage,
+  summarizeLocalDay,
+  summarizeLocalRecords,
+} from "./local-sources";
 import { visibleTokens } from "./format";
 import { ALL_LOCAL_SOURCES } from "../../../electron/local-usage/types";
 import type { LocalDailyUsageRecord, LocalSource } from "@/types";
@@ -154,13 +160,23 @@ describe("pivotDailyUsage", () => {
     expect(rows[0].models?.codex).toBeUndefined();
   });
 
-  it("cost 为 null（价格表匹配不到）按 0 计，不产生 NaN", () => {
+  it("cost 为 null 不把未知画成 $0，那天可以没有金额列", () => {
     const rows = pivotDailyUsage(
-      [rec({ date: "2026-09-01", model: "unknown", cost: null })],
+      [rec({ date: "2026-09-01", model: "unknown", cost: null, inputTokens: 10 })],
       "cost",
     );
-    expect(rows[0].codex).toBe(0);
-    expect(Number.isFinite(rows[0].codex as number)).toBe(true);
+    expect(rows).toEqual([]);
+  });
+
+  it("同一天有标价和未标价时只累加有价的", () => {
+    const rows = pivotDailyUsage(
+      [
+        rec({ date: "2026-09-01", model: "priced", cost: 1.5, inputTokens: 10 }),
+        rec({ date: "2026-09-01", model: "unknown", cost: null, inputTokens: 99 }),
+      ],
+      "cost",
+    );
+    expect(rows[0]?.codex).toBe(1.5);
   });
 
   it("空输入返回空数组", () => {
@@ -183,5 +199,71 @@ describe("pivotDailyUsage", () => {
     for (const [date, sum] of expectByDay) {
       expect(byDate.get(date)?.total).toBe(sum);
     }
+  });
+});
+
+describe("summarizeLocalDay", () => {
+  it("只汇总指定日期，按来源列出", () => {
+    const s = summarizeLocalDay(
+      [
+        rec({ date: "2026-09-11", model: "a", source: "codex", inputTokens: 100, cost: 0.5, currency: "USD" }),
+        rec({ date: "2026-09-11", model: "b", source: "claude-code", inputTokens: 50, cost: 1, currency: "USD" }),
+        rec({ date: "2026-09-10", model: "a", source: "codex", inputTokens: 999, cost: 9 }),
+      ],
+      "2026-09-11",
+    );
+    expect(s.tokens).toBe(150);
+    expect(s.cost).toBe(1.5);
+    expect(s.bySource.map((x) => x.source)).toEqual(["claude-code", "codex"]);
+  });
+
+  it("没有标价的用量计入 tokens，费用为 null 而不是 0", () => {
+    const s = summarizeLocalDay(
+      [rec({ date: "2026-09-11", model: "unknown", inputTokens: 10, cost: null })],
+      "2026-09-11",
+    );
+    expect(s.tokens).toBe(10);
+    expect(s.cost).toBeNull();
+    expect(s.hasUnpriced).toBe(true);
+  });
+
+  it("有价和未标价混在一天时，合计只加有价的并标 hasUnpriced", () => {
+    const s = summarizeLocalDay(
+      [
+        rec({ date: "2026-09-11", model: "a", inputTokens: 10, cost: 2 }),
+        rec({ date: "2026-09-11", model: "b", inputTokens: 5, cost: null }),
+      ],
+      "2026-09-11",
+    );
+    expect(s.tokens).toBe(15);
+    expect(s.cost).toBe(2);
+    expect(s.hasUnpriced).toBe(true);
+  });
+});
+
+describe("compareLocalWindows", () => {
+  it("近 7 天与前 7 天分开合计", () => {
+    const rows = [
+      rec({ date: "2026-09-12", model: "a", inputTokens: 100, cost: 1, currency: "USD" }),
+      rec({ date: "2026-09-01", model: "a", inputTokens: 50, cost: 0.5, currency: "USD" }),
+    ];
+    const c = compareLocalWindows(rows, "2026-09-12", 7);
+    expect(c.current.tokens).toBe(100);
+    expect(c.previous.tokens).toBe(50);
+  });
+});
+
+describe("summarizeLocalRecords", () => {
+  it("跨天合计，不丢某一天", () => {
+    const s = summarizeLocalRecords(
+      [
+        rec({ date: "2026-09-01", model: "a", source: "codex", inputTokens: 100, cost: 1, currency: "USD" }),
+        rec({ date: "2026-09-12", model: "a", source: "codex", inputTokens: 50, cost: 0.5, currency: "USD" }),
+      ],
+      "2026-09",
+    );
+    expect(s.date).toBe("2026-09");
+    expect(s.tokens).toBe(150);
+    expect(s.cost).toBe(1.5);
   });
 });

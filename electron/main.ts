@@ -1,20 +1,47 @@
-import { app, BrowserWindow, Menu, shell, session } from "electron";
+import { app, BrowserWindow, Menu, screen, session } from "electron";
 import path from "node:path";
-import { initDb, flushDb } from "./db";
+import { initDb, flushDb, getSetting, setSetting } from "./db";
 import { registerAllAdapters } from "./adapters";
 import { registerIpc } from "./ipc";
 import { setMainWindow, startScheduler } from "./scheduler";
+import { setRendererNotify } from "./lib/renderer-notify";
 import { buildCsp, safeOpenExternal, applySessionProxy } from "./lib/http";
 import { initLogger, logError, logWarn } from "./lib/logger";
 import { redactUrl } from "./lib/redact";
 import { closePetWindow, openPetIfEnabled, preparePetQuit } from "./pet/window";
+import {
+  clampWindowBounds,
+  DEFAULT_WINDOW,
+  parseWindowBounds,
+} from "./lib/window-bounds";
 
 let win: BrowserWindow | null = null;
 
+function restoreWindowBounds() {
+  const parsed = parseWindowBounds({
+    windowX: getSetting("windowX"),
+    windowY: getSetting("windowY"),
+    windowWidth: getSetting("windowWidth"),
+    windowHeight: getSetting("windowHeight"),
+  });
+  const workAreas = screen.getAllDisplays().map((d) => d.workArea);
+  if (!parsed) return { width: DEFAULT_WINDOW.width, height: DEFAULT_WINDOW.height };
+  return clampWindowBounds(parsed, workAreas);
+}
+
+function persistWindowBounds(): void {
+  if (!win || win.isDestroyed()) return;
+  const b = win.getBounds();
+  setSetting("windowX", String(b.x));
+  setSetting("windowY", String(b.y));
+  setSetting("windowWidth", String(b.width));
+  setSetting("windowHeight", String(b.height));
+}
+
 function createWindow() {
+  const bounds = restoreWindowBounds();
   win = new BrowserWindow({
-    width: 1280,
-    height: 840,
+    ...bounds,
     minWidth: 960,
     minHeight: 620,
     title: "Token Lens",
@@ -30,6 +57,11 @@ function createWindow() {
   });
 
   setMainWindow(win);
+  setRendererNotify((channel, payload) => {
+    if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+      win.webContents.send(channel, payload);
+    }
+  });
 
   // 捕获页面加载异常
   win.webContents.on("did-fail-load", (_e, errorCode, errorDescription, validatedURL) => {
@@ -77,11 +109,27 @@ function createWindow() {
     win?.show();
     win?.focus();
   });
+  let boundsTimer: NodeJS.Timeout | null = null;
+  const schedulePersistBounds = () => {
+    if (boundsTimer) clearTimeout(boundsTimer);
+    boundsTimer = setTimeout(() => {
+      boundsTimer = null;
+      persistWindowBounds();
+    }, 250);
+  };
+  win.on("moved", schedulePersistBounds);
+  win.on("resized", schedulePersistBounds);
+  win.on("close", persistWindowBounds);
   win.on("closed", () => {
+    if (boundsTimer) {
+      clearTimeout(boundsTimer);
+      boundsTimer = null;
+    }
     preparePetQuit();
     closePetWindow();
     win = null;
     setMainWindow(null);
+    setRendererNotify(null);
   });
 
 }

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { inferSourceFromPath, isWatchableFile } from "./activity";
+import {
+  filterDisabledWatchTargets,
+  inferSourceFromPath,
+  isWatchableFile,
+} from "./activity";
 
 describe("inferSourceFromPath", () => {
   it("识别 Windows 风格的各家会话路径", () => {
@@ -40,5 +44,18 @@ describe("isWatchableFile", () => {
   it("丢掉编辑器临时文件", () => {
     expect(isWatchableFile("updates.jsonl.tmp")).toBe(false);
     expect(isWatchableFile("foo.swp")).toBe(false);
+  });
+});
+
+describe("filterDisabledWatchTargets", () => {
+  it("关掉的来源不再盯", () => {
+    const targets = [
+      { dir: "a", source: "codex" as const },
+      { dir: "b", source: "claude-code" as const },
+    ];
+    expect(filterDisabledWatchTargets(targets, ["codex"]).map((t) => t.source)).toEqual([
+      "claude-code",
+    ]);
+    expect(filterDisabledWatchTargets(targets, [])).toBe(targets);
   });
 });

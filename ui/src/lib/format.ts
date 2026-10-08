@@ -5,6 +5,31 @@ export function formatMoney(n: number | undefined, currency = "USD"): string {
   return `${symbol}${n.toFixed(2)}`;
 }
 
+/** 用量费用：四位小数，没有数字时显示破折号而不是 $0 */
+export function formatCost(
+  n: number | null | undefined,
+  currency?: string | null,
+): string {
+  if (n == null || Number.isNaN(n)) return "—";
+  const symbol = currency === "USD" ? "$" : currency === "CNY" ? "¥" : "";
+  return `${symbol}${n.toFixed(4)}`;
+}
+
+/** 本地时区 YYYY-MM-DD，与主进程 toDateKey 同一套「今天」 */
+export function localDateKey(d: Date = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+/** 距下一个本地零点的毫秒数，供「今日本地 agent」跨天翻页 */
+export function msUntilNextLocalMidnight(from: Date | number = new Date()): number {
+  const d = from instanceof Date ? from : new Date(from);
+  const next = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+  return Math.max(0, next.getTime() - d.getTime());
+}
+
 /** 余额数值格式化：金额用货币符号，tokens/Credits 等计量单位用简写加单位 */
 export function formatBalance(n: number | undefined, currency: string): string {
   if (n == null || Number.isNaN(n)) return "-";
@@ -33,6 +58,28 @@ export function usedPercent(
   if (!Number.isFinite(used)) return 0;
   if (!Number.isFinite(total) || total <= 0) return 0;
   return Math.min(100, Math.max(0, (used / total) * 100));
+}
+
+/** 进度条颜色：快用尽时换成警告/危险色，避免满条还是陶杏色。 */
+export function progressBarClass(pct: number): string {
+  if (!Number.isFinite(pct) || pct < 70) {
+    return "h-full rounded-full bg-gradient-to-r from-primary to-[#d5905f]";
+  }
+  if (pct < 90) return "h-full rounded-full bg-amber-600";
+  return "h-full rounded-full bg-destructive";
+}
+
+/** 总览页内预算横幅。不是系统通知。 */
+export function budgetBannerKind(
+  spent: number | null | undefined,
+  budget: number | null | undefined,
+): "near" | "over" | null {
+  if (budget == null || !Number.isFinite(budget) || budget <= 0) return null;
+  if (spent == null || !Number.isFinite(spent) || spent < 0) return null;
+  const pct = (spent / budget) * 100;
+  if (pct >= 100) return "over";
+  if (pct >= 80) return "near";
+  return null;
 }
 
 /**
@@ -131,4 +178,34 @@ export function formatTime(iso: string | undefined): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/** 相对时间。超过一周退回 formatTime。nowMs 可注入，方便单测。 */
+export function formatRelative(
+  iso: string | undefined,
+  nowMs: number = Date.now(),
+): string {
+  if (!iso) return "—";
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return "—";
+  const diff = nowMs - t;
+  if (diff < 0) return formatTime(iso);
+  const sec = Math.floor(diff / 1000);
+  if (sec < 45) return "刚刚";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} 分钟前`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} 小时前`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day} 天前`;
+  return formatTime(iso);
+}
+
+/** YYYY-MM-DD 加减天数，本地时区。非法键原样返回。 */
+export function addDateKey(dateKey: string, deltaDays: number): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return dateKey;
+  const y = Number(dateKey.slice(0, 4));
+  const m = Number(dateKey.slice(5, 7));
+  const d = Number(dateKey.slice(8, 10));
+  return localDateKey(new Date(y, m - 1, d + deltaDays));
 }

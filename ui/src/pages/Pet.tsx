@@ -12,6 +12,8 @@ import waveSprite from "@/assets/pet/wave.png";
 import lookSprite from "@/assets/pet/look.png";
 import hopSprite from "@/assets/pet/hop.png";
 import { ipc } from "@/lib/ipc";
+import { reportError } from "@/lib/error-reporting";
+import { documentTitleForPath } from "@/lib/shortcuts";
 import { formatMoney, formatTokensCn } from "@/lib/format";
 import { LOCAL_SOURCE_LABEL } from "@/lib/local-sources";
 import type { PetActivity, PetSpendSummary } from "@/types";
@@ -65,6 +67,7 @@ export function PetPage() {
 
   useEffect(() => {
     void ipc.getPetActivity().then(setActivity);
+    document.title = documentTitleForPath("/pet");
     const offActivity = ipc.onPetActivity(setActivity);
     const offSpend = ipc.onPetSpendUpdated((summary) => {
       setSpend(summary);
@@ -114,7 +117,8 @@ export function PetPage() {
       const summary = await ipc.petTodaySpend();
       setSpend(summary);
       if (summary.tokens > 0 || summary.cost != null) setLoadingSpend(false);
-    } catch {
+    } catch (e) {
+      reportError("pet-spend", e);
       setLoadingSpend(false);
     }
   }, []);

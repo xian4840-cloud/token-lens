@@ -132,6 +132,23 @@
     opacity: 0.05;
     mix-blend-mode: multiply;
   }
+  /*
+   * Recharts 3 默认开 accessibilityLayer：点柱/折线会给 SVG 设 tabIndex，
+   * Chromium 随即画出默认橙色焦点框。图表交互反馈已经是 Tooltip，
+   * 这圈描边只碍眼，键盘也走不到有意义的操作。
+   */
+  .recharts-wrapper,
+  .recharts-wrapper *:focus,
+  .recharts-wrapper *:focus-visible,
+  .recharts-surface:focus,
+  .recharts-legend-item:focus,
+  .recharts-legend-wrapper:focus {
+    outline: none !important;
+  }
+  .recharts-wrapper {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   /* 细滚动条，融入奶油底 */
   ::-webkit-scrollbar {
     width: 10px;

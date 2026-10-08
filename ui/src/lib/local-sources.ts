@@ -1,5 +1,5 @@
 import type { LocalDailyUsageRecord, LocalSource } from "@/types";
-import { formatDateKey, visibleTokens } from "./format";
+import { addDateKey, formatDateKey, visibleTokens } from "./format";
 
 /**
  * 来源展示名。写成 satisfies Record<LocalSource, string> 而非裸数组，
@@ -79,7 +79,10 @@ export function pivotDailyUsage(
   const byDate = new Map<string, DailyUsageRow>();
   for (const r of records) {
     const total = visibleTokens(r);
-    const val = metric === "tokens" ? total : (r.cost ?? 0);
+    if (metric === "cost") {
+      if (r.cost == null || !Number.isFinite(r.cost)) continue;
+    }
+    const val = metric === "tokens" ? total : (r.cost as number);
     const row = byDate.get(r.date) ?? { date: formatDateKey(r.date) };
     row[r.source] = ((row[r.source] as number | undefined) ?? 0) + val;
     if (metric === "tokens") {
@@ -110,4 +113,120 @@ export function pivotDailyUsage(
         ]),
       ),
     }));
+}
+
+export interface LocalDaySourceSummary {
+  source: LocalSource;
+  label: string;
+  tokens: number;
+  cost: number | null;
+  unpriced: boolean;
+}
+
+export interface LocalDaySummary {
+  date: string;
+  tokens: number;
+  cost: number | null;
+  currency: string;
+  bySource: LocalDaySourceSummary[];
+  hasUnpriced: boolean;
+}
+
+/**
+ * 一组本地用量记录的合计。未知价格的用量计 tokens 并标 unpriced，不把未知当成 $0。
+ * dateLabel 只用于展示（「今天」或「2026-09」），不参与过滤。
+ */
+export function summarizeLocalRecords(
+  records: LocalDailyUsageRecord[],
+  dateLabel: string,
+): LocalDaySummary {
+  const groups = new Map<
+    LocalSource,
+    { tokens: number; cost: number; priced: boolean; unpriced: boolean }
+  >();
+  let currency = "USD";
+  for (const r of records) {
+    const tokens = visibleTokens(r);
+    const prev = groups.get(r.source) ?? {
+      tokens: 0,
+      cost: 0,
+      priced: false,
+      unpriced: false,
+    };
+    prev.tokens += tokens;
+    if (r.cost != null && Number.isFinite(r.cost)) {
+      prev.cost += r.cost;
+      prev.priced = true;
+      if (r.currency) currency = r.currency;
+    } else if (tokens > 0) {
+      prev.unpriced = true;
+    }
+    groups.set(r.source, prev);
+  }
+
+  const bySource: LocalDaySourceSummary[] = [];
+  let totalCost = 0;
+  let anyPriced = false;
+  let hasUnpriced = false;
+  let tokens = 0;
+  for (const { value, label } of LOCAL_SOURCES) {
+    const g = groups.get(value);
+    if (!g || g.tokens === 0) continue;
+    tokens += g.tokens;
+    const cost = g.priced ? g.cost : null;
+    if (cost != null) {
+      totalCost += cost;
+      anyPriced = true;
+    }
+    if (g.unpriced) hasUnpriced = true;
+    bySource.push({
+      source: value,
+      label,
+      tokens: g.tokens,
+      cost,
+      unpriced: g.unpriced,
+    });
+  }
+  return {
+    date: dateLabel,
+    tokens,
+    cost: anyPriced ? totalCost : null,
+    currency,
+    bySource,
+    hasUnpriced,
+  };
+}
+
+/**
+ * 某一天的本地 agent 合计。未知价格的用量计 tokens 并标 unpriced，不把未知当成 $0。
+ */
+export function summarizeLocalDay(
+  records: LocalDailyUsageRecord[],
+  date: string,
+): LocalDaySummary {
+  return summarizeLocalRecords(
+    records.filter((r) => r.date === date),
+    date,
+  );
+}
+
+/** 近 N 天 vs 再往前 N 天。todayKey 为本地 YYYY-MM-DD。 */
+export function compareLocalWindows(
+  records: LocalDailyUsageRecord[],
+  todayKey: string,
+  days = 7,
+): { current: LocalDaySummary; previous: LocalDaySummary } {
+  const currentStart = addDateKey(todayKey, -(days - 1));
+  const prevEnd = addDateKey(todayKey, -days);
+  const prevStart = addDateKey(todayKey, -(days * 2 - 1));
+  return {
+    current: summarizeLocalRecords(
+      records.filter((r) => r.date >= currentStart && r.date <= todayKey),
+      `${currentStart}~${todayKey}`,
+    ),
+    previous: summarizeLocalRecords(
+      records.filter((r) => r.date >= prevStart && r.date <= prevEnd),
+      `${prevStart}~${prevEnd}`,
+    ),
+  };
 }

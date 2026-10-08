@@ -1,6 +1,7 @@
 import { app } from "electron";
 import fs from "node:fs";
 import path from "node:path";
+import { logWarn } from "../lib/logger";
 
 /**
  * 本地 agent 用量扫描的文件级缓存。
@@ -155,7 +156,18 @@ export function getScanCache(): ScanCacheData {
             grok: typeof parsed.grok === "object" ? parsed.grok : {},
           }
         : emptyCache();
-  } catch {
+  } catch (e) {
+    const code =
+      e && typeof e === "object" && "code" in e
+        ? String((e as { code?: unknown }).code)
+        : "";
+    // 文件不存在是首次运行的正常路径，不当成故障
+    if (code !== "ENOENT") {
+      logWarn(
+        "local-usage",
+        `用量扫描缓存不可用，将全量重扫：${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
     cache = emptyCache();
   }
   return cache;
@@ -176,8 +188,11 @@ export function persistScanCache(): void {
     const tmp = cachePath + ".tmp";
     fs.writeFileSync(tmp, JSON.stringify(cache), "utf8");
     fs.renameSync(tmp, cachePath);
-  } catch {
-    // 忽略：缓存只是加速层
+  } catch (e) {
+    logWarn(
+      "local-usage",
+      `用量扫描缓存写入失败（下次会重扫）：${e instanceof Error ? e.message : String(e)}`,
+    );
   }
 }
 

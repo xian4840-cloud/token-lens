@@ -15,6 +15,7 @@ import {
   PawPrint,
 } from "lucide-react";
 import { DiagnosticsCard } from "@/components/DiagnosticsCard";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PageHeader } from "@/components/PageHeader";
 import {
   Card,
@@ -35,6 +36,13 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useAppStore } from "@/store/app";
 import { ipc } from "@/lib/ipc";
+import { showToast } from "@/lib/toast";
+import { LOCAL_SOURCES } from "@/lib/local-sources";
+import {
+  formatBackupPreviewText,
+  prepareBackupImport,
+  type BackupPreview,
+} from "@/lib/backup-import";
 import type { ProxyMode } from "@/types";
 
 const INTERVAL_OPTIONS: { value: string; label: string }[] = [
@@ -78,18 +86,23 @@ export function SettingsPage() {
   const testProxy = useAppStore((s) => s.testProxy);
   const petEnabled = useAppStore((s) => s.petEnabled);
   const savePetEnabled = useAppStore((s) => s.savePetEnabled);
-
-  const loaded = useAppStore((s) => s.loaded);
-  const init = useAppStore((s) => s.init);
+  const monthlyBudgetUsd = useAppStore((s) => s.monthlyBudgetUsd);
+  const saveMonthlyBudgetUsd = useAppStore((s) => s.saveMonthlyBudgetUsd);
 
   const [customUrlInput, setCustomUrlInput] = useState(proxyCustomUrl);
   const [bypassInput, setBypassInput] = useState(proxyBypassRules);
   const [showAdvancedBypass, setShowAdvancedBypass] = useState(false);
   const [clearingCache, setClearingCache] = useState(false);
-
-  useEffect(() => {
-    if (!loaded) init();
-  }, [loaded, init]);
+  const [clearCacheOpen, setClearCacheOpen] = useState(false);
+  const [clearCacheMessage, setClearCacheMessage] = useState<string | null>(null);
+  const [testedAt, setTestedAt] = useState<string | null>(null);
+  const [budgetInput, setBudgetInput] = useState(monthlyBudgetUsd);
+  const [backingUp, setBackingUp] = useState(false);
+  const [disabledSources, setDisabledSources] = useState<string[]>([]);
+  const [backupPending, setBackupPending] = useState<{
+    raw: string;
+    preview: BackupPreview;
+  } | null>(null);
 
   useEffect(() => {
     setCustomUrlInput(proxyCustomUrl);
@@ -98,6 +111,32 @@ export function SettingsPage() {
   useEffect(() => {
     setBypassInput(proxyBypassRules);
   }, [proxyBypassRules]);
+
+  useEffect(() => {
+    setBudgetInput(monthlyBudgetUsd);
+  }, [monthlyBudgetUsd]);
+
+  useEffect(() => {
+    void ipc
+      .getSetting("disabledLocalSources")
+      .then((raw) => {
+        try {
+          const v: unknown = JSON.parse(raw || "[]");
+          if (Array.isArray(v)) {
+            setDisabledSources(v.filter((x) => typeof x === "string"));
+            return;
+          }
+          showToast("本地来源开关数据损坏，已按全部开启处理", "err");
+          setDisabledSources([]);
+        } catch {
+          showToast("本地来源开关数据损坏，已按全部开启处理", "err");
+          setDisabledSources([]);
+        }
+      })
+      .catch((e: unknown) => {
+        showToast(e instanceof Error ? e.message : "读取来源开关失败", "err");
+      });
+  }, []);
 
   const handleCustomUrlBlur = () => {
     if (customUrlInput !== proxyCustomUrl) {
@@ -116,24 +155,43 @@ export function SettingsPage() {
       mode: proxyMode,
       customUrl: customUrlInput.trim(),
       bypassRules: bypassInput.trim(),
-    });
+    })
+      .then(() => {
+        setTestedAt(new Date().toLocaleTimeString());
+      })
+      .catch(() => {
+        setTestedAt(new Date().toLocaleTimeString());
+      });
+  };
+
+  const handleBudgetBlur = () => {
+    const next = budgetInput.trim();
+    if (next === monthlyBudgetUsd) return;
+    void saveMonthlyBudgetUsd(next)
+      .then(() => showToast("月度预算已保存"))
+      .catch(() => {
+        setBudgetInput(monthlyBudgetUsd);
+        showToast("月度预算无效", "err");
+      });
   };
 
   const handleClearCache = async () => {
-    if (!confirm("确定要清除本地用量缓存吗？\n\n这将删除所有缓存数据和历史统计记录，然后重新扫描。操作不可撤销。")) {
-      return;
-    }
     setClearingCache(true);
+    setClearCacheMessage(null);
     try {
       const result = await ipc.clearLocalUsageCache();
       if (result.success) {
-        alert("缓存清除成功，已重新扫描用量数据。");
+        setClearCacheMessage("缓存已清除，并重新扫描了用量数据。");
+        showToast("缓存已清除并重新扫描");
       } else {
-        alert(`清除失败：${result.error || "未知错误"}`);
+        setClearCacheMessage(`清除失败：${result.error || "未知错误"}`);
+        showToast(result.error || "清除失败", "err");
       }
+      setClearCacheOpen(false);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      alert(`清除失败：${msg}`);
+      setClearCacheMessage(`清除失败：${msg}`);
+      showToast(msg, "err");
     } finally {
       setClearingCache(false);
     }
@@ -158,7 +216,7 @@ export function SettingsPage() {
                 value={refreshInterval}
                 onValueChange={(v) => saveRefreshInterval(Number(v))}
               >
-                <SelectTrigger className="w-44">
+                <SelectTrigger className="w-44" aria-label="刷新间隔">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -191,7 +249,7 @@ export function SettingsPage() {
                 value={petEnabled ? "1" : "0"}
                 onValueChange={(v) => void savePetEnabled(v === "1")}
               >
-                <SelectTrigger className="w-44">
+                <SelectTrigger className="w-44" aria-label="显示宠物">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -199,6 +257,75 @@ export function SettingsPage() {
                   <SelectItem value="1">开启</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-display text-lg font-medium">本地采集来源</CardTitle>
+            <CardDescription>
+              关掉的来源不再扫描，已有历史还在。适合某家 agent 目录特别大、又不想统计的时候。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {LOCAL_SOURCES.map((s) => {
+              const on = !disabledSources.includes(s.value);
+              return (
+                <Button
+                  key={s.value}
+                  type="button"
+                  size="sm"
+                  variant={on ? "secondary" : "outline"}
+                  onClick={() => {
+                    const next = on
+                      ? [...disabledSources, s.value]
+                      : disabledSources.filter((x) => x !== s.value);
+                    const prev = disabledSources;
+                    setDisabledSources(next);
+                    void ipc
+                      .setSetting("disabledLocalSources", JSON.stringify(next))
+                      .then(() =>
+                        showToast(on ? `已关闭 ${s.label}` : `已开启 ${s.label}`),
+                      )
+                      .catch((e: unknown) => {
+                        setDisabledSources(prev);
+                        showToast(
+                          e instanceof Error ? e.message : "保存来源开关失败",
+                          "err",
+                        );
+                      });
+                  }}
+                >
+                  {s.label}
+                  {on ? "" : "（关）"}
+                </Button>
+              );
+            })}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-display text-lg font-medium">月度预算</CardTitle>
+            <CardDescription>
+              按本月本地 agent 花费估算盯预算，总览卡片上会画出进度。留空表示不限制。
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">每月上限 (USD)</span>
+              <Input
+                value={budgetInput}
+                onChange={(e) => setBudgetInput(e.target.value)}
+                onBlur={handleBudgetBlur}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleBudgetBlur();
+                }}
+                placeholder="不限制"
+                className="w-36 font-mono"
+                inputMode="decimal"
+              />
             </div>
           </CardContent>
         </Card>
@@ -246,7 +373,7 @@ export function SettingsPage() {
                   value={proxyMode}
                   onValueChange={(v) => saveProxyMode(v as ProxyMode)}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-full" aria-label="代理工作模式">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -271,7 +398,7 @@ export function SettingsPage() {
                   value={requestTimeout}
                   onValueChange={(v) => saveRequestTimeout(v)}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className="w-full" aria-label="请求超时时间">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -367,7 +494,7 @@ export function SettingsPage() {
               <div className="space-y-2.5 rounded-lg border border-border/80 bg-background/80 p-4">
                 <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
                   <span>连通性探测结果</span>
-                  <span>{new Date().toLocaleTimeString()}</span>
+                  <span>{testedAt}</span>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {proxyTestResult.targets.map((target) => (
@@ -408,6 +535,70 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-display text-lg font-medium">数据与日志</CardTitle>
+            <CardDescription>
+              配置、密钥密文和用量历史都在本机 userData 目录，不会上传。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void ipc.revealUserData()}
+            >
+              打开数据目录
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={backingUp}
+              onClick={() => {
+                setBackingUp(true);
+                void (async () => {
+                  try {
+                    const json = await ipc.backupJson();
+                    const ok = await ipc.saveText(
+                      `token-lens-backup-${new Date().toISOString().slice(0, 10)}.json`,
+                      json,
+                    );
+                    if (ok) showToast("备份已导出（不含密钥）");
+                  } catch (e) {
+                    showToast(
+                      e instanceof Error ? e.message : "导出失败",
+                      "err",
+                    );
+                  } finally {
+                    setBackingUp(false);
+                  }
+                })();
+              }}
+            >
+              {backingUp ? "导出中…" : "导出备份"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                void (async () => {
+                  const r = await prepareBackupImport();
+                  if (!r.ok) {
+                    if ("error" in r) showToast(r.error, "err");
+                    return;
+                  }
+                  setBackupPending({ raw: r.raw, preview: r.preview });
+                })();
+              }}
+            >
+              导入备份
+            </Button>
+            <p className="w-full text-xs text-muted-foreground">
+              备份含服务清单、用量历史和价格覆盖，不含 API Key、Cookie 和代理地址。导入不会写入密钥。
+            </p>
+          </CardContent>
+        </Card>
+
         {/* 诊断日志 */}
         <DiagnosticsCard />
 
@@ -423,7 +614,10 @@ export function SettingsPage() {
             <Button
               variant="destructive"
               size="sm"
-              onClick={handleClearCache}
+              onClick={() => {
+                setClearCacheMessage(null);
+                setClearCacheOpen(true);
+              }}
               disabled={clearingCache}
               className="gap-1.5"
             >
@@ -439,11 +633,50 @@ export function SettingsPage() {
                 </>
               )}
             </Button>
-            <p className="mt-3 text-xs text-muted-foreground">
-              注意：此操作会清空所有历史统计记录，重新扫描可能需要几秒到几分钟（取决于会话文件数量）。
-            </p>
+            {clearCacheMessage ? (
+              <p className="mt-3 text-xs text-muted-foreground">{clearCacheMessage}</p>
+            ) : (
+              <p className="mt-3 text-xs text-muted-foreground">
+                注意：此操作会清空所有历史统计记录，重新扫描可能需要几秒到几分钟（取决于会话文件数量）。
+              </p>
+            )}
           </CardContent>
         </Card>
+
+        <ConfirmDialog
+          open={clearCacheOpen}
+          onOpenChange={setClearCacheOpen}
+          title="清除本地用量缓存？"
+          description="将删除所有缓存数据和历史统计记录，然后重新扫描。此操作不可撤销。"
+          confirmLabel="清除并重扫"
+          destructive
+          busy={clearingCache}
+          onConfirm={handleClearCache}
+        />
+        <ConfirmDialog
+          open={backupPending != null}
+          onOpenChange={(open) => {
+            if (!open) setBackupPending(null);
+          }}
+          title="导入备份？"
+          description={
+            backupPending
+              ? formatBackupPreviewText(backupPending.preview)
+              : "导入备份"
+          }
+          confirmLabel="导入"
+          onConfirm={() => {
+            const pending = backupPending;
+            setBackupPending(null);
+            if (!pending) return;
+            void ipc.importBackup(pending.raw).then(
+              (r) =>
+                showToast(`已导入本地 ${r.local} 条、API 用量 ${r.usage} 条`),
+              (e: unknown) =>
+                showToast(e instanceof Error ? e.message : "导入失败", "err"),
+            );
+          }}
+        />
 
         {/* 模型价格表入口卡片 */}
         <Link to="/settings/pricing" className="block">

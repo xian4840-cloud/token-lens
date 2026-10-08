@@ -165,3 +165,23 @@ export interface ProxyTestResult {
   targets: ProxyTestTargetResult[];
 }
 
+/** 启动一次带回的数据，避免前端连打 8 次 IPC 再空等网络刷新 */
+export interface AppBootstrap {
+  definitions: ServiceDefinition[];
+  services: ServiceRecord[];
+  settings: {
+    refreshInterval: string;
+    proxyMode: string;
+    proxyCustomUrl: string;
+    proxyBypassRules: string;
+    requestTimeout: string;
+    monthlyBudgetUsd: string;
+    pinnedServiceIds: string;
+    hiddenServiceIds: string;
+  };
+  lastBalances: Record<string, BalanceResult>;
+  petEnabled: boolean;
+  todayLocal: LocalDailyUsageRecord[];
+  monthLocal: LocalDailyUsageRecord[];
+}
+

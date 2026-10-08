@@ -2,6 +2,60 @@
 
 export type ServiceKind = "api" | "plan";
 
+export type ModelMonitorSource = "codex" | "claude-code" | "opencode" | "grok-build" | "antigravity";
+export interface ModelMonitorSession { id: string; name: string; modifiedAt: string; archived: boolean }
+export interface ModelMonitorRecord {
+  id: string;
+  startedAt: string;
+  requestedModel?: string;
+  responseModel?: string;
+  sentModel?: string;
+  matchedCalls?: number;
+  mismatchedCalls?: number;
+  unverifiedCalls?: number;
+  responseCalls?: number;
+  responseId?: string;
+  reportedModel?: string;
+  evidence?: "response" | "assistant-message" | "generation-response" | "usage" | "selection";
+  modelCalls?: number;
+  status: "match" | "mismatch" | "unknown";
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  sessionId?: string;
+  sessionName?: string;
+  archived?: boolean;
+}
+export interface ModelMonitorDay {
+  date: string;
+  sessionCount: number;
+  callCount: number;
+  totalTokens: number;
+  verifiedCount: number;
+  mismatchCount: number;
+  unknownCount: number;
+  responseCount: number;
+  models: string[];
+}
+export interface ModelMonitorSessionDay {
+  sessionId: string; name: string; model?: string; modelBasis?: "request" | "response" | "unknown"; callCount: number; matchedCount: number; mismatchedCount: number; unknownCount: number; totalTokens: number;
+}
+export interface ModelMonitorState {
+  source: ModelMonitorSource;
+  description?: string;
+  root: string;
+  scannedAt: string;
+  sessions: ModelMonitorSession[];
+  days: ModelMonitorDay[];
+  selectedDate?: string;
+  callCount: number;
+  records: ModelMonitorRecord[];
+  sessionDays?: ModelMonitorSessionDay[];
+  agentCapture?: { enabled: boolean; requestCount: number; responseCount: number };
+  capture: { supported: boolean; ready: boolean; active: boolean; responseCount: number; lastResponseAt?: string; error?: string };
+  unavailable?: string;
+}
+
 export type LogLevel = "info" | "warn" | "error";
 
 /**
@@ -137,6 +191,13 @@ export interface PricingRowDisplay {
   cacheReadPerM: number;
   cacheWritePerM: number;
   currency: string;
+  overridden?: boolean;
+  defaults?: {
+    inputPerM: number;
+    outputPerM: number;
+    cacheReadPerM: number;
+    cacheWritePerM: number;
+  };
 }
 
 /** 本地 agent 用量采集（阶段 10），镜像主进程 electron/local-usage/types */
@@ -231,5 +292,25 @@ export interface ProxyTestTargetResult {
 
 export interface ProxyTestResult {
   targets: ProxyTestTargetResult[];
+}
+
+/** 启动一次带回的数据，避免前端连打 8 次 IPC 再空等网络刷新 */
+export interface AppBootstrap {
+  definitions: ServiceDefinition[];
+  services: ServiceRecord[];
+  settings: {
+    refreshInterval: string;
+    proxyMode: string;
+    proxyCustomUrl: string;
+    proxyBypassRules: string;
+    requestTimeout: string;
+    monthlyBudgetUsd: string;
+    pinnedServiceIds: string;
+    hiddenServiceIds: string;
+  };
+  lastBalances: Record<string, BalanceResult>;
+  petEnabled: boolean;
+  todayLocal: LocalDailyUsageRecord[];
+  monthLocal: LocalDailyUsageRecord[];
 }
 

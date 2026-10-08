@@ -7,6 +7,7 @@ import {
   type ModelPricing,
 } from "./pricing";
 import { DEFAULT_PRICING } from "./pricing-table";
+import { getRecentLogs } from "../lib/logger";
 
 /**
  * 价格覆盖（设置页「模型价格表」）。
@@ -109,8 +110,13 @@ describe("parseOverrides", () => {
     expect(Object.keys(parseOverrides(stored))).toEqual(["gpt-5"]);
   });
 
-  it("损坏的 JSON 回退为空而不是抛异常", () => {
+  it("损坏的 JSON 回退为空而不是抛异常，并记一条警告", () => {
     expect(parseOverrides("{ 不是 JSON")).toEqual({});
+    expect(
+      getRecentLogs().some(
+        (e) => e.scope === "pricing" && e.message.includes("不是合法 JSON"),
+      ),
+    ).toBe(true);
     expect(parseOverrides(undefined)).toEqual({});
     expect(parseOverrides("")).toEqual({});
   });

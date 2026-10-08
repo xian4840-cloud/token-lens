@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  AppBootstrap,
   BalanceResult,
   BalanceSnapshot,
   LocalDailyUsageRecord,
@@ -15,15 +16,49 @@ import type { ScanLocalUsageResult } from "./local-usage/types";
 import type { ProxyConfigOverride } from "./lib/http";
 import type { LogEntry } from "./lib/logger";
 import type { PetActivity, PetSpendSummary } from "./pet/types";
+import type { ModelMonitorState, ModelMonitorSource } from "./model-monitor";
 
 
 /**
  * 渲染进程可用的 API。所有主进程能力通过此处暴露，前端经 window.tokenLens 调用。
  */
 const api = {
+  getModelMonitorState: (date?: string, source?: ModelMonitorSource) => ipcRenderer.invoke("model-monitor:state", date, source) as Promise<ModelMonitorState>,
+  launchCapturedCodex: () => ipcRenderer.invoke("model-monitor:launch-codex") as Promise<ModelMonitorState["capture"]>,
+  enableOpenCodeCapture: () => ipcRenderer.invoke("model-monitor:enable-opencode") as Promise<void>,
+  enableClaudeCapture: () => ipcRenderer.invoke("model-monitor:enable-claude") as Promise<void>,
   ping: () => ipcRenderer.invoke("app:ping") as Promise<string>,
   isEncryptionAvailable: () =>
     ipcRenderer.invoke("encryption:available") as Promise<boolean>,
+  bootstrap: () => ipcRenderer.invoke("app:bootstrap") as Promise<AppBootstrap>,
+  revealUserData: () => ipcRenderer.invoke("app:reveal-user-data") as Promise<boolean>,
+  backupJson: () => ipcRenderer.invoke("app:backup-json") as Promise<string>,
+  previewBackup: (raw: string) =>
+    ipcRenderer.invoke("app:preview-backup", raw) as Promise<{
+      local: number;
+      usage: number;
+      exportedAt: string;
+    }>,
+  importBackup: (raw: string) =>
+    ipcRenderer.invoke("app:import-backup", raw) as Promise<{
+      local: number;
+      usage: number;
+    }>,
+  dataStats: () =>
+    ipcRenderer.invoke("app:stats") as Promise<{
+      services: number;
+      usageRecords: number;
+      localDaily: number;
+      snapshots: number;
+      bytes: number;
+    }>,
+  importLocalRows: (rows: unknown[]) =>
+    ipcRenderer.invoke("local-usage:import-rows", rows) as Promise<{
+      imported: number;
+      skipped: number;
+    }>,
+  saveText: (defaultName: string, content: string) =>
+    ipcRenderer.invoke("app:save-text", defaultName, content) as Promise<boolean>,
 
   listDefinitions: () =>
     ipcRenderer.invoke("services:definitions") as Promise<ServiceDefinition[]>,
@@ -49,6 +84,11 @@ const api = {
     ipcRenderer.invoke("usage:list", serviceId, since) as Promise<
       UsageRecord[]
     >,
+  onLocalUsageUpdated: (cb: () => void) => {
+    const handler = () => cb();
+    ipcRenderer.on("local-usage:updated", handler);
+    return () => ipcRenderer.removeListener("local-usage:updated", handler);
+  },
   onBalanceUpdated: (
     cb: (payload: {
       id: string;

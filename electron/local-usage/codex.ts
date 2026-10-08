@@ -9,6 +9,7 @@ import {
   type CodexFileEntry,
   type CodexIncrement,
 } from "./cache";
+import { logWarn } from "../lib/logger";
 import type { LocalUsageRow } from "./types";
 
 interface TotalTokenUsage {
@@ -109,7 +110,11 @@ function readCodexConfig(): CodexConfig {
   let text: string;
   try {
     text = fs.readFileSync(CODEX_CONFIG, "utf8");
-  } catch {
+  } catch (e) {
+    logWarn(
+      "local-usage",
+      `读取 Codex 配置失败：${e instanceof Error ? e.message : String(e)}`,
+    );
     return {};
   }
   const cfg: CodexConfig = {};
@@ -329,7 +334,11 @@ export async function scanCodex(since?: string): Promise<LocalUsageRow[]> {
           input: fs.createReadStream(file.path, { encoding: "utf8" }),
           crlfDelay: Infinity,
         });
-      } catch {
+      } catch (e) {
+        logWarn(
+          "local-usage",
+          `无法打开 Codex 会话文件，已跳过：${file.path}（${e instanceof Error ? e.message : String(e)}）`,
+        );
         continue;
       }
       for await (const line of rl) {

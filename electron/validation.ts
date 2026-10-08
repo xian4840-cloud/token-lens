@@ -20,6 +20,10 @@ const ALLOWED_SETTING_KEYS = new Set<string>([
   "proxyCustomUrl",
   "proxyBypassRules",
   "requestTimeout",
+  "monthlyBudgetUsd",
+  "pinnedServiceIds",
+  "hiddenServiceIds",
+  "disabledLocalSources",
 ]);
 
 

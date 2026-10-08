@@ -24,6 +24,17 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    // Electron 全是本地文件，预加载懒路由只会让总览顺带把宠物图打进来
+    modulePreload: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/recharts") || id.includes("node_modules/victory-vendor")) {
+            return "charts";
+          }
+        },
+      },
+    },
   },
   server: {
     host: "127.0.0.1",

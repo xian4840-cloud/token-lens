@@ -98,7 +98,7 @@ export async function scanOpenCode(since?: string): Promise<OpenCodeResult> {
       cacheCreation: number;
       cacheRead: number;
       reasoning: number;
-      cost: number;
+      cost?: number;
       firstAt?: string;
       lastAt?: string;
     }
@@ -120,7 +120,6 @@ export async function scanOpenCode(since?: string): Promise<OpenCodeResult> {
       cacheCreation: 0,
       cacheRead: 0,
       reasoning: 0,
-      cost: 0,
     };
     cur.sessions += 1;
     cur.input += r.tokens_input ?? 0;
@@ -132,7 +131,9 @@ export async function scanOpenCode(since?: string): Promise<OpenCodeResult> {
     cur.cacheCreation += r.tokens_cache_write ?? 0;
     cur.cacheRead += r.tokens_cache_read ?? 0;
     cur.reasoning += reasoning;
-    cur.cost += r.cost ?? 0;
+    if (typeof r.cost === "number" && Number.isFinite(r.cost)) {
+      cur.cost = (cur.cost ?? 0) + r.cost;
+    }
     if (iso) {
       if (!cur.firstAt || iso < cur.firstAt) cur.firstAt = iso;
       if (!cur.lastAt || iso > cur.lastAt) cur.lastAt = iso;

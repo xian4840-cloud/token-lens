@@ -1,4 +1,4 @@
-import { getService, getSecrets, saveBalanceSnapshot } from "./db";
+import { getService, getSecrets, saveBalanceSnapshot, saveLastBalance } from "./db";
 import { getAdapter } from "./adapters";
 import type { BalanceResult } from "./types";
 
@@ -16,5 +16,7 @@ export async function refreshServiceInternal(
   const secrets = getSecrets(id);
   const balance = await adapter.fetchBalance(record.config, secrets);
   saveBalanceSnapshot(id, balance.remaining ?? balance.used, balance.currency);
-  return balance;
+  const { raw: _raw, ...safe } = balance;
+  saveLastBalance(id, safe);
+  return safe;
 }

@@ -1,11 +1,12 @@
-import { formatTokensCn } from "@/lib/format";
+import { formatCost, formatTokensCn } from "@/lib/format";
 import {
   LOCAL_SOURCES,
   LOCAL_SOURCE_COLORS,
   type DailyUsageRow,
+  type LocalMetric,
 } from "@/lib/local-sources";
 
-const TOOLTIP_STYLE: React.CSSProperties = {
+export const CHART_TOOLTIP_STYLE: React.CSSProperties = {
   backgroundColor: "var(--popover)",
   border: "1px solid rgba(255, 255, 255, 0.5)",
   borderRadius: "12px",
@@ -50,15 +51,17 @@ function ModelRow({ model, tokens }: { model: string; tokens: number }) {
   );
 }
 
-/** 本地 agent 每日柱状图 Tooltip：各来源（含模型分项）+ 当日 Input / Output / 总 tokens */
+/** 本地 agent 每日柱状图 Tooltip：tokens 列分项，费用列过来源金额 */
 export function LocalUsageTooltip({
   active,
   payload,
   label,
+  metric = "tokens",
 }: {
   active?: boolean;
   payload?: { payload: DailyUsageRow }[];
   label?: string | number;
+  metric?: LocalMetric;
 }) {
   if (!active || !payload?.length) return null;
   const row = payload[0].payload;
@@ -66,8 +69,30 @@ export function LocalUsageTooltip({
     (s) =>
       typeof row[s.value] === "number" && (row[s.value] as number) > 0,
   );
+  if (metric === "cost") {
+    const total = sources.reduce((sum, s) => sum + (row[s.value] as number), 0);
+    return (
+      <div style={CHART_TOOLTIP_STYLE}>
+        <div className="mb-1 font-medium">{label ?? row.date}</div>
+        {sources.map((s, i) => (
+          <Row
+            key={s.value}
+            label={s.label}
+            value={formatCost(row[s.value] as number, "USD")}
+            dot={LOCAL_SOURCE_COLORS[i % LOCAL_SOURCE_COLORS.length]}
+          />
+        ))}
+        {sources.length > 0 && <div className="my-1 border-t border-border/60" />}
+        <Row
+          label="合计"
+          value={formatCost(total, "USD")}
+          dot="var(--muted-foreground)"
+        />
+      </div>
+    );
+  }
   return (
-    <div style={TOOLTIP_STYLE}>
+    <div style={CHART_TOOLTIP_STYLE}>
       <div className="mb-1 font-medium">{label ?? row.date}</div>
       {sources.map((s, i) => (
         <div key={s.value} className="mb-0.5">

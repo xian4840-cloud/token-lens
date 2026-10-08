@@ -157,12 +157,12 @@ export function openPetWindow(): void {
 
   petWin.once("ready-to-show", () => {
     petWin?.show();
+    sendToPet("pet:spend-updated", currentSpendSummary());
   });
 
   startActivityWatch((activity: PetActivity) => {
     sendToPet("pet:activity", activity);
   });
-  void refreshSpendAndPush();
 }
 
 export function openPetIfEnabled(): void {
@@ -216,6 +216,7 @@ export function getPetActivity(): PetActivity {
 
 export function requestTodaySpend(): PetSpendSummary {
   const summary = currentSpendSummary();
+  // 点击时再扫：走 scanInFlight，调度器正在扫就复用，不会叠第二份
   void refreshSpendAndPush();
   return summary;
 }

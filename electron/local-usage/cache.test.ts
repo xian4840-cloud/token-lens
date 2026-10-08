@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getRecentLogs } from "../lib/logger";
 
 /**
  * 扫描缓存的读写与失效。
@@ -63,13 +64,29 @@ describe("getScanCache", () => {
     expect(getScanCache().codex).toEqual({});
   });
 
-  it("缓存文件损坏时退回空缓存而不是抛异常", () => {
+  it("缓存文件损坏时退回空缓存而不是抛异常，并记一条警告", () => {
     fs.writeFileSync(cachePath(), "{ 不是 JSON", "utf8");
+    const before = getRecentLogs().length;
     expect(getScanCache().codex).toEqual({});
+    expect(
+      getRecentLogs()
+        .slice(before)
+        .some(
+          (e) => e.scope === "local-usage" && e.message.includes("缓存不可用"),
+        ),
+    ).toBe(true);
   });
 
-  it("缓存文件不存在时返回空缓存", () => {
+  it("缓存文件不存在时返回空缓存，不记警告", () => {
+    const before = getRecentLogs().length;
     expect(getScanCache().codex).toEqual({});
+    expect(
+      getRecentLogs()
+        .slice(before)
+        .some(
+          (e) => e.scope === "local-usage" && e.message.includes("缓存不可用"),
+        ),
+    ).toBe(false);
   });
 });
 

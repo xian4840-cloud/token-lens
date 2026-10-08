@@ -11,6 +11,7 @@ import {
   type GrokFileEntry,
   type GrokModelDayAgg,
 } from "./cache";
+import { logWarn } from "../lib/logger";
 import type { LocalUsageRow } from "./types";
 
 /** turn_completed.usage 的 token 分项（顶层与 modelUsage[model] 同构） */
@@ -68,7 +69,7 @@ function freshAgg(): ModelDayAgg {
  * - 存储侧把 reasoning 从 output 中拆出（outputTokens 存差值），使 UI 的
  *   「output = outputTokens + reasoningTokens」惯例与原始口径一致，不双计。
  */
-function usageParts(u: GrokUsage): {
+export function usageParts(u: GrokUsage): {
   input: number;
   output: number;
   cacheCreation: number;
@@ -238,7 +239,11 @@ export async function scanGrokBuild(since?: string): Promise<GrokScanResult> {
         input: fs.createReadStream(file.path, { encoding: "utf8" }),
         crlfDelay: Infinity,
       });
-    } catch {
+    } catch (e) {
+      logWarn(
+        "local-usage",
+        `无法打开 Grok 会话文件，已跳过：${file.path}（${e instanceof Error ? e.message : String(e)}）`,
+      );
       continue;
     }
     for await (const line of rl) {

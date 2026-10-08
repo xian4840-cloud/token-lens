@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
   Legend,
   Line,
@@ -27,13 +25,10 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAppStore } from "@/store/app";
-import { LocalUsageTooltip } from "@/components/LocalUsageTooltip";
-import { formatCompact } from "@/lib/format";
-import {
-  LOCAL_SOURCES as CHART_SOURCES,
-  LOCAL_SOURCE_COLORS as CHART_COLORS,
-  pivotDailyUsage,
-} from "@/lib/local-sources";
+import { CHART_TOOLTIP_STYLE } from "@/components/LocalUsageTooltip";
+import { LocalUsageBarChart } from "@/components/LocalUsageBarChart";
+import { formatCompact, formatRelative } from "@/lib/format";
+import { pivotDailyUsage } from "@/lib/local-sources";
 import type { BalanceSnapshot } from "@/types";
 
 type Range = "7d" | "30d" | "all";
@@ -44,8 +39,6 @@ const RANGE_OPTIONS: { value: Range; label: string }[] = [
   { value: "30d", label: "近 30 天" },
   { value: "all", label: "全部" },
 ];
-
-/** 本地 agent 每日堆叠柱状图：来源系列与配色见 lib/local-sources.ts */
 
 /** 时间范围 -> 起始 ISO 字符串（全部返回 undefined 不过滤） */
 function rangeToSince(range: Range): string | undefined {
@@ -151,18 +144,23 @@ export function Trends() {
   const loadSnapshots = useAppStore((s) => s.loadSnapshots);
   const localDailyRecords = useAppStore((s) => s.localDailyRecords);
   const loadLocalDaily = useAppStore((s) => s.loadLocalDaily);
-  const loaded = useAppStore((s) => s.loaded);
-  const init = useAppStore((s) => s.init);
-  const [range, setRange] = useState<Range>("30d");
-  const [tab, setTab] = useState<"balance" | "local">("balance");
-  const [metric, setMetric] = useState<Metric>("tokens");
+  const range = useAppStore((s) => s.trendsRange);
+  const setRange = useAppStore((s) => s.setTrendsRange);
+  const tab = useAppStore((s) => s.trendsTab);
+  const setTab = useAppStore((s) => s.setTrendsTab);
+  const metric = useAppStore((s) => s.trendsMetric);
+  const setMetric = useAppStore((s) => s.setTrendsMetric);
+  const [snapReady, setSnapReady] = useState(false);
 
   useEffect(() => {
-    if (!loaded) init();
-  }, [loaded, init]);
-
-  useEffect(() => {
-    loadSnapshots(rangeToSince(range));
+    let cancelled = false;
+    setSnapReady(false);
+    void loadSnapshots(rangeToSince(range)).finally(() => {
+      if (!cancelled) setSnapReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [range, loadSnapshots]);
 
   // 切到本地 agent tab 或切换时间范围时加载持久化的每日历史
@@ -187,22 +185,33 @@ export function Trends() {
       data: pivot(snaps, nameOf, range !== "7d"),
       serviceNames: [...new Set(snaps.map((s) => s.serviceId))].map(nameOf),
     }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapshots, services]);
+  }, [snapshots, services, range]);
 
   const localChartData = useMemo(
     () => pivotDailyUsage(localDailyRecords, metric),
     [localDailyRecords, metric],
   );
 
+  const lastScannedAt = useMemo(() => {
+    let max = "";
+    for (const r of localDailyRecords) {
+      if (r.scannedAt && r.scannedAt > max) max = r.scannedAt;
+    }
+    return max || undefined;
+  }, [localDailyRecords]);
+
   return (
     <div>
       <PageHeader
         title="趋势"
-        description="余额随时间的变化；本地 agent 每日用量趋势（每次刷新记录一点）"
+        description={
+          tab === "local" && lastScannedAt
+            ? `本地 agent 每日用量 · 扫描于 ${formatRelative(lastScannedAt)}`
+            : "余额随时间的变化；本地 agent 每日用量趋势（每次刷新记录一点）"
+        }
       >
         <Select value={range} onValueChange={(v) => setRange(v as Range)}>
-          <SelectTrigger className="w-32">
+          <SelectTrigger className="w-32" aria-label="时间范围">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -228,7 +237,13 @@ export function Trends() {
           {/* ---- 余额趋势 ---- */}
           <TabsContent value="balance">
             <div className="space-y-6 py-4">
-              {snapshots.length === 0 ? (
+              {!snapReady ? (
+                <Card>
+                  <CardContent className="py-16 text-center text-sm text-muted-foreground">
+                    加载中…
+                  </CardContent>
+                </Card>
+              ) : snapshots.length === 0 ? (
                 <Card>
                   <CardContent className="py-16 text-center text-sm text-muted-foreground">
                     暂无余额快照。去总览页刷新服务，刷新记录会累积成趋势数据。
@@ -249,7 +264,7 @@ export function Trends() {
                         </div>
                       ) : (
                         <ResponsiveContainer width="100%" height={300}>
-                          <LineChart data={g.data}>
+                          <LineChart data={g.data} accessibilityLayer={false}>
                             <CartesianGrid
                               strokeDasharray="3 3"
                               stroke="rgba(110, 95, 70, 0.12)"
@@ -269,15 +284,7 @@ export function Trends() {
                               width={56}
                             />
                             <Tooltip
-                              contentStyle={{
-                                backgroundColor: "var(--popover)",
-                                border: "1px solid rgba(255, 255, 255, 0.5)",
-                                borderRadius: "12px",
-                                fontSize: "12px",
-                                boxShadow: "0 8px 30px rgba(90, 75, 50, 0.12)",
-                                backdropFilter: "blur(12px)",
-                                WebkitBackdropFilter: "blur(12px)",
-                              }}
+                              contentStyle={CHART_TOOLTIP_STYLE}
                               labelStyle={{ color: "var(--popover-foreground)" }}
                               itemStyle={{ color: "var(--popover-foreground)" }}
                             />
@@ -318,7 +325,7 @@ export function Trends() {
                   value={metric}
                   onValueChange={(v) => setMetric(v as Metric)}
                 >
-                  <SelectTrigger className="w-32">
+                  <SelectTrigger className="w-32" aria-label="用量指标">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -339,50 +346,11 @@ export function Trends() {
                       该范围内无数据。去用量页「本地 agent」tab 点「重新扫描」采集。
                     </div>
                   ) : (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <BarChart data={localChartData}>
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                          stroke="rgba(110, 95, 70, 0.12)"
-                          vertical={false}
-                        />
-                        <XAxis
-                          dataKey="date"
-                          tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
-                          axisLine={false}
-                          tickLine={false}
-                          dy={6}
-                        />
-                        <YAxis
-                          tick={{ fontSize: 12, fill: "var(--muted-foreground)" }}
-                          axisLine={false}
-                          tickLine={false}
-                          width={48}
-                          tickFormatter={(v: number) =>
-                            metric === "tokens"
-                              ? formatCompact(v)
-                              : `$${formatCompact(v)}`
-                          }
-                        />
-                        <Tooltip
-                          cursor={{ fill: "rgba(110, 95, 70, 0.06)" }}
-                          content={
-                            metric === "tokens" ? <LocalUsageTooltip /> : undefined
-                          }
-                        />
-                        <Legend wrapperStyle={{ fontSize: 12 }} />
-                        {CHART_SOURCES.map((s, i) => (
-                          <Bar
-                            key={s.value}
-                            dataKey={s.value}
-                            name={s.label}
-                            stackId="a"
-                            fill={CHART_COLORS[i % CHART_COLORS.length]}
-                            radius={[3, 3, 0, 0]}
-                          />
-                        ))}
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <LocalUsageBarChart
+                      data={localChartData}
+                      height={300}
+                      metric={metric}
+                    />
                   )}
                 </CardContent>
               </Card>

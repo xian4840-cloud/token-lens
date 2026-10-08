@@ -9,6 +9,8 @@ import {
 } from "../local-usage/paths";
 import type { LocalSource } from "../local-usage/types";
 import { logError } from "../lib/logger";
+import { parseIdList } from "../lib/id-list";
+import { getSetting } from "../db";
 import type { PetActivity } from "./types";
 
 /** 会话文件停止写入后多久算空闲。秒级足够当桌宠，不是实时进度条。 */
@@ -79,7 +81,20 @@ function watchTargets(): { dir: string; source: LocalSource }[] {
   ];
   const oc = findOpenCodeDb();
   if (oc) targets.push({ dir: path.dirname(oc), source: "opencode" });
-  return targets;
+  return filterDisabledWatchTargets(
+    targets,
+    parseIdList(getSetting("disabledLocalSources")),
+  );
+}
+
+/** 设置里关掉的来源，宠物也不盯，避免关了采集还在跳「工作中」。 */
+export function filterDisabledWatchTargets(
+  targets: { dir: string; source: LocalSource }[],
+  disabled: string[],
+): { dir: string; source: LocalSource }[] {
+  if (disabled.length === 0) return targets;
+  const skip = new Set(disabled);
+  return targets.filter((t) => !skip.has(t.source));
 }
 
 /** 开始盯本地会话目录。目录不存在就跳过，不阻塞其它来源。 */

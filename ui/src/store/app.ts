@@ -1,11 +1,18 @@
 import { create } from "zustand";
 import { ipc } from "@/lib/ipc";
+import { addDateKey, localDateKey } from "@/lib/format";
 import { DEFAULT_BYPASS_RULES as DEFAULT_BYPASS } from "@/lib/proxy";
+import { reportError } from "@/lib/error-reporting";
+import { showToast } from "@/lib/toast";
+import {
+  refreshFailureMessage,
+  usageRefreshFailureMessage,
+} from "@/lib/refresh-summary";
+import { parseIdList, toggleId } from "@/lib/id-list";
 import type {
   BalanceResult,
   BalanceSnapshot,
   LocalDailyUsageRecord,
-  LocalUsageRow,
   ModelPricing,
   PricingRowDisplay,
   ScanLocalUsageResult,
@@ -19,6 +26,12 @@ import type {
 
 /** 防止自动刷新监听重复注册（React StrictMode / 多页 init） */
 let balanceListenerRegistered = false;
+let localUsageListenerRegistered = false;
+/** init 单飞：StrictMode 双 effect 不能打两轮厂商 API */
+let initPromise: Promise<void> | null = null;
+let usageSeq = 0;
+let snapshotSeq = 0;
+let localDailySeq = 0;
 
 interface AppState {
   definitions: ServiceDefinition[];
@@ -26,7 +39,10 @@ interface AppState {
   balances: Record<string, BalanceResult | undefined>;
   errors: Record<string, string>;
   refreshing: boolean;
+  /** 正在刷新的服务 id，用于单卡转圈而不是整页空白 */
+  refreshingIds: Record<string, boolean>;
   loaded: boolean;
+  initError: string | null;
   snapshots: BalanceSnapshot[];
   refreshInterval: string;
   proxyMode: ProxyMode;
@@ -34,15 +50,24 @@ interface AppState {
   proxyBypassRules: string;
   requestTimeout: string;
   petEnabled: boolean;
+  monthlyBudgetUsd: string;
+  pinnedIds: string[];
+  hiddenIds: string[];
   proxyTesting: boolean;
   proxyTestResult: ProxyTestResult | null;
   usageRecords: UsageRecord[];
   usageRefreshing: boolean;
   pricingTable: PricingRowDisplay[];
-  localUsageRows: LocalUsageRow[];
   localUsageUnavailable: ScanLocalUsageResult["unavailable"];
   localUsageScanning: boolean;
   localDailyRecords: LocalDailyUsageRecord[];
+  todayLocal: LocalDailyUsageRecord[];
+  monthLocal: LocalDailyUsageRecord[];
+  usageRange: "month" | "7d" | "30d" | "all";
+  usageTab: "api" | "local";
+  trendsRange: "7d" | "30d" | "all";
+  trendsTab: "balance" | "local";
+  trendsMetric: "tokens" | "cost";
 
   init: () => Promise<void>;
   loadServices: () => Promise<void>;
@@ -58,6 +83,9 @@ interface AppState {
   saveProxyBypassRules: (rules: string) => Promise<void>;
   saveRequestTimeout: (sec: string) => Promise<void>;
   savePetEnabled: (on: boolean) => Promise<void>;
+  saveMonthlyBudgetUsd: (value: string) => Promise<void>;
+  togglePinned: (id: string) => Promise<void>;
+  toggleHidden: (id: string) => Promise<void>;
   testProxy: (override?: {
     mode?: string;
     customUrl?: string;
@@ -75,6 +103,12 @@ interface AppState {
   ) => Promise<void>;
   scanLocalUsage: (since?: string) => Promise<void>;
   loadLocalDaily: (since?: string) => Promise<void>;
+  loadTodayLocal: () => Promise<void>;
+  setUsageRange: (range: "month" | "7d" | "30d" | "all") => void;
+  setUsageTab: (tab: "api" | "local") => void;
+  setTrendsRange: (range: "7d" | "30d" | "all") => void;
+  setTrendsTab: (tab: "balance" | "local") => void;
+  setTrendsMetric: (metric: "tokens" | "cost") => void;
 }
 
 
@@ -84,7 +118,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   balances: {},
   errors: {},
   refreshing: false,
+  refreshingIds: {},
   loaded: false,
+  initError: null,
   snapshots: [],
   refreshInterval: "5",
   proxyMode: "system",
@@ -92,67 +128,79 @@ export const useAppStore = create<AppState>((set, get) => ({
   proxyBypassRules: DEFAULT_BYPASS,
   requestTimeout: "15",
   petEnabled: false,
+  monthlyBudgetUsd: "",
+  pinnedIds: [],
+  hiddenIds: [],
   proxyTesting: false,
   proxyTestResult: null,
   usageRecords: [],
   usageRefreshing: false,
   pricingTable: [],
-  localUsageRows: [],
   localUsageUnavailable: [],
   localUsageScanning: false,
   localDailyRecords: [],
+  todayLocal: [],
+  monthLocal: [],
+  usageRange: "month",
+  usageTab: "api",
+  trendsRange: "30d",
+  trendsTab: "balance",
+  trendsMetric: "tokens",
 
   init: async () => {
-    const [
-      definitions,
-      services,
-      refreshInterval,
-      proxyMode,
-      proxyCustomUrl,
-      proxyBypassRules,
-      requestTimeout,
-      petEnabled,
-    ] = await Promise.all([
-      ipc.listDefinitions(),
-      ipc.listServices(),
-      ipc.getSetting("refreshInterval"),
-      ipc.getSetting("proxyMode"),
-      ipc.getSetting("proxyCustomUrl"),
-      ipc.getSetting("proxyBypassRules"),
-      ipc.getSetting("requestTimeout"),
-      ipc.getPetEnabled(),
-    ]);
-    set({
-      definitions,
-      services,
-      refreshInterval: refreshInterval ?? "5",
-      proxyMode: (proxyMode as ProxyMode) || "system",
-      proxyCustomUrl: proxyCustomUrl ?? "",
-      proxyBypassRules: proxyBypassRules ?? DEFAULT_BYPASS,
-      requestTimeout: requestTimeout ?? "15",
-      petEnabled,
-      loaded: true,
-    });
-
-    // 监听后台自动刷新事件，更新总览页余额/错误
-    if (!balanceListenerRegistered) {
-      balanceListenerRegistered = true;
-      ipc.onBalanceUpdated((payload) => {
-        set((state) => {
-          const balances = { ...state.balances };
-          const errors = { ...state.errors };
-          if (payload.error) {
-            errors[payload.id] = payload.error;
-          } else if (payload.balance) {
-            balances[payload.id] = payload.balance;
-            errors[payload.id] = "";
-          }
-          return { balances, errors };
-        });
+    if (initPromise) return initPromise;
+    initPromise = (async () => {
+      const boot = await ipc.bootstrap();
+      set({
+        initError: null,
+        definitions: boot.definitions,
+        services: boot.services,
+        balances: boot.lastBalances,
+        refreshInterval: boot.settings.refreshInterval || "5",
+        proxyMode: (boot.settings.proxyMode as ProxyMode) || "system",
+        proxyCustomUrl: boot.settings.proxyCustomUrl,
+        proxyBypassRules: boot.settings.proxyBypassRules || DEFAULT_BYPASS,
+        requestTimeout: boot.settings.requestTimeout || "15",
+        petEnabled: boot.petEnabled,
+        monthlyBudgetUsd: boot.settings.monthlyBudgetUsd ?? "",
+        pinnedIds: parseIdList(boot.settings.pinnedServiceIds),
+        hiddenIds: parseIdList(boot.settings.hiddenServiceIds),
+        todayLocal: boot.todayLocal,
+        monthLocal: boot.monthLocal ?? [],
+        loaded: true,
       });
-    }
-    // 启动后立即刷新一次（更新总览页余额 + 记录快照到趋势）
-    void get().refreshAll();
+
+      // 监听后台自动刷新事件，更新总览页余额/错误
+      if (!localUsageListenerRegistered) {
+        localUsageListenerRegistered = true;
+        ipc.onLocalUsageUpdated(() => {
+          void get().loadTodayLocal();
+        });
+      }
+      if (!balanceListenerRegistered) {
+        balanceListenerRegistered = true;
+        ipc.onBalanceUpdated((payload) => {
+          set((state) => {
+            const balances = { ...state.balances };
+            const errors = { ...state.errors };
+            if (payload.error) {
+              errors[payload.id] = payload.error;
+            } else if (payload.balance) {
+              balances[payload.id] = payload.balance;
+              errors[payload.id] = "";
+            }
+            return { balances, errors };
+          });
+        });
+      }
+      // 启动后立即刷新一次；卡片已经有上次数字，这次是覆盖
+      void get().refreshAll();
+    })().catch((e) => {
+      initPromise = null;
+      const msg = e instanceof Error ? e.message : String(e);
+      set({ initError: msg, loaded: false });
+    });
+    return initPromise;
   },
 
   loadServices: async () => {
@@ -172,6 +220,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   deleteService: async (id) => {
     await ipc.deleteService(id);
+    const pinnedIds = get().pinnedIds.filter((x) => x !== id);
+    const hiddenIds = get().hiddenIds.filter((x) => x !== id);
+    if (pinnedIds.length !== get().pinnedIds.length) {
+      await ipc.setSetting("pinnedServiceIds", JSON.stringify(pinnedIds));
+    }
+    if (hiddenIds.length !== get().hiddenIds.length) {
+      await ipc.setSetting("hiddenServiceIds", JSON.stringify(hiddenIds));
+    }
     set((state) => {
       const balances = { ...state.balances };
       const errors = { ...state.errors };
@@ -181,11 +237,16 @@ export const useAppStore = create<AppState>((set, get) => ({
         services: state.services.filter((s) => s.id !== id),
         balances,
         errors,
+        pinnedIds,
+        hiddenIds,
       };
     });
   },
 
   refreshService: async (id) => {
+    set((state) => ({
+      refreshingIds: { ...state.refreshingIds, [id]: true },
+    }));
     try {
       const balance = await ipc.refreshService(id);
       set((state) => ({
@@ -195,21 +256,36 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       set((state) => ({ errors: { ...state.errors, [id]: msg } }));
+    } finally {
+      set((state) => {
+        const refreshingIds = { ...state.refreshingIds };
+        delete refreshingIds[id];
+        return { refreshingIds };
+      });
     }
   },
 
   refreshAll: async () => {
-    set({ refreshing: true });
+    const services = get().services;
+    set({
+      refreshing: true,
+      refreshingIds: Object.fromEntries(services.map((s) => [s.id, true])),
+    });
     try {
-      const services = get().services;
       await Promise.allSettled(services.map((s) => get().refreshService(s.id)));
+      const { errors } = get();
+      const failed = services.filter((s) => errors[s.id]);
+      const msg = refreshFailureMessage(services.length, failed.length);
+      if (msg) showToast(msg, "err");
     } finally {
       set({ refreshing: false });
     }
   },
 
   loadSnapshots: async (since) => {
+    const seq = ++snapshotSeq;
     const snapshots = await ipc.listSnapshots(undefined, since);
+    if (seq !== snapshotSeq) return;
     set({ snapshots });
   },
 
@@ -244,6 +320,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ petEnabled: on });
   },
 
+  saveMonthlyBudgetUsd: async (value) => {
+    await ipc.setSetting("monthlyBudgetUsd", value);
+    set({ monthlyBudgetUsd: value });
+  },
+
+  togglePinned: async (id) => {
+    const pinnedIds = toggleId(get().pinnedIds, id);
+    await ipc.setSetting("pinnedServiceIds", JSON.stringify(pinnedIds));
+    set({ pinnedIds });
+  },
+
+  toggleHidden: async (id) => {
+    const hiddenIds = toggleId(get().hiddenIds, id);
+    await ipc.setSetting("hiddenServiceIds", JSON.stringify(hiddenIds));
+    set({ hiddenIds });
+  },
+
   testProxy: async (override) => {
     set({ proxyTesting: true });
     try {
@@ -257,7 +350,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
   loadUsage: async (since) => {
+    const seq = ++usageSeq;
     const records = await ipc.listUsage(undefined, since);
+    if (seq !== usageSeq) return;
     set({ usageRecords: records });
   },
 
@@ -283,6 +378,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       await Promise.allSettled(
         supported.map((s) => get().refreshUsage(s.id, period)),
       );
+      const { errors } = get();
+      const failed = supported.filter((s) => errors[s.id]);
+      const msg = usageRefreshFailureMessage(supported.length, failed.length);
+      if (msg) showToast(msg, "err");
     } finally {
       set({ usageRefreshing: false });
     }
@@ -304,19 +403,53 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const result = await ipc.scanLocalUsage(since);
       set({
-        localUsageRows: result.rows,
         localUsageUnavailable: result.unavailable,
       });
       // 扫描已在主进程 upsert 落盘，重载持久化历史供趋势/历史明细
+      const seq = ++localDailySeq;
       const records = await ipc.listLocalDaily(since);
+      if (seq !== localDailySeq) return;
       set({ localDailyRecords: records });
+      void get().loadTodayLocal();
+      const unexpected = result.unavailable.filter(
+        (u) => u.reason !== "已在设置中关闭",
+      );
+      if (unexpected.length > 0) {
+        showToast(
+          `${unexpected.map((u) => u.reason).join("；")}`,
+          "err",
+        );
+      }
+    } catch (e) {
+      reportError("scanLocalUsage", e);
+      throw e;
     } finally {
       set({ localUsageScanning: false });
     }
   },
 
   loadLocalDaily: async (since) => {
+    const seq = ++localDailySeq;
     const records = await ipc.listLocalDaily(since);
+    if (seq !== localDailySeq) return;
     set({ localDailyRecords: records });
   },
+
+  loadTodayLocal: async () => {
+    const today = localDateKey();
+    const monthStart = `${today.slice(0, 7)}-01`;
+    const weekStart = addDateKey(today, -13);
+    const start = weekStart < monthStart ? weekStart : monthStart;
+    const records = await ipc.listLocalDaily(start, today);
+    set({
+      monthLocal: records,
+      todayLocal: records.filter((r) => r.date === today),
+    });
+  },
+
+  setUsageRange: (usageRange) => set({ usageRange }),
+  setUsageTab: (usageTab) => set({ usageTab }),
+  setTrendsRange: (trendsRange) => set({ trendsRange }),
+  setTrendsTab: (trendsTab) => set({ trendsTab }),
+  setTrendsMetric: (trendsMetric) => set({ trendsMetric }),
 }));

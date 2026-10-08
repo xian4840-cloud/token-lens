@@ -30,7 +30,9 @@ interface Props {
 }
 
 export function ServiceFormDialog({ open, onOpenChange, editing }: Props) {
-  const { definitions, createService, updateService } = useAppStore();
+  const definitions = useAppStore((s) => s.definitions);
+  const createService = useAppStore((s) => s.createService);
+  const updateService = useAppStore((s) => s.updateService);
   const [provider, setProvider] = useState("");
   const [name, setName] = useState("");
   const [fields, setFields] = useState<Record<string, string>>({});
@@ -122,13 +124,13 @@ export function ServiceFormDialog({ open, onOpenChange, editing }: Props) {
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label>服务类型</Label>
+            <Label htmlFor="service-provider">服务类型</Label>
             <Select
               value={provider}
               onValueChange={handleProviderChange}
               disabled={!!editing}
             >
-              <SelectTrigger>
+              <SelectTrigger id="service-provider" aria-label="服务类型">
                 <SelectValue placeholder="请选择服务类型" />
               </SelectTrigger>
               <SelectContent>
@@ -142,8 +144,9 @@ export function ServiceFormDialog({ open, onOpenChange, editing }: Props) {
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>名称</Label>
+            <Label htmlFor="service-name">名称</Label>
             <Input
+              id="service-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="自定义名称，如&ldquo;工作号&rdquo;"
@@ -169,7 +172,7 @@ export function ServiceFormDialog({ open, onOpenChange, editing }: Props) {
           )}
           {def?.configSchema.map((f) => (
             <div key={f.key} className="space-y-1.5">
-              <Label>
+              <Label htmlFor={`field-${f.key}`}>
                 {f.label}
                 {f.required && <span className="ml-0.5 text-destructive">*</span>}
               </Label>
@@ -178,7 +181,7 @@ export function ServiceFormDialog({ open, onOpenChange, editing }: Props) {
                   value={fields[f.key] ?? ""}
                   onValueChange={(v) => setFields((s) => ({ ...s, [f.key]: v }))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id={`field-${f.key}`} aria-label={f.label}>
                     <SelectValue placeholder="请选择" />
                   </SelectTrigger>
                   <SelectContent>
@@ -191,6 +194,7 @@ export function ServiceFormDialog({ open, onOpenChange, editing }: Props) {
                 </Select>
               ) : (
                 <Input
+                  id={`field-${f.key}`}
                   type={f.type === "password" ? "password" : "text"}
                   value={fields[f.key] ?? ""}
                   onChange={(e) => setFields((s) => ({ ...s, [f.key]: e.target.value }))}

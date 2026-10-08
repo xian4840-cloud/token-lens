@@ -10,12 +10,19 @@ import {
   replaceLocalDailyUsageBySource,
   upsertLocalDailyUsage,
 } from "../db";
+import { parseIdList } from "../lib/id-list";
 import type {
   LocalSource,
   LocalUsageRow,
   ScanLocalUsageResult,
 } from "./types";
 import { ALL_LOCAL_SOURCES } from "./types";
+import { notifyRenderer } from "../lib/renderer-notify";
+
+let scanFlight: {
+  since: string | undefined;
+  promise: Promise<ScanLocalUsageResult>;
+} | null = null;
 
 /**
  * 按 source 构造 computeCost 用的 TokenUsage。
@@ -50,6 +57,7 @@ export function toCostTokens(row: LocalUsageRow): TokenUsage {
  */
 export async function scanLocalUsage(since?: string): Promise<ScanLocalUsageResult> {
   const overrides = parseOverrides(getSetting("pricingOverrides"));
+  const disabled = new Set(parseIdList(getSetting("disabledLocalSources")));
 
   const [claudeRows, codexRows, opencode, antigravity, grok] = await Promise.all([
     scanClaudeCode(since),
@@ -106,9 +114,16 @@ export async function scanLocalUsage(since?: string): Promise<ScanLocalUsageResu
     });
   }
 
+  for (const source of ALL_LOCAL_SOURCES) {
+    if (disabled.has(source)) {
+      unavailable.push({ source, reason: "已在设置中关闭" });
+    }
+  }
+
   // 过滤无实际用量的行（如 Claude Code 的 <synthetic> 占位消息，token 全 0）
   const filtered = rows.filter(
     (r) =>
+      !disabled.has(r.source) &&
       r.inputTokens +
         r.outputTokens +
         r.cacheCreationTokens +
@@ -146,6 +161,23 @@ export async function scanLocalUsage(since?: string): Promise<ScanLocalUsageResu
 export async function scanAndPersistLocalUsage(
   since?: string,
 ): Promise<ScanLocalUsageResult> {
+  // 全量扫描可以满足任何窗口请求；窗口扫描不能拿来顶全量（会漏掉窗口外的替换）。
+  while (scanFlight) {
+    if (scanFlight.since === undefined || scanFlight.since === since) {
+      return scanFlight.promise;
+    }
+    await scanFlight.promise.catch(() => undefined);
+  }
+  const promise = persistScannedUsage(since).finally(() => {
+    if (scanFlight?.promise === promise) scanFlight = null;
+  });
+  scanFlight = { since, promise };
+  return promise;
+}
+
+async function persistScannedUsage(
+  since?: string,
+): Promise<ScanLocalUsageResult> {
   const result = await scanLocalUsage(since);
   const grouped = new Map<LocalSource, LocalUsageRow[]>();
   for (const r of result.rows) {
@@ -161,5 +193,6 @@ export async function scanAndPersistLocalUsage(
     if (fullScan) replaceLocalDailyUsageBySource(source, rows);
     else upsertLocalDailyUsage(rows);
   }
+  notifyRenderer("local-usage:updated");
   return result;
 }

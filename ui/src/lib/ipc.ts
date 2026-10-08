@@ -1,4 +1,5 @@
 import type {
+  AppBootstrap,
   BalanceResult,
   BalanceSnapshot,
   LocalDailyUsageRecord,
@@ -21,8 +22,23 @@ import type {
 
 /** 前端调用主进程的统一封装 */
 export const ipc = {
+  getModelMonitorState: (date?: string, source?: import("@/types").ModelMonitorSource) => window.tokenLens.getModelMonitorState(date, source),
+  launchCapturedCodex: () => window.tokenLens.launchCapturedCodex(),
+  enableOpenCodeCapture: () => window.tokenLens.enableOpenCodeCapture(),
+  enableClaudeCapture: () => window.tokenLens.enableClaudeCapture(),
   ping: () => window.tokenLens.ping(),
   isEncryptionAvailable: () => window.tokenLens.isEncryptionAvailable(),
+  bootstrap: () => window.tokenLens.bootstrap(),
+  revealUserData: () => window.tokenLens.revealUserData(),
+  backupJson: () => window.tokenLens.backupJson(),
+  previewBackup: (raw: string) => window.tokenLens.previewBackup(raw),
+  importBackup: (raw: string) => window.tokenLens.importBackup(raw),
+  dataStats: () => window.tokenLens.dataStats(),
+  getRecentLogs: () => window.tokenLens.getRecentLogs(),
+  getLogPath: () => window.tokenLens.getLogPath(),
+  importLocalRows: (rows: unknown[]) => window.tokenLens.importLocalRows(rows),
+  saveText: (defaultName: string, content: string) =>
+    window.tokenLens.saveText(defaultName, content),
 
   listDefinitions: () => window.tokenLens.listDefinitions(),
   listServices: () => window.tokenLens.listServices(),
@@ -38,6 +54,8 @@ export const ipc = {
     window.tokenLens.refreshUsage(id, period),
   listUsage: (serviceId?: string, since?: string) =>
     window.tokenLens.listUsage(serviceId, since),
+  onLocalUsageUpdated: (cb: () => void) =>
+    window.tokenLens.onLocalUsageUpdated(cb),
   onBalanceUpdated: (
     cb: (payload: {
       id: string;

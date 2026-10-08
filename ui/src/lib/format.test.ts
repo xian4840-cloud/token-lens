@@ -3,11 +3,18 @@ import {
   balanceCaption,
   formatBalance,
   formatCompact,
+  formatCost,
   formatMoney,
   formatTime,
+  formatRelative,
+  addDateKey,
+  localDateKey,
+  msUntilNextLocalMidnight,
   formatTokens,
   formatTokensCn,
   usedPercent,
+  progressBarClass,
+  budgetBannerKind,
   visibleTokens,
   // 走 @ alias 而非相对路径：顺带守卫 vitest.config.mts 的 alias 配置，
   // 配错了这里会直接解析失败，而不是等到某个组件测试才暴露
@@ -151,6 +158,55 @@ describe("usedPercent", () => {
   });
 });
 
+describe("progressBarClass", () => {
+  it("70% 以下陶杏，70-90 警告，90 以上危险", () => {
+    expect(progressBarClass(0)).toContain("from-primary");
+    expect(progressBarClass(69)).toContain("from-primary");
+    expect(progressBarClass(70)).toContain("amber");
+    expect(progressBarClass(90)).toContain("destructive");
+    expect(progressBarClass(Number.NaN)).toContain("from-primary");
+  });
+});
+
+describe("formatRelative", () => {
+  const now = Date.parse("2026-09-12T12:00:00.000Z");
+  it("刚刚 / 分钟 / 小时 / 天", () => {
+    expect(formatRelative(new Date(now - 10_000).toISOString(), now)).toBe("刚刚");
+    expect(formatRelative(new Date(now - 5 * 60_000).toISOString(), now)).toBe(
+      "5 分钟前",
+    );
+    expect(formatRelative(new Date(now - 3 * 3600_000).toISOString(), now)).toBe(
+      "3 小时前",
+    );
+    expect(formatRelative(new Date(now - 2 * 86400_000).toISOString(), now)).toBe(
+      "2 天前",
+    );
+  });
+  it("非法值占位", () => {
+    expect(formatRelative(undefined)).toBe("—");
+    expect(formatRelative("不是日期")).toBe("—");
+  });
+});
+
+describe("addDateKey", () => {
+  it("跨月加减", () => {
+    expect(addDateKey("2026-09-01", -1)).toBe("2026-08-31");
+    expect(addDateKey("2026-09-12", 0)).toBe("2026-09-12");
+  });
+  it("非法键不瞎改", () => {
+    expect(addDateKey("bad", 1)).toBe("bad");
+  });
+});
+
+describe("budgetBannerKind", () => {
+  it("80% 接近，100% 超支，其余不横幅", () => {
+    expect(budgetBannerKind(40, 50)).toBe("near");
+    expect(budgetBannerKind(50, 50)).toBe("over");
+    expect(budgetBannerKind(39, 50)).toBeNull();
+    expect(budgetBannerKind(10, null)).toBeNull();
+  });
+});
+
 describe("balanceCaption", () => {
   it("同时有余额与已用时说明已用多少", () => {
     expect(balanceCaption({ remaining: 70, used: 30, currency: "USD" })).toBe(
@@ -199,6 +255,32 @@ describe("formatTokensCn", () => {
   it("缺值返回连字符占位", () => {
     expect(formatTokensCn(null)).toBe("-");
     expect(formatTokensCn(undefined)).toBe("-");
+  });
+});
+
+describe("formatCost", () => {
+  it("没有数字显示破折号，有数字保留四位小数", () => {
+    expect(formatCost(null, "USD")).toBe("—");
+    expect(formatCost(1.23456, "USD")).toBe("$1.2346");
+    expect(formatCost(2, "CNY")).toBe("¥2.0000");
+  });
+});
+
+describe("localDateKey", () => {
+  it("按本地时区输出 YYYY-MM-DD", () => {
+    expect(localDateKey(new Date(2026, 8, 11, 23, 59))).toBe("2026-09-11");
+  });
+});
+
+describe("msUntilNextLocalMidnight", () => {
+  it("23:59:59 距零点不到两秒", () => {
+    const d = new Date(2026, 8, 11, 23, 59, 59, 200);
+    expect(msUntilNextLocalMidnight(d)).toBe(800);
+  });
+
+  it("零点整是一整天", () => {
+    const d = new Date(2026, 8, 11, 0, 0, 0, 0);
+    expect(msUntilNextLocalMidnight(d)).toBe(86_400_000);
   });
 });
 

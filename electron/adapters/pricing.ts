@@ -9,6 +9,7 @@
  * computeCost 会先查覆盖再查默认。
  */
 
+import { logWarn } from "../lib/logger";
 import { DEFAULT_PRICING } from "./pricing-table";
 
 export interface ModelPricing {
@@ -33,6 +34,14 @@ export interface PricingRowDisplay {
   cacheReadPerM: number;
   cacheWritePerM: number;
   currency: string;
+  /** 该行是否有用户覆盖（用于显示「恢复默认」） */
+  overridden?: boolean;
+  defaults?: {
+    inputPerM: number;
+    outputPerM: number;
+    cacheReadPerM: number;
+    cacheWritePerM: number;
+  };
 }
 
 /** 内置价格行：多一个 match 正则用于按模型名分派 */
@@ -97,6 +106,13 @@ export function getPricingTable(
       cacheReadPerM: o.cacheReadPerM ?? r.cacheReadPerM ?? 0,
       cacheWritePerM: o.cacheWritePerM ?? r.cacheWritePerM ?? 0,
       currency: o.currency ?? r.currency ?? USD,
+      overridden: Object.keys(o).length > 0,
+      defaults: {
+        inputPerM: r.inputPerM,
+        outputPerM: r.outputPerM,
+        cacheReadPerM: r.cacheReadPerM ?? 0,
+        cacheWritePerM: r.cacheWritePerM ?? 0,
+      },
     };
   });
 }
@@ -153,8 +169,11 @@ export function parseOverrides(
         parsed as Record<string, Partial<ModelPricing>>,
       );
     }
-  } catch {
-    // 损坏 JSON 忽略，回退默认
+  } catch (e) {
+    logWarn(
+      "pricing",
+      `pricingOverrides 不是合法 JSON，已回退内置价格：${e instanceof Error ? e.message : String(e)}`,
+    );
   }
   return {};
 }

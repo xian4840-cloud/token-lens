@@ -3,7 +3,9 @@ import { listServices, getSetting } from "./db";
 import { refreshServiceInternal } from "./refresh";
 import { scanAndPersistLocalUsage } from "./local-usage";
 import { logError } from "./lib/logger";
-import { redactError } from "./lib/redact";
+import { mapErrorToUserMessage } from "./lib/user-error";
+import { createBusyLock, mapPool } from "./lib/concurrency";
+import { flushDb } from "./db";
 import type { BalanceResult } from "./types";
 
 /** 后台自动刷新调度器。应用运行期间按间隔刷新所有服务并记录快照，
@@ -11,6 +13,8 @@ import type { BalanceResult } from "./types";
 
 let timer: NodeJS.Timeout | null = null;
 let mainWin: BrowserWindow | null = null;
+const refreshLock = createBusyLock();
+const REFRESH_CONCURRENCY = 3;
 
 export function setMainWindow(win: BrowserWindow | null): void {
   mainWin = win;
@@ -27,21 +31,25 @@ function notify(
   }
 }
 
-/** 刷新所有服务：逐个记录快照并通知前端，单个失败不影响其他；
- *  末尾顺带扫描本地 agent 用量落盘每日快照（失败不影响余额刷新）。 */
+/** 刷新所有服务：有限并发，单个失败不影响其他；本地扫描与余额拆开。 */
 async function refreshAll(): Promise<void> {
-  const services = listServices();
-  for (const s of services) {
-    try {
-      const balance = await refreshServiceInternal(s.id);
-      notify(s.id, { balance });
-    } catch (e) {
-      // 记日志：自动刷新在后台跑，用户看到的只是卡片一直不更新，
-      // 不落盘的话事后完全无从查证是哪个服务在报什么错
-      logError(`refresh:${s.provider}`, e);
-      notify(s.id, { error: redactError(e) });
-    }
-  }
+  const started = refreshLock.tryRun(async () => {
+    const services = listServices();
+    await mapPool(services, REFRESH_CONCURRENCY, async (s) => {
+      try {
+        const balance = await refreshServiceInternal(s.id);
+        notify(s.id, { balance });
+      } catch (e) {
+        // 记日志：自动刷新在后台跑，用户看到的只是卡片一直不更新，
+        // 不落盘的话事后完全无从查证是哪个服务在报什么错
+        logError(`refresh:${s.provider}`, e);
+        notify(s.id, { error: mapErrorToUserMessage(e) });
+      }
+    });
+    flushDb();
+  });
+  if (!started) return;
+  await started;
   try {
     await scanAndPersistLocalUsage();
   } catch (e) {
@@ -78,7 +86,9 @@ export function normalizeIntervalMinutes(
 /** 应用启动时调用：读取设置并启动调度器 */
 export function startScheduler(): void {
   // 启动时扫一次本地 agent 用量，确保当日数据在（异步，不阻塞窗口显示）
-  void scanAndPersistLocalUsage().catch(() => {});
+  void scanAndPersistLocalUsage().catch((e) => {
+    logError("local-usage", e);
+  });
   restart(normalizeIntervalMinutes(getSetting("refreshInterval")) ?? 0);
 }
 

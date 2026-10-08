@@ -8,7 +8,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { formatTime } from "@/lib/format";
+import { showToast } from "@/lib/toast";
+import { copyText } from "@/lib/copy-text";
+import { formatDiagnosticSummary } from "@/lib/diagnostics";
 import type { LogEntry, LogLevel } from "@/types";
 
 /**
@@ -42,17 +46,29 @@ export function DiagnosticsCard() {
   const [logPath, setLogPath] = useState("");
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [clearOpen, setClearOpen] = useState(false);
+  const [stats, setStats] = useState<{
+    services: number;
+    usageRecords: number;
+    localDaily: number;
+    snapshots: number;
+    bytes: number;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [entries, p] = await Promise.all([
+      const [entries, p, st] = await Promise.all([
         window.tokenLens.getRecentLogs(),
         window.tokenLens.getLogPath(),
+        window.tokenLens.dataStats(),
       ]);
       // 新的在前，便于第一眼看到最近的错误
       setLogs([...entries].reverse());
       setLogPath(p);
+      setStats(st);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "读取日志失败", "err");
     } finally {
       setLoading(false);
     }
@@ -63,8 +79,13 @@ export function DiagnosticsCard() {
   }, [load]);
 
   const handleClear = async () => {
-    await window.tokenLens.clearLogs();
-    await load();
+    try {
+      await window.tokenLens.clearLogs();
+      showToast("日志已清空");
+      await load();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "清空日志失败", "err");
+    }
   };
 
   const errorCount = logs.filter((l) => l.level === "error").length;
@@ -85,7 +106,33 @@ export function DiagnosticsCard() {
             </CardDescription>
           </div>
           <div className="flex shrink-0 gap-2">
-            <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const text = formatDiagnosticSummary({
+                  stats,
+                  logPath,
+                  logs,
+                  limit: 30,
+                });
+                if (!text) {
+                  showToast("暂无诊断内容", "err");
+                  return;
+                }
+                copyText(text, "已复制诊断摘要（未上传）");
+              }}
+              aria-label="复制诊断摘要"
+            >
+              复制摘要
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void load()}
+              disabled={loading}
+              aria-label="刷新日志"
+            >
               <RotateCw className={loading ? "size-4 animate-spin" : "size-4"} />
               刷新
             </Button>
@@ -93,11 +140,17 @@ export function DiagnosticsCard() {
               variant="outline"
               size="sm"
               onClick={() => void window.tokenLens.revealLogFile()}
+              aria-label="打开日志文件"
             >
               <FolderOpen className="size-4" />
               打开日志文件
             </Button>
-            <Button variant="outline" size="sm" onClick={() => void handleClear()}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setClearOpen(true)}
+              aria-label="清空日志"
+            >
               <Trash2 className="size-4" />
               清空
             </Button>
@@ -110,6 +163,13 @@ export function DiagnosticsCard() {
           {errorCount > 0 ? `，其中 ${errorCount} 条错误` : "，暂无错误"}
           {logPath ? ` · 文件位置：${logPath}` : ""}
         </div>
+        {stats ? (
+          <div className="text-xs text-muted-foreground">
+            数据文件 {(stats.bytes / 1024).toFixed(1)} KB · 服务 {stats.services} ·
+            API 用量 {stats.usageRecords} · 本地日桶 {stats.localDaily} · 余额快照{" "}
+            {stats.snapshots}
+          </div>
+        ) : null}
 
         {logs.length === 0 ? (
           <div className="rounded-md border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
@@ -142,6 +202,18 @@ export function DiagnosticsCard() {
           </Button>
         )}
       </CardContent>
+      <ConfirmDialog
+        open={clearOpen}
+        onOpenChange={setClearOpen}
+        title="清空诊断日志？"
+        description="只清日志文件，配置、密钥和用量数据都还在。"
+        confirmLabel="清空"
+        destructive
+        onConfirm={() => {
+          setClearOpen(false);
+          void handleClear();
+        }}
+      />
     </Card>
   );
 }

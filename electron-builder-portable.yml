@@ -4,9 +4,16 @@ directories:
   output: dist-electron
 files:
   - electron-dist/**
+  - "!electron-dist/**/*.map"
   - ui/dist/**
   - package.json
+  - electron/codex-capture/*.cs
+  - electron/agent-capture/*.mjs
+  - electron/agent-capture/*.cjs
 asar: true
+electronLanguages:
+  - zh-CN
+  - en-US
 asarUnpack:
   - "**/*.node"
 win:

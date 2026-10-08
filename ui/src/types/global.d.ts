@@ -1,4 +1,6 @@
 import type {
+  ModelMonitorState,
+  AppBootstrap,
   BalanceResult,
   BalanceSnapshot,
   LocalDailyUsageRecord,
@@ -20,8 +22,30 @@ import type {
 declare global {
   interface Window {
     tokenLens: {
+      getModelMonitorState: (date?: string, source?: import("@/types").ModelMonitorSource) => Promise<ModelMonitorState>;
+      launchCapturedCodex: () => Promise<ModelMonitorState["capture"]>;
+      enableOpenCodeCapture: () => Promise<void>;
+      enableClaudeCapture: () => Promise<void>;
       ping: () => Promise<string>;
       isEncryptionAvailable: () => Promise<boolean>;
+      bootstrap: () => Promise<AppBootstrap>;
+      revealUserData: () => Promise<boolean>;
+      backupJson: () => Promise<string>;
+      previewBackup: (
+        raw: string,
+      ) => Promise<{ local: number; usage: number; exportedAt: string }>;
+      importBackup: (raw: string) => Promise<{ local: number; usage: number }>;
+      dataStats: () => Promise<{
+        services: number;
+        usageRecords: number;
+        localDaily: number;
+        snapshots: number;
+        bytes: number;
+      }>;
+      importLocalRows: (
+        rows: unknown[],
+      ) => Promise<{ imported: number; skipped: number }>;
+      saveText: (defaultName: string, content: string) => Promise<boolean>;
       listDefinitions: () => Promise<ServiceDefinition[]>;
       listServices: () => Promise<ServiceRecord[]>;
       createService: (input: ServiceInput) => Promise<ServiceRecord>;
@@ -43,6 +67,7 @@ declare global {
         serviceId?: string,
         since?: string,
       ) => Promise<UsageRecord[]>;
+      onLocalUsageUpdated: (cb: () => void) => () => void;
       onBalanceUpdated: (
         cb: (payload: {
           id: string;

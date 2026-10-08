@@ -104,6 +104,10 @@ describe("validateSettingKey", () => {
       "proxyCustomUrl",
       "proxyBypassRules",
       "requestTimeout",
+      "monthlyBudgetUsd",
+      "pinnedServiceIds",
+      "hiddenServiceIds",
+      "disabledLocalSources",
     ]) {
       expect(validateSettingKey(k)).toBe(k);
     }

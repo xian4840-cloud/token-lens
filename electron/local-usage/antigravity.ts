@@ -8,6 +8,7 @@ import {
   type AntigravityFileEntry,
   type AntigravityModelDayAgg,
 } from "./cache";
+import { logWarn } from "../lib/logger";
 import type { LocalUsageRow } from "./types";
 
 export interface AntigravityResult {
@@ -42,7 +43,7 @@ interface ProtoField {
   data?: Uint8Array;
 }
 
-function readVarint(buf: Uint8Array, pos: number): [number, number] | undefined {
+export function readVarint(buf: Uint8Array, pos: number): [number, number] | undefined {
   let val = 0;
   let shift = 0;
   while (pos < buf.length) {
@@ -58,7 +59,7 @@ function readVarint(buf: Uint8Array, pos: number): [number, number] | undefined 
 }
 
 /** 解析一条 protobuf 消息为字段数组；结构异常返回 undefined（调用方跳过该 blob） */
-function parseProtoFields(buf: Uint8Array): ProtoField[] | undefined {
+export function parseProtoFields(buf: Uint8Array): ProtoField[] | undefined {
   const fields: ProtoField[] = [];
   let pos = 0;
   while (pos < buf.length) {
@@ -281,8 +282,11 @@ export async function scanAntigravity(since?: string): Promise<AntigravityResult
     let db: InstanceType<typeof DatabaseSync>;
     try {
       db = new DatabaseSync(dbPath, { readOnly: true });
-    } catch {
-      // 会话可能正被 Antigravity 写入锁定等，跳过不阻塞其它会话
+    } catch (e) {
+      logWarn(
+        "local-usage",
+        `Antigravity 会话打不开，已跳过：${dbPath}（${e instanceof Error ? e.message : String(e)}）`,
+      );
       dbOpenFailures += 1;
       continue;
     }
@@ -293,7 +297,10 @@ export async function scanAntigravity(since?: string): Promise<AntigravityResult
         .prepare("SELECT step_type, metadata FROM steps WHERE step_type = ?")
         .all(STEP_TYPE_MODEL_RESPONSE) as unknown as StepRow[];
     } catch (e) {
-      // 表结构异常（损坏/新版 schema 变更），跳过该会话
+      logWarn(
+        "local-usage",
+        `Antigravity 会话表结构异常，已跳过：${dbPath}（${e instanceof Error ? e.message : String(e)}）`,
+      );
       dbOpenFailures += 1;
       db.close();
       continue;

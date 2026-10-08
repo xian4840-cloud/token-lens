@@ -20,3 +20,21 @@ export function toDateKey(
   const dd = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${dd}`;
 }
+
+const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** YYYY-MM-DD → 当月 1 号。非法键返回 undefined，避免把垃圾字符串切片当日期。 */
+export function monthStartKey(
+  dateKey: string | undefined | null,
+): string | undefined {
+  if (!dateKey || !DATE_KEY.test(dateKey)) return undefined;
+  return `${dateKey.slice(0, 7)}-01`;
+}
+
+/** YYYY-MM-DD → YYYY-MM。非法键返回 undefined。 */
+export function monthKey(
+  dateKey: string | undefined | null,
+): string | undefined {
+  if (!dateKey || !DATE_KEY.test(dateKey)) return undefined;
+  return dateKey.slice(0, 7);
+}

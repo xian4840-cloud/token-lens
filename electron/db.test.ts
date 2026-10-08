@@ -20,9 +20,13 @@ import {
   setSetting,
   getSetting,
   upsertLocalDailyUsage,
+  saveLastBalance,
+  getLastBalances,
+  appendImportedUsageRecords,
+  dataStats,
 } from "./db";
 import { getRecentLogs } from "./lib/logger";
-import type { LocalDailyUsageRecord, ServiceRecord } from "./types";
+import type { BalanceResult, LocalDailyUsageRecord, ServiceRecord } from "./types";
 import type { LocalUsageRow } from "./local-usage/types";
 
 /**
@@ -512,5 +516,100 @@ describe("密钥解密失败时留痕", () => {
     expect(
       getRecentLogs().some((e) => e.scope === "db" && e.message.includes("svc-2")),
     ).toBe(false);
+  });
+});
+
+describe("lastBalance", () => {
+  beforeEach(() => initDbAt(file));
+
+  function result(partial: Partial<BalanceResult> = {}): BalanceResult {
+    return {
+      remaining: 12.5,
+      currency: "USD",
+      fetchedAt: "2026-09-11T08:00:00.000Z",
+      breakdown: [{ label: "月配额", remaining: 12.5, used: 7.5, total: 20 }],
+      ...partial,
+    };
+  }
+
+  it("写入后能读回完整卡片所需字段，不只是一个数字", () => {
+    saveLastBalance("s1", result());
+    flushDb();
+    const all = getLastBalances();
+    expect(all.s1?.remaining).toBe(12.5);
+    expect(all.s1?.breakdown?.[0]?.label).toBe("月配额");
+    expect(all.s1?.fetchedAt).toBe("2026-09-11T08:00:00.000Z");
+  });
+
+  it("不把 raw 落盘（那是适配器内部的整段响应，UI 不用）", () => {
+    saveLastBalance("s1", result({ raw: { huge: "payload" } }));
+    flushDb();
+    expect(getLastBalances().s1?.raw).toBeUndefined();
+    const disk = JSON.parse(fs.readFileSync(file, "utf8")) as {
+      lastBalances: Record<string, { raw?: unknown }>;
+    };
+    expect(disk.lastBalances.s1.raw).toBeUndefined();
+  });
+
+  it("仅校验 Key 的结果（无数字、只有 statusLabel）也要留下", () => {
+    saveLastBalance(
+      "gemini",
+      result({ remaining: undefined, statusLabel: "Key 有效", currency: "USD" }),
+    );
+    flushDb();
+    expect(getLastBalances().gemini?.statusLabel).toBe("Key 有效");
+  });
+
+  it("删服务时级联清掉上次余额", () => {
+    insertService(service("a"));
+    insertService(service("b"));
+    saveLastBalance("a", result({ remaining: 1 }));
+    saveLastBalance("b", result({ remaining: 2 }));
+    deleteServiceRow("a");
+    flushDb();
+    expect(getLastBalances().a).toBeUndefined();
+    expect(getLastBalances().b?.remaining).toBe(2);
+  });
+
+  it("旧文件没有 lastBalances 字段时以空对象启动，不抛异常", () => {
+    writeStore({ services: [service("a")] });
+    initDbAt(file);
+    expect(getLastBalances()).toEqual({});
+  });
+
+  it("lastBalances 若被写成数组则当成缺失，不在落盘时把余额丢掉", () => {
+    writeStore({ services: [service("a")], lastBalances: [] });
+    initDbAt(file);
+    saveLastBalance("a", result({ remaining: 3 }));
+    flushDb();
+    const disk = JSON.parse(fs.readFileSync(file, "utf8")) as {
+      lastBalances: Record<string, { remaining?: number }>;
+    };
+    expect(disk.lastBalances.a.remaining).toBe(3);
+  });
+});
+
+describe("导入与统计", () => {
+  beforeEach(() => initDbAt(file));
+
+  it("appendImportedUsageRecords 丢掉没有 serviceId 的行，并分配新 id", () => {
+    const n = appendImportedUsageRecords([
+      { serviceId: "s1", model: "m", totalTokens: 10, period: "p" },
+      { model: "no-service" },
+      { serviceId: "s1", cost: Number.NaN, totalTokens: 2 },
+    ]);
+    expect(n).toBe(2);
+    const rows = listUsageRecords();
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.id).not.toBe(rows[1]?.id);
+    expect(rows[1]?.cost).toBeNull();
+  });
+
+  it("dataStats 计入服务与文件大小", () => {
+    insertService(service("a"));
+    flushDb();
+    const s = dataStats();
+    expect(s.services).toBe(1);
+    expect(s.bytes).toBeGreaterThan(0);
   });
 });

@@ -5,6 +5,7 @@ import { encrypt, decrypt } from "./secrets";
 import type {
   ServiceRecord,
   BalanceSnapshot,
+  BalanceResult,
   UsageRecord,
   UsageItem,
   LocalDailyUsageRecord,
@@ -25,6 +26,12 @@ interface StoreData {
   balanceSnapshots: BalanceSnapshot[];
   usageRecords: UsageRecord[];
   localDailyUsage: LocalDailyUsageRecord[];
+  /**
+   * 每个服务最近一次刷新成功的完整卡片结果（不含 raw）。
+   * 趋势页继续用 balanceSnapshots 的数字序列；总览重启后要立刻画出
+   * breakdown / statusLabel，快照里没有这些字段。
+   */
+  lastBalances: Record<string, BalanceResult>;
   settings: Record<string, string>;
   counters: {
     balanceSnapshot: number;
@@ -43,6 +50,7 @@ function defaultData(): StoreData {
     balanceSnapshots: [],
     usageRecords: [],
     localDailyUsage: [],
+    lastBalances: {},
     settings: {},
     counters: { balanceSnapshot: 0, usageRecord: 0, localDailyUsage: 0 },
   };
@@ -195,6 +203,20 @@ export function initDbAt(dbFilePath: string): void {
   if (!Array.isArray(data.balanceSnapshots)) data.balanceSnapshots = [];
   if (!Array.isArray(data.usageRecords)) data.usageRecords = [];
   if (!Array.isArray(data.localDailyUsage)) data.localDailyUsage = [];
+  if (
+    !data.lastBalances ||
+    typeof data.lastBalances !== "object" ||
+    Array.isArray(data.lastBalances)
+  ) {
+    data.lastBalances = {};
+  } else {
+    // 旧数据若误把 raw 写进去了，读的时候剥掉，下次落盘即自愈
+    for (const [id, bal] of Object.entries(data.lastBalances)) {
+      if (bal && typeof bal === "object" && "raw" in bal) {
+        data.lastBalances[id] = stripRaw(bal);
+      }
+    }
+  }
   if (!data.settings || typeof data.settings !== "object") data.settings = {};
   if (!data.counters || typeof data.counters !== "object") {
     data.counters = { balanceSnapshot: 0, usageRecord: 0, localDailyUsage: 0 };
@@ -248,7 +270,26 @@ export function deleteServiceRow(id: string): void {
   data.balanceSnapshots = data.balanceSnapshots.filter((s) => s.serviceId !== id);
   data.usageRecords = data.usageRecords.filter((s) => s.serviceId !== id);
   delete data.secrets[id];
+  delete data.lastBalances[id];
   persist();
+}
+
+function stripRaw(balance: BalanceResult): BalanceResult {
+  const { raw: _raw, ...rest } = balance;
+  return rest;
+}
+
+/** 刷新成功后写入，供下次启动立刻画出卡片。raw 不落盘。 */
+export function saveLastBalance(serviceId: string, balance: BalanceResult): void {
+  if (!data.lastBalances || typeof data.lastBalances !== "object") {
+    data.lastBalances = {};
+  }
+  data.lastBalances[serviceId] = stripRaw(balance);
+  persist();
+}
+
+export function getLastBalances(): Record<string, BalanceResult> {
+  return { ...(data.lastBalances ?? {}) };
 }
 
 // ---- secrets（safeStorage 加密，JSON 存 base64） ----
@@ -492,5 +533,82 @@ export function setSetting(key: string, value: string): void {
   if (!data) data = defaultData();
   data.settings[key] = value;
   persist();
+}
+
+export function dataStats(): {
+  services: number;
+  usageRecords: number;
+  localDaily: number;
+  snapshots: number;
+  bytes: number;
+} {
+  let bytes = 0;
+  try {
+    if (filePath && fs.existsSync(filePath)) bytes = fs.statSync(filePath).size;
+  } catch (e) {
+    logWarn(
+      "db",
+      `读取数据文件大小失败：${e instanceof Error ? e.message : String(e)}`,
+    );
+    bytes = 0;
+  }
+  return {
+    services: data?.services.length ?? 0,
+    usageRecords: data?.usageRecords.length ?? 0,
+    localDaily: data?.localDailyUsage.length ?? 0,
+    snapshots: data?.balanceSnapshots.length ?? 0,
+    bytes,
+  };
+}
+
+/** 导入备份用：追加用量记录，不覆盖现有、不复用旧 id。 */
+export function appendImportedUsageRecords(
+  rows: Array<{
+    serviceId?: unknown;
+    model?: unknown;
+    normalizedModel?: unknown;
+    cost?: unknown;
+    promptTokens?: unknown;
+    completionTokens?: unknown;
+    totalTokens?: unknown;
+    period?: unknown;
+    currency?: unknown;
+    recordedAt?: unknown;
+  }>,
+): number {
+  if (!data) data = defaultData();
+  let n = 0;
+  const now = new Date().toISOString();
+  for (const it of rows) {
+    if (typeof it.serviceId !== "string" || !it.serviceId) continue;
+    data.counters.usageRecord += 1;
+    data.usageRecords.push({
+      id: data.counters.usageRecord,
+      serviceId: it.serviceId,
+      model: typeof it.model === "string" ? it.model : null,
+      normalizedModel:
+        typeof it.normalizedModel === "string" ? it.normalizedModel : null,
+      cost: typeof it.cost === "number" && Number.isFinite(it.cost) ? it.cost : null,
+      promptTokens:
+        typeof it.promptTokens === "number" && Number.isFinite(it.promptTokens)
+          ? it.promptTokens
+          : null,
+      completionTokens:
+        typeof it.completionTokens === "number" &&
+        Number.isFinite(it.completionTokens)
+          ? it.completionTokens
+          : null,
+      totalTokens:
+        typeof it.totalTokens === "number" && Number.isFinite(it.totalTokens)
+          ? it.totalTokens
+          : null,
+      period: typeof it.period === "string" ? it.period : null,
+      currency: typeof it.currency === "string" ? it.currency : null,
+      recordedAt: typeof it.recordedAt === "string" ? it.recordedAt : now,
+    });
+    n += 1;
+  }
+  if (n) persist();
+  return n;
 }
 

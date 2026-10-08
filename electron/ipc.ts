@@ -1,4 +1,6 @@
-import { ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import fs from "node:fs";
+import path from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   listServices,
@@ -13,6 +15,10 @@ import {
   clearAllLocalDailyUsage,
   getSetting,
   setSetting,
+  getLastBalances,
+  upsertLocalDailyUsage,
+  appendImportedUsageRecords,
+  dataStats,
 } from "./db";
 import { isEncryptionAvailable } from "./secrets";
 import { listDefinitions, getDefinition } from "./adapters";
@@ -32,9 +38,22 @@ import {
 import {
   applySessionProxy,
   clearProxyAgentCache,
+  DEFAULT_BYPASS_RULES,
   testNetworkConnectivity,
   type ProxyConfigOverride,
 } from "./lib/http";
+import { mapErrorToUserMessage } from "./lib/user-error";
+import { monthStartKey, toDateKey } from "./local-usage/date";
+import { parseMonthlyBudgetUsd } from "./lib/budget";
+import { parseIdList } from "./lib/id-list";
+import {
+  backupPreviewStats,
+  buildBackupPayload,
+  parseBackupJson,
+  saveDialogFilters,
+  toLocalUsageRows,
+  type BackupPayload,
+} from "./lib/backup";
 import {
   clearLogs,
   getLogPath,
@@ -43,8 +62,14 @@ import {
   write as writeLog,
 } from "./lib/logger";
 import { clearUsageScanCache } from "./local-usage/clear-cache";
-import type { BalanceResult, BalanceSnapshot, ServiceRecord } from "./types";
+import type { AppBootstrap, BalanceResult, BalanceSnapshot, ServiceRecord } from "./types";
 import { registerPetIpc } from "./pet/ipc";
+import { getAgentModelMonitorState } from "./agent-model-monitor";
+import { launchCapturedCodex } from "./codex-capture";
+import { enableOpenCodeCapture, enableClaudeCapture } from "./agent-response-capture";
+import { singleFlight } from "./lib/inflight";
+
+const captureLaunch = { current: null as ReturnType<typeof launchCapturedCodex> | null };
 
 
 /** 按服务定义把表单字段拆分为非敏感 config 与敏感 secrets */
@@ -68,9 +93,45 @@ function splitFields(
   return { config, secrets };
 }
 
+function parseBackupOrThrow(raw: unknown): BackupPayload {
+  if (typeof raw !== "string") throw new Error("无效的备份内容");
+  if (raw.length > 20_000_000) throw new Error("备份文件过大");
+  const parsed = parseBackupJson(raw);
+  if (!parsed.ok) throw new Error(parsed.error);
+  return parsed.payload;
+}
+
 export function registerIpc(): void {
+  ipcMain.handle("model-monitor:state", (_e, date?: unknown, source?: unknown) => getAgentModelMonitorState(date, source, app.getPath("userData")));
+  ipcMain.handle("model-monitor:enable-opencode", () => enableOpenCodeCapture(path.join(app.getAppPath(), "electron", "agent-capture", "opencode.mjs"), app.getPath("userData")));
+  ipcMain.handle("model-monitor:enable-claude", () => enableClaudeCapture(path.join(app.getAppPath(), "electron", "agent-capture"), app.getPath("userData")));
+  ipcMain.handle("model-monitor:launch-codex", () => singleFlight(captureLaunch, () => launchCapturedCodex(path.join(app.getAppPath(), "electron", "codex-capture", "CodexCapture.cs"), app.getPath("userData"))));
   ipcMain.handle("app:ping", () => "pong");
   ipcMain.handle("encryption:available", () => isEncryptionAvailable());
+
+  ipcMain.handle("app:bootstrap", (): AppBootstrap => {
+    const today = toDateKey(Date.now());
+    const monthStart = monthStartKey(today);
+    return {
+      definitions: listDefinitions(),
+      services: listServices(),
+      settings: {
+        refreshInterval: getSetting("refreshInterval") ?? "5",
+        proxyMode: getSetting("proxyMode") ?? "system",
+        proxyCustomUrl: getSetting("proxyCustomUrl") ?? "",
+        proxyBypassRules: getSetting("proxyBypassRules") ?? DEFAULT_BYPASS_RULES,
+        requestTimeout: getSetting("requestTimeout") ?? "15",
+        monthlyBudgetUsd: getSetting("monthlyBudgetUsd") ?? "",
+        pinnedServiceIds: getSetting("pinnedServiceIds") ?? "[]",
+        hiddenServiceIds: getSetting("hiddenServiceIds") ?? "[]",
+      },
+      lastBalances: getLastBalances(),
+      petEnabled: getSetting("petEnabled") === "1",
+      todayLocal: today ? listLocalDailyUsage(today, today) : [],
+      monthLocal:
+        today && monthStart ? listLocalDailyUsage(monthStart, today) : [],
+    };
+  });
 
   ipcMain.handle("services:definitions", () => listDefinitions());
   ipcMain.handle("services:list", () => listServices());
@@ -128,6 +189,22 @@ export function registerIpc(): void {
       restartScheduler(n);
       return true;
     }
+    if (validKey === "monthlyBudgetUsd") {
+      const parsed = parseMonthlyBudgetUsd(value);
+      if (value.trim() !== "" && parsed == null) {
+        throw new Error("月度预算需为正数");
+      }
+      setSetting(validKey, parsed == null ? "" : String(parsed));
+      return true;
+    }
+    if (
+      validKey === "pinnedServiceIds" ||
+      validKey === "hiddenServiceIds" ||
+      validKey === "disabledLocalSources"
+    ) {
+      setSetting(validKey, JSON.stringify(parseIdList(value)));
+      return true;
+    }
     setSetting(validKey, value);
     if (
       validKey === "proxyMode" ||
@@ -160,7 +237,7 @@ export function registerIpc(): void {
     } catch (e) {
       const record = getService(id);
       logError(`refresh:${record?.provider ?? "unknown"}`, e);
-      throw e;
+      throw new Error(mapErrorToUserMessage(e));
     }
   });
 
@@ -216,6 +293,91 @@ export function registerIpc(): void {
     shell.showItemInFolder(getLogPath());
     return true;
   });
+  ipcMain.handle("app:reveal-user-data", () => {
+    void shell.openPath(app.getPath("userData"));
+    return true;
+  });
+  ipcMain.handle("app:backup-json", () => {
+    const payload = buildBackupPayload({
+      services: listServices(),
+      usageRecords: listUsageRecords(),
+      localDailyUsage: listLocalDailyUsage(),
+      settings: {
+        refreshInterval: getSetting("refreshInterval"),
+        requestTimeout: getSetting("requestTimeout"),
+        monthlyBudgetUsd: getSetting("monthlyBudgetUsd"),
+        pricingOverrides: getSetting("pricingOverrides"),
+        petEnabled: getSetting("petEnabled"),
+        pinnedServiceIds: getSetting("pinnedServiceIds"),
+        hiddenServiceIds: getSetting("hiddenServiceIds"),
+      },
+      exportedAt: new Date().toISOString(),
+    });
+    return JSON.stringify(payload, null, 2);
+  });
+  ipcMain.handle("app:preview-backup", (_e, raw: unknown) => {
+    const payload = parseBackupOrThrow(raw);
+    return backupPreviewStats(payload);
+  });
+  ipcMain.handle("app:import-backup", (_e, raw: unknown) => {
+    const payload = parseBackupOrThrow(raw);
+    const localRows = toLocalUsageRows(payload.localDailyUsage);
+    upsertLocalDailyUsage(localRows);
+    const usageN = appendImportedUsageRecords(
+      payload.usageRecords as Parameters<
+        typeof appendImportedUsageRecords
+      >[0],
+    );
+    const s = payload.settings;
+    if (s.monthlyBudgetUsd)
+      setSetting("monthlyBudgetUsd", s.monthlyBudgetUsd);
+    if (s.pricingOverrides)
+      setSetting("pricingOverrides", s.pricingOverrides);
+    if (s.pinnedServiceIds)
+      setSetting(
+        "pinnedServiceIds",
+        JSON.stringify(parseIdList(s.pinnedServiceIds)),
+      );
+    if (s.hiddenServiceIds)
+      setSetting(
+        "hiddenServiceIds",
+        JSON.stringify(parseIdList(s.hiddenServiceIds)),
+      );
+    return { local: localRows.length, usage: usageN };
+  });
+  ipcMain.handle("app:stats", () => dataStats());
+  ipcMain.handle("local-usage:import-rows", (_e, rows: unknown) => {
+    if (!Array.isArray(rows)) throw new Error("无效的导入数据");
+    if (rows.length > 50_000) throw new Error("导入行数过多");
+    const localRows = toLocalUsageRows(rows);
+    upsertLocalDailyUsage(localRows);
+    return { imported: localRows.length, skipped: rows.length - localRows.length };
+  });
+  ipcMain.handle(
+    "app:save-text",
+    async (_e, defaultName: unknown, content: unknown) => {
+      if (typeof defaultName !== "string" || typeof content !== "string") {
+        throw new Error("无效的导出内容");
+      }
+      if (content.length > 20_000_000) throw new Error("导出内容过大");
+      const win = BrowserWindow.fromWebContents(_e.sender);
+      const saveOpts = {
+        defaultPath: defaultName.replace(/[/\\]/g, "_").slice(0, 120),
+        filters: saveDialogFilters(defaultName),
+      };
+      const result = win
+        ? await dialog.showSaveDialog(win, saveOpts)
+        : await dialog.showSaveDialog(saveOpts);
+      if (result.canceled || !result.filePath) return false;
+      try {
+        await fs.promises.writeFile(result.filePath, content, "utf8");
+      } catch (e) {
+        logError("export", e);
+        throw new Error("写入文件失败");
+      }
+      return true;
+    },
+  );
   ipcMain.handle("logs:clear", () => {
     clearLogs();
     return true;

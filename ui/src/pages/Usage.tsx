@@ -1,14 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,14 +13,28 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bot, Coins, ChevronDown, ChevronRight } from "lucide-react";
 import { useAppStore } from "@/store/app";
-import { LocalUsageTooltip } from "@/components/LocalUsageTooltip";
-import { formatCompact, formatDateKey, formatTokensCn, visibleTokens } from "@/lib/format";
+import { LocalUsageBarChart } from "@/components/LocalUsageBarChart";
+import { ipc } from "@/lib/ipc";
+import { showToast } from "@/lib/toast";
+import { copyText } from "@/lib/copy-text";
+import { applyLocalUsageCsv, toCsv, type LocalCsvRow } from "@/lib/csv";
+import { pickTextFile, readFileAsText } from "@/lib/pick-file";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import {
-  LOCAL_SOURCES as CHART_SOURCES,
-  LOCAL_SOURCE_COLORS as CHART_COLORS,
+  formatCost,
+  formatDateKey,
+  formatRelative,
+  formatTime,
+  formatTokensCn,
+  visibleTokens,
+} from "@/lib/format";
+import {
+  LOCAL_SOURCES,
   LOCAL_SOURCE_LABEL as SOURCE_LABEL,
   pivotDailyUsage,
+  summarizeLocalRecords,
 } from "@/lib/local-sources";
+import type { LocalSource } from "@/types";
 
 type Range = "month" | "7d" | "30d" | "all";
 
@@ -40,8 +44,6 @@ const RANGE_OPTIONS: { value: Range; label: string }[] = [
   { value: "30d", label: "近 30 天" },
   { value: "all", label: "全部" },
 ];
-
-/** 每日堆叠柱状图的来源系列（固定顺序与配色，见 lib/local-sources.ts） */
 
 /** 时间范围 -> 刷新用的时间区间（全部不可刷新） */
 function rangeToPeriod(range: Range): { start: string; end: string } {
@@ -69,26 +71,6 @@ function formatTokens(n: number | null | undefined): string {
   return n.toLocaleString();
 }
 
-function formatCost(
-  n: number | null | undefined,
-  currency: string | null | undefined,
-): string {
-  if (n == null) return "-";
-  const symbol = currency === "USD" ? "$" : currency === "CNY" ? "¥" : "";
-  return `${symbol}${n.toFixed(4)}`;
-}
-
-function formatTime(iso: string | undefined): string {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mi = String(d.getMinutes()).padStart(2, "0");
-  return `${mm}-${dd} ${hh}:${mi}`;
-}
-
 /** 当日区间：同日显示 HH:mm~HH:mm */
 function formatDayRange(
   firstAt?: string | null,
@@ -113,8 +95,6 @@ export function Usage() {
   const usageRecords = useAppStore((s) => s.usageRecords);
   const usageRefreshing = useAppStore((s) => s.usageRefreshing);
   const errors = useAppStore((s) => s.errors);
-  const loaded = useAppStore((s) => s.loaded);
-  const init = useAppStore((s) => s.init);
   const loadUsage = useAppStore((s) => s.loadUsage);
   const refreshAllUsage = useAppStore((s) => s.refreshAllUsage);
 
@@ -124,23 +104,47 @@ export function Usage() {
   const localDailyRecords = useAppStore((s) => s.localDailyRecords);
   const loadLocalDaily = useAppStore((s) => s.loadLocalDaily);
 
-  const [range, setRange] = useState<Range>("month");
-  const [tab, setTab] = useState<"api" | "local">("api");
+  const range = useAppStore((s) => s.usageRange);
+  const setRange = useAppStore((s) => s.setUsageRange);
+  const tab = useAppStore((s) => s.usageTab);
+  const setTab = useAppStore((s) => s.setUsageTab);
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+  const [usageReady, setUsageReady] = useState(
+    () => useAppStore.getState().usageRecords.length > 0,
+  );
+  const [localReady, setLocalReady] = useState(
+    () => useAppStore.getState().localDailyRecords.length > 0,
+  );
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [localSource, setLocalSource] = useState<"all" | LocalSource>("all");
+  const [csvPending, setCsvPending] = useState<{
+    rows: LocalCsvRow[];
+    unknownSources: string[];
+    invalid: string[];
+  } | null>(null);
 
   useEffect(() => {
-    if (!loaded) init();
-  }, [loaded, init]);
-
-  useEffect(() => {
-    loadUsage(rangeToSince(range));
+    let cancelled = false;
+    if (useAppStore.getState().usageRecords.length === 0) setUsageReady(false);
+    void loadUsage(rangeToSince(range)).finally(() => {
+      if (!cancelled) setUsageReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [range, loadUsage]);
 
   // 切到本地 agent tab 或切换时间范围时加载持久化的每日历史
   useEffect(() => {
-    if (tab === "local") {
-      loadLocalDaily(rangeToSince(range));
-    }
+    if (tab !== "local") return;
+    let cancelled = false;
+    setLocalReady(false);
+    void loadLocalDaily(rangeToSince(range)).finally(() => {
+      if (!cancelled) setLocalReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [tab, range, loadLocalDaily]);
 
   const nameOf = (id: string) =>
@@ -165,6 +169,60 @@ export function Usage() {
     .map((s) => ({ name: s.name, msg: errors[s.id] }))
     .filter((e) => e.msg);
 
+  const exportApi = async () => {
+    const csv = toCsv(
+      ["服务", "模型", "Tokens", "费用", "币种", "周期", "记录时间"],
+      records.map((r) => [
+        nameOf(r.serviceId),
+        r.model,
+        r.totalTokens,
+        r.cost,
+        r.currency,
+        r.period,
+        r.recordedAt,
+      ]),
+    );
+    setExportError(null);
+    try {
+      const ok = await ipc.saveText(`token-lens-api-${range}.csv`, csv);
+      if (!ok) return;
+      showToast("已导出 CSV");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setExportError(msg);
+      showToast(msg, "err");
+    }
+  };
+
+  const exportLocal = async () => {
+    const csv = toCsv(
+      ["日期", "来源", "模型", "会话", "输入", "输出", "缓存写", "缓存读", "推理", "费用", "币种"],
+      localRows.map((r) => [
+        r.date,
+        r.source,
+        r.model,
+        r.sessions,
+        r.inputTokens,
+        r.outputTokens,
+        r.cacheCreationTokens,
+        r.cacheReadTokens,
+        r.reasoningTokens,
+        r.cost,
+        r.currency,
+      ]),
+    );
+    setExportError(null);
+    try {
+      const ok = await ipc.saveText(`token-lens-local-${range}.csv`, csv);
+      if (!ok) return;
+      showToast("已导出 CSV");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setExportError(msg);
+      showToast(msg, "err");
+    }
+  };
+
   const handleRefresh = async () => {
     if (range === "all") return;
     await refreshAllUsage(rangeToPeriod(range));
@@ -180,15 +238,23 @@ export function Usage() {
   );
 
   // 本地每日明细：按日期倒序，同日按来源+模型
+  const filteredDaily = useMemo(
+    () =>
+      localSource === "all"
+        ? localDailyRecords
+        : localDailyRecords.filter((r) => r.source === localSource),
+    [localDailyRecords, localSource],
+  );
+
   const localRows = useMemo(
     () =>
-      [...localDailyRecords].sort(
+      [...filteredDaily].sort(
         (a, b) =>
           b.date.localeCompare(a.date) ||
           a.source.localeCompare(b.source) ||
           a.model.localeCompare(b.model),
       ),
-    [localDailyRecords],
+    [filteredDaily],
   );
 
   // 按日期分组
@@ -214,19 +280,25 @@ export function Usage() {
     });
   };
 
-  // 部分上游（GLM/Kimi 代理、Codex）不上报缓存写：结果集全 0 时隐藏写列，避免「全是 0」的坏观感
-  const showCacheWrite = useMemo(
-    () => localRows.some((r) => r.cacheCreationTokens > 0),
-    [localRows],
-  );
+  const dailyChartData = useMemo(() => pivotDailyUsage(filteredDaily), [filteredDaily]);
 
-  const dailyChartData = useMemo(() => pivotDailyUsage(localDailyRecords), [localDailyRecords]);
+  const lastScannedAt = useMemo(() => {
+    let max = "";
+    for (const r of filteredDaily) {
+      if (r.scannedAt && r.scannedAt > max) max = r.scannedAt;
+    }
+    return max || undefined;
+  }, [filteredDaily]);
 
   return (
     <div>
       <PageHeader
         title="用量明细"
-        description="跨服务按模型汇总的用量与支出；本地 agent 按天扫描本机使用记录换算。总量含缓存读取，但不把缓存再算进输入。"
+        description={
+          tab === "local" && lastScannedAt
+            ? `本地扫描 ${formatRelative(lastScannedAt)} · 总量含缓存读取，不把缓存再算进输入`
+            : "跨服务按模型汇总的用量与支出；本地 agent 按天扫描本机使用记录换算。总量含缓存读取，但不把缓存再算进输入。"
+        }
       />
 
       <div className="px-8">
@@ -241,7 +313,7 @@ export function Usage() {
             </TabsList>
             <div className="flex items-center gap-2">
               <Select value={range} onValueChange={(v) => setRange(v as Range)}>
-                <SelectTrigger className="w-32">
+                <SelectTrigger className="w-32" aria-label="时间范围">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -253,26 +325,117 @@ export function Usage() {
                 </SelectContent>
               </Select>
               {tab === "api" ? (
-                <Button
-                  onClick={handleRefresh}
-                  disabled={
-                    range === "all" ||
-                    usageRefreshing ||
-                    supportedServices.length === 0
-                  }
-                >
-                  {usageRefreshing ? "刷新中…" : "刷新用量"}
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => void exportApi()}
+                    disabled={!usageReady || records.length === 0}
+                  >
+                    导出 CSV
+                  </Button>
+                  <Button
+                    onClick={handleRefresh}
+                    disabled={
+                      range === "all" ||
+                      usageRefreshing ||
+                      supportedServices.length === 0
+                    }
+                  >
+                    {usageRefreshing ? "刷新中…" : "刷新用量"}
+                  </Button>
+                </>
               ) : (
-                <Button
-                  onClick={() => scanLocalUsage(rangeToSince(range))}
-                  disabled={localUsageScanning}
-                >
-                  {localUsageScanning ? "扫描中…" : "重新扫描"}
-                </Button>
+                <>
+                  <Select
+                    value={localSource}
+                    onValueChange={(v) => setLocalSource(v as "all" | LocalSource)}
+                  >
+                    <SelectTrigger className="w-36" aria-label="筛选来源">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">全部来源</SelectItem>
+                      {LOCAL_SOURCES.map((s) => (
+                        <SelectItem key={s.value} value={s.value}>
+                          {s.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    onClick={() => void exportLocal()}
+                    disabled={!localReady || localRows.length === 0}
+                  >
+                    导出 CSV
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      void (async () => {
+                        const file = await pickTextFile(".csv,text/csv");
+                        if (!file) return;
+                        const read = await readFileAsText(file);
+                        if (!read.ok) {
+                          showToast(read.error, "err");
+                          return;
+                        }
+                        const parsed = applyLocalUsageCsv(read.text);
+                        if (!parsed.ok) {
+                          showToast(parsed.error, "err");
+                          return;
+                        }
+                        if (parsed.rows.length === 0) {
+                          const notes = [
+                            parsed.unknownSources.length
+                              ? `未知来源 ${parsed.unknownSources.length}`
+                              : "",
+                            parsed.invalid.length
+                              ? `非法 ${parsed.invalid.length} 行`
+                              : "",
+                          ]
+                            .filter(Boolean)
+                            .join("，");
+                          showToast(
+                            notes
+                              ? `没有可导入的行（${notes}）`
+                              : "没有可导入的行",
+                            "err",
+                          );
+                          return;
+                        }
+                        setCsvPending({
+                          rows: parsed.rows,
+                          unknownSources: parsed.unknownSources,
+                          invalid: parsed.invalid,
+                        });
+                      })();
+                    }}
+                  >
+                    导入 CSV
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      void scanLocalUsage(rangeToSince(range)).then(
+                        undefined,
+                        (e: unknown) =>
+                          showToast(
+                            e instanceof Error ? e.message : "扫描失败",
+                            "err",
+                          ),
+                      );
+                    }}
+                    disabled={localUsageScanning}
+                  >
+                    {localUsageScanning ? "扫描中…" : "重新扫描"}
+                  </Button>
+                </>
               )}
             </div>
           </div>
+          {exportError ? (
+            <p className="pb-3 text-xs text-destructive">{exportError}</p>
+          ) : null}
 
           {/* ---- API 用量 ---- */}
           <TabsContent value="api">
@@ -307,7 +470,16 @@ export function Usage() {
                           <span className="font-medium text-foreground">
                             {e.name}
                           </span>
-                          ：{e.msg}
+                          ：
+                          <button
+                            type="button"
+                            className="hover:underline"
+                            title="复制"
+                            aria-label={`复制「${e.name}」错误`}
+                            onClick={() => copyText(`${e.name}：${e.msg}`)}
+                          >
+                            {e.msg}
+                          </button>
                         </li>
                       ))}
                     </ul>
@@ -315,7 +487,13 @@ export function Usage() {
                 </Card>
               )}
 
-              {records.length === 0 ? (
+              {!usageReady ? (
+                <Card>
+                  <CardContent className="py-16 text-center text-sm text-muted-foreground">
+                    加载中…
+                  </CardContent>
+                </Card>
+              ) : records.length === 0 ? (
                 <Card>
                   <CardContent className="flex flex-col items-center gap-3 py-16 text-center text-sm text-muted-foreground">
                     <Coins className="size-6" />
@@ -404,7 +582,13 @@ export function Usage() {
                 </Card>
               )}
 
-              {localRows.length === 0 ? (
+              {!localReady ? (
+                <Card>
+                  <CardContent className="py-16 text-center text-sm text-muted-foreground">
+                    加载中…
+                  </CardContent>
+                </Card>
+              ) : localRows.length === 0 ? (
                 <Card>
                   <CardContent className="flex flex-col items-center gap-3 py-16 text-center text-sm text-muted-foreground">
                     <Bot className="size-6" />
@@ -423,50 +607,35 @@ export function Usage() {
                       <div className="mb-3 text-sm font-medium text-muted-foreground">
                         每日用量（按来源堆叠；输入已拆出缓存，总量含缓存一次）
                       </div>
-                      <ResponsiveContainer width="100%" height={240}>
-                        <BarChart data={dailyChartData}>
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            stroke="rgba(110, 95, 70, 0.12)"
-                            vertical={false}
-                          />
-                          <XAxis
-                            dataKey="date"
-                            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                            axisLine={false}
-                            tickLine={false}
-                            dy={6}
-                          />
-                          <YAxis
-                            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                            axisLine={false}
-                            tickLine={false}
-                            width={48}
-                            tickFormatter={formatCompact}
-                          />
-                          <Tooltip
-                            cursor={{ fill: "rgba(110, 95, 70, 0.06)" }}
-                            content={<LocalUsageTooltip />}
-                          />
-                          <Legend wrapperStyle={{ fontSize: 12 }} />
-                          {CHART_SOURCES.map((s, i) => (
-                            <Bar
-                              key={s.value}
-                              dataKey={s.value}
-                              name={s.label}
-                              stackId="a"
-                              fill={CHART_COLORS[i % CHART_COLORS.length]}
-                              radius={[3, 3, 0, 0]}
-                            />
-                          ))}
-                        </BarChart>
-                      </ResponsiveContainer>
+                      <LocalUsageBarChart data={dailyChartData} height={240} />
                     </CardContent>
                   </Card>
 
                   {/* 按天明细表 */}
                   <Card>
                     <CardContent className="p-0">
+                      {groupedByDate.size > 1 ? (
+                      <div className="flex items-center justify-end px-4 pt-3">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() => {
+                            const dates = [...groupedByDate.keys()];
+                            const allOn =
+                              dates.length > 0 &&
+                              dates.every((d) => expandedDates.has(d));
+                            setExpandedDates(allOn ? new Set() : new Set(dates));
+                          }}
+                        >
+                          {[...groupedByDate.keys()].every((d) =>
+                            expandedDates.has(d),
+                          )
+                            ? "全部收起"
+                            : "全部展开"}
+                        </Button>
+                      </div>
+                      ) : null}
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
@@ -486,15 +655,7 @@ export function Usage() {
                           <tbody>
                             {[...groupedByDate.entries()].map(([date, rows]) => {
                               const isExpanded = expandedDates.has(date);
-                              const dailyTotal = rows.reduce(
-                                (sum, r) => sum + visibleTokens(r),
-                                0,
-                              );
-                              const dailyCost = rows.reduce(
-                                (sum, r) => sum + (r.cost ?? 0),
-                                0,
-                              );
-                              const currency = rows.find((r) => r.currency)?.currency;
+                              const day = summarizeLocalRecords(rows, date);
 
                               return (
                                 <>
@@ -515,10 +676,15 @@ export function Usage() {
                                       </div>
                                     </td>
                                     <td className="px-4 py-3 text-right tabular-nums font-medium">
-                                      {formatTokensCn(dailyTotal)}
+                                      {formatTokensCn(day.tokens)}
                                     </td>
                                     <td className="px-4 py-3 text-right tabular-nums font-medium">
-                                      {formatCost(dailyCost, currency)}
+                                      {formatCost(day.cost, day.currency)}
+                                      {day.hasUnpriced ? (
+                                        <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                                          含未标价
+                                        </span>
+                                      ) : null}
                                     </td>
                                     <td className="px-4 py-3 text-right text-muted-foreground">
                                       {rows.length} 条记录
@@ -580,6 +746,37 @@ export function Usage() {
           </TabsContent>
         </Tabs>
       </div>
+      <ConfirmDialog
+        open={csvPending != null}
+        onOpenChange={(open) => {
+          if (!open) setCsvPending(null);
+        }}
+        title="导入本地用量 CSV？"
+        description={
+          csvPending
+            ? `将写入 ${csvPending.rows.length} 条日桶${
+                csvPending.unknownSources.length || csvPending.invalid.length
+                  ? `（跳过未知来源 ${csvPending.unknownSources.length}、非法 ${csvPending.invalid.length} 行）`
+                  : ""
+              }。未知价格不会被写成 $0。`
+            : "导入 CSV"
+        }
+        confirmLabel="导入"
+        onConfirm={() => {
+          const pending = csvPending;
+          setCsvPending(null);
+          if (!pending) return;
+          void (async () => {
+            try {
+              const r = await ipc.importLocalRows(pending.rows);
+              await loadLocalDaily(rangeToSince(range));
+              showToast(`已导入 ${r.imported} 条`);
+            } catch (e) {
+              showToast(e instanceof Error ? e.message : "导入失败", "err");
+            }
+          })();
+        }}
+      />
     </div>
   );
 }
