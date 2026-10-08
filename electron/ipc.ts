@@ -37,7 +37,7 @@ import {
   type ProxyConfigOverride,
 } from "./lib/http";
 import { mapErrorToUserMessage } from "./lib/user-error";
-import { monthStartKey, toDateKey } from "./local-usage/date";
+import { localHistoryStartKey, toDateKey } from "./local-usage/date";
 import { parseMonthlyBudgetUsd } from "./lib/budget";
 import { parseIdList } from "./lib/id-list";
 import {
@@ -183,7 +183,8 @@ export function registerIpc(
 
   handle("app:bootstrap", (): AppBootstrap => {
     const today = toDateKey(Date.now());
-    const monthStart = monthStartKey(today);
+    // 至少 14 天：月初时「近 7 天 vs 前 7 天」也要用到上个月的数据
+    const historyStart = localHistoryStartKey(today);
     return {
       definitions: listDefinitions(),
       services: listServices(),
@@ -201,7 +202,7 @@ export function registerIpc(
       petEnabled: getSetting("petEnabled") === "1",
       todayLocal: today ? listLocalDailyUsage(today, today) : [],
       monthLocal:
-        today && monthStart ? listLocalDailyUsage(monthStart, today) : [],
+        today && historyStart ? listLocalDailyUsage(historyStart, today) : [],
     };
   });
 

@@ -38,3 +38,25 @@ export function monthKey(
   if (!dateKey || !DATE_KEY.test(dateKey)) return undefined;
   return dateKey.slice(0, 7);
 }
+
+/** 总览「近 7 天 vs 前 7 天」对比需要的天数（含今天） */
+export const LOCAL_COMPARE_DAYS = 14;
+
+/**
+ * 启动时随 bootstrap 下发的本地用量起点：当月 1 号与「今天往前 13 天」取较早者。
+ *
+ * 此前只给当月数据：月初几天打开应用时，「近 7 天 vs 前 7 天」两段都缺上个月的那几天，
+ * 要等后台扫描完再 loadTodayLocal 才补齐，对比数字会先错一下再跳。
+ * 渲染进程 loadTodayLocal 用的就是同一个起点，两边口径一致。
+ */
+export function localHistoryStartKey(
+  today: string | undefined | null,
+): string | undefined {
+  const monthStart = monthStartKey(today);
+  if (!monthStart || !today) return undefined;
+  const y = Number(today.slice(0, 4));
+  const m = Number(today.slice(5, 7));
+  const d = Number(today.slice(8, 10));
+  const back = toDateKey(new Date(y, m - 1, d - (LOCAL_COMPARE_DAYS - 1)).getTime());
+  return back && back < monthStart ? back : monthStart;
+}
