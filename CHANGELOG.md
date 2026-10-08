@@ -2,7 +2,7 @@
 
 ## 0.1.17（2026-10-08）
 
-一轮代码审查的 15 项整改合并发布（PR #1–#5）。没有新增页面，主要是性能、安全和正确性。
+一轮代码审查的 15 项整改合并发布（PR #1–#5），外加一次内置价格表更新。没有新增页面，主要是性能、安全和正确性。
 
 ### 性能
 
@@ -54,6 +54,13 @@
 
 ### 其他
 
+- **模型价格更新**（照各家官方定价页，核对日期 2026-10-08）：新增 GPT-6.1 Sol / GPT-6 Luna、
+  Claude Opus 5.5 / Sonnet 5.5 / Haiku 5.5、Gemini 3.8 Flash、Grok 4.7、DeepSeek Flash（V4.1）、
+  Kimi K2.7 Code / K2.6、MiMo V2.6 系列、GLM-5.3-Flash / FlashX 等 17 款。此前 GPT-6.1 Sol、
+  GPT-6 Luna 会被按 GPT-6 Astra 计费，Claude Opus 5.5 / Sonnet 5.5 被按 5 代计费，GLM-5.3-Flash
+  被按 GLM-5.3 计费，均已修正。调价：DeepSeek V4 Flash 旧名已退役、按新 Flash 价计（峰时
+  $0.44/$1.32 → $0.30/$1.20）；Kimi K3 改用官方美元价（$3/$15，此前按汇率折算为 $2.82/$14.08），
+  并补上官方新增的缓存写入费（5 分钟档 $3）。费用按读取时的价格表计算，历史用量也会按新价显示。
 - 主进程和界面的 IPC 通道与类型收拢到 `shared/`，一处定义、编译器校验。打包入口变为
   `electron-dist/electron/main.js`。
 - 引入 ESLint / Prettier 并做一次全量格式化（已登记 `.git-blame-ignore-revs`）；拆分用量、设置、
