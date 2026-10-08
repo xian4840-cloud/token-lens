@@ -1,13 +1,10 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 import {
   listServices,
   getService,
-  insertService,
   deleteServiceRow,
-  setSecret,
   listBalanceSnapshots,
   listUsageRecords,
   listLocalDailyUsage,
@@ -28,7 +25,6 @@ import { refreshServiceInternal } from "./refresh";
 import { refreshUsageInternal } from "./usage";
 import { restart as restartScheduler } from "./scheduler";
 import {
-  validateServiceInput,
   validateSettingKey,
   validatePeriod,
   validatePricingOverrides,
@@ -60,14 +56,14 @@ import {
   write as writeLog,
 } from "./lib/logger";
 import { clearUsageScanCache } from "./local-usage/clear-cache";
-import type { AppBootstrap, BalanceResult, BalanceSnapshot, ServiceRecord } from "./types";
+import type { AppBootstrap } from "./types";
 import { registerPetIpc } from "./pet/ipc";
 import { getAgentModelMonitorState } from "./agent-model-monitor";
 import { launchCapturedCodex } from "./codex-capture";
 import { enableOpenCodeCapture, enableClaudeCapture } from "./agent-response-capture";
 import { singleFlight } from "./lib/inflight";
 import { applyBackupImport } from "./backup-import";
-import { splitFields, updateServiceFromInput } from "./service-update";
+import { createServiceFromInput, updateServiceFromInput } from "./service-update";
 
 const captureLaunch = { current: null as ReturnType<typeof launchCapturedCodex> | null };
 
@@ -116,26 +112,7 @@ export function registerIpc(): void {
   ipcMain.handle("services:definitions", () => listDefinitions());
   ipcMain.handle("services:list", () => listServices());
 
-  ipcMain.handle("services:create", (_e, input: unknown) => {
-    const valid = validateServiceInput(input);
-    const def = getDefinition(valid.provider);
-    if (!def) throw new Error(`未知服务类型: ${valid.provider}`);
-    const { config, secrets } = splitFields(valid.provider, valid.fields);
-    const id = randomUUID();
-    const now = new Date().toISOString();
-    const record: ServiceRecord = {
-      id,
-      name: valid.name,
-      provider: valid.provider,
-      kind: def.kind,
-      config,
-      createdAt: now,
-      updatedAt: now,
-    };
-    insertService(record);
-    for (const [k, v] of Object.entries(secrets)) setSecret(id, k, v);
-    return record;
-  });
+  ipcMain.handle("services:create", (_e, input: unknown) => createServiceFromInput(input));
   ipcMain.handle("services:update", (_e, id: string, input: unknown) =>
     updateServiceFromInput(id, input),
   );

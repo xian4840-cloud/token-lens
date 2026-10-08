@@ -11,9 +11,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * db、适配器注册表、校验、刷新逻辑都是真的。
  */
 
+const crypto = vi.hoisted(() => ({ available: true }));
+
 vi.mock("./secrets", () => ({
-  isEncryptionAvailable: () => true,
-  encrypt: (text: string) => Buffer.from(`enc:${text}`, "utf8"),
+  isEncryptionAvailable: () => crypto.available,
+  encrypt: (text: string) => {
+    // 与真实 secrets.ts 一致：系统加密不可用时抛错
+    if (!crypto.available) throw new Error("系统加密不可用，无法安全存储密钥");
+    return Buffer.from(`enc:${text}`, "utf8");
+  },
   decrypt: (buf: Buffer) => buf.toString("utf8").replace(/^enc:/, ""),
 }));
 
@@ -43,7 +49,7 @@ const { buildBackupPayload, NEEDS_CREDENTIALS_MESSAGE, parseBackupJson } = await
   "./lib/backup"
 );
 const { refreshServiceInternal } = await import("./refresh");
-const { updateServiceFromInput } = await import("./service-update");
+const { createServiceFromInput, updateServiceFromInput } = await import("./service-update");
 
 registerAllAdapters();
 
@@ -53,6 +59,7 @@ beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "token-lens-svc-update-"));
   initDbAt(path.join(dir, "data.json"));
   http.calls.length = 0;
+  crypto.available = true;
 });
 
 afterEach(() => {
@@ -132,5 +139,57 @@ describe("备份恢复的服务：补填密钥后恢复可用", () => {
     expect(() =>
       updateServiceFromInput("nope", { name: "x", provider: "deepseek", fields: { apiKey: "k" } }),
     ).toThrow("服务不存在");
+  });
+});
+
+describe("新建服务：密钥先加密成功再落库", () => {
+  it("系统加密不可用时整次新建失败，不留下没有密钥的孤儿服务", () => {
+    crypto.available = false;
+    expect(() =>
+      createServiceFromInput({ name: "DeepSeek", provider: "deepseek", fields: { apiKey: "sk-x" } }),
+    ).toThrow("系统加密不可用");
+    expect(listServices()).toEqual([]);
+    // 落盘的数据里也没有
+    flushDb();
+    const disk = JSON.parse(fs.readFileSync(path.join(dir, "data.json"), "utf8")) as {
+      services: unknown[];
+      secrets: Record<string, unknown>;
+    };
+    expect(disk.services).toEqual([]);
+    expect(disk.secrets).toEqual({});
+  });
+
+  it("加密可用时正常新建，密钥按服务定义存进 secrets 而不是 config", () => {
+    const rec = createServiceFromInput({ name: "DeepSeek", provider: "deepseek", fields: { apiKey: "sk-x" } });
+    expect(listServices().map((s) => s.id)).toEqual([rec.id]);
+    expect(rec.config).toEqual({});
+    expect(getSecrets(rec.id)).toEqual({ apiKey: "sk-x" });
+  });
+});
+
+describe("编辑服务：服务类型以库里的记录为准", () => {
+  it("渲染进程传来别的 provider 时拒绝，记录与密钥都不变", () => {
+    const rec = createServiceFromInput({ name: "DeepSeek", provider: "deepseek", fields: { apiKey: "sk-old" } });
+    expect(() =>
+      updateServiceFromInput(rec.id, { name: "改名", provider: "openai", fields: { apiKey: "sk-new" } }),
+    ).toThrow("不能修改服务类型");
+    expect(getService(rec.id)).toMatchObject({ name: "DeepSeek", provider: "deepseek" });
+    expect(getSecrets(rec.id)).toEqual({ apiKey: "sk-old" });
+  });
+
+  it("不传 provider 时按库里的类型校验并拆分字段：密钥仍进 secrets，不会落成明文 config", () => {
+    const rec = createServiceFromInput({ name: "DeepSeek", provider: "deepseek", fields: { apiKey: "sk-old" } });
+    const updated = updateServiceFromInput(rec.id, { name: "DeepSeek 工作号", fields: { apiKey: "sk-new" } });
+    expect(updated).toMatchObject({ name: "DeepSeek 工作号", provider: "deepseek", config: {} });
+    expect(getSecrets(rec.id)).toEqual({ apiKey: "sk-new" });
+  });
+
+  it("编辑时加密失败：名称等元数据也不改（整次编辑不生效）", () => {
+    const rec = createServiceFromInput({ name: "DeepSeek", provider: "deepseek", fields: { apiKey: "sk-old" } });
+    crypto.available = false;
+    expect(() =>
+      updateServiceFromInput(rec.id, { name: "改名", provider: "deepseek", fields: { apiKey: "sk-new" } }),
+    ).toThrow("系统加密不可用");
+    expect(getService(rec.id)?.name).toBe("DeepSeek");
   });
 });

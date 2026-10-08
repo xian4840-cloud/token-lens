@@ -294,6 +294,40 @@ export function getLastBalances(): Record<string, BalanceResult> {
 
 // ---- secrets（safeStorage 加密，JSON 存 base64） ----
 
+/** 先把全部字段加密好；任一字段失败（如系统加密不可用）就整体抛出，不写入任何东西 */
+function encryptAll(secrets: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(secrets)) out[k] = encrypt(v).toString("base64");
+  return out;
+}
+
+/**
+ * 新建服务并保存密钥，要么全成要么全不成。
+ *
+ * 先加密、后落库：safeStorage 不可用时 encrypt 会抛错，此前的顺序是先
+ * insertService 再 setSecret，结果留下一个没有密钥、却出现在列表里的「孤儿」服务，
+ * 每次刷新都报「缺少 API Key」。
+ */
+export function insertServiceWithSecrets(
+  record: ServiceRecord,
+  secrets: Record<string, string>,
+): void {
+  const encrypted = encryptAll(secrets);
+  data.services.push(record);
+  if (Object.keys(encrypted).length) {
+    data.secrets[record.id] = { ...(data.secrets[record.id] ?? {}), ...encrypted };
+  }
+  persist();
+}
+
+/** 批量更新密钥：同样先全部加密成功才写入 */
+export function setSecrets(serviceId: string, secrets: Record<string, string>): void {
+  const encrypted = encryptAll(secrets);
+  if (!Object.keys(encrypted).length) return;
+  data.secrets[serviceId] = { ...(data.secrets[serviceId] ?? {}), ...encrypted };
+  persist();
+}
+
 export function setSecret(serviceId: string, fieldKey: string, value: string): void {
   const b64 = encrypt(value).toString("base64");
   if (!data.secrets[serviceId]) data.secrets[serviceId] = {};

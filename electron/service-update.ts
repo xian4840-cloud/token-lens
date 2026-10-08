@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
 import {
   getSecrets,
   getService,
+  insertServiceWithSecrets,
   setNeedsCredentials,
-  setSecret,
+  setSecrets,
   updateServiceMeta,
 } from "./db";
 import { getDefinition } from "./adapters";
@@ -31,6 +33,29 @@ export function splitFields(
 }
 
 /**
+ * 新建服务（services:create 的全部逻辑）。
+ * 密钥先加密成功再落库，失败时不留下没有密钥的服务记录。
+ */
+export function createServiceFromInput(input: unknown): ServiceRecord {
+  const valid = validateServiceInput(input);
+  const def = getDefinition(valid.provider);
+  if (!def) throw new Error(`未知服务类型: ${valid.provider}`);
+  const { config, secrets } = splitFields(valid.provider, valid.fields);
+  const now = new Date().toISOString();
+  const record: ServiceRecord = {
+    id: randomUUID(),
+    name: valid.name,
+    provider: valid.provider,
+    kind: def.kind,
+    config,
+    createdAt: now,
+    updatedAt: now,
+  };
+  insertServiceWithSecrets(record, secrets);
+  return record;
+}
+
+/**
  * 编辑服务（services:update 的全部逻辑）。
  *
  * 从 ipc 抽出来是为了能测「备份恢复的服务 -> 补填密钥 -> 标记清除 -> 能刷新」
@@ -42,13 +67,24 @@ export function updateServiceFromInput(
 ): ServiceRecord | undefined {
   const existing = getService(id);
   if (!existing) throw new Error("服务不存在");
-  const valid = validateServiceInput(input);
-  const { config, secrets } = splitFields(valid.provider, valid.fields);
-  updateServiceMeta(id, valid.name, config);
-  // 密码字段非空才更新；留空表示保留旧值（便于编辑其他字段时不重填密码）
-  for (const [k, v] of Object.entries(secrets)) {
-    if (v) setSecret(id, k, v);
+  // 服务类型以库里的记录为准，不信渲染进程传来的 provider：否则传一个别的类型，
+  // 就能按另一套字段定义拆分，把密钥字段当普通 config 明文落盘，或塞进不属于该服务的字段。
+  if (input && typeof input === "object" && "provider" in input) {
+    const claimed = (input as { provider?: unknown }).provider;
+    if (claimed !== undefined && claimed !== existing.provider) {
+      throw new Error("不能修改服务类型");
+    }
   }
+  const valid = validateServiceInput({
+    ...(input && typeof input === "object" ? input : {}),
+    provider: existing.provider,
+  });
+  const { config, secrets } = splitFields(existing.provider, valid.fields);
+  // 密码字段非空才更新；留空表示保留旧值（便于编辑其他字段时不重填密码）。
+  // 先加密、后改元数据：加密失败时整次编辑不生效
+  const nonEmpty = Object.fromEntries(Object.entries(secrets).filter(([, v]) => v));
+  setSecrets(id, nonEmpty);
+  updateServiceMeta(id, valid.name, config);
   // 备份恢复的服务：必填的密钥字段都补上了才算可用，清掉「需重新填写」标记
   if (existing.needsCredentials) {
     const def = getDefinition(existing.provider);
