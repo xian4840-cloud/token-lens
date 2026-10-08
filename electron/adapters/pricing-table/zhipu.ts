@@ -2,11 +2,35 @@ import type { PricingRow } from "../pricing";
 
 export const ZHIPU_PRICING: PricingRow[] = [
   // ==========================================================================
-  // 智谱 GLM — docs.z.ai/guides/overview/pricing（海外站，美元）
+  // 智谱 GLM — docs.z.ai/guides/overview/pricing（海外站，美元；核对 2026-10-08）
   //
   // 缓存写入官方标注「限时免费」，故 cacheWritePerM 全填 0，是事实不是占位。
   // -flash 免费款必须排在同系列付费款之前。
+  // 注意 GLM-5.3-Flash **不是**免费款（$0.15/$0.50），与 4.7-Flash 不同。
   // ==========================================================================
+  {
+    // 2026-10 新增。flash / flashx 都必须排在宽松的 glm-5.3 之前，
+    // 否则会按 GLM-5.3 的 $1.4/$4.4 计费
+    key: "glm-5.3-flashx",
+    label: "GLM-5.3-FlashX",
+    match: /glm[.\-_]*5[.\-_]*3[.\-_]*flashx/i,
+    inputPerM: 0.37,
+    outputPerM: 1.25,
+    cacheReadPerM: 0.075,
+    cacheWritePerM: 0,
+    currency: "USD",
+  },
+  {
+    // 2026-10 新增
+    key: "glm-5.3-flash",
+    label: "GLM-5.3-Flash",
+    match: /glm[.\-_]*5[.\-_]*3[.\-_]*flash/i,
+    inputPerM: 0.15,
+    outputPerM: 0.5,
+    cacheReadPerM: 0.03,
+    cacheWritePerM: 0,
+    currency: "USD",
+  },
   {
     key: "glm-5.3",
     label: "GLM-5.3",
@@ -38,6 +62,7 @@ export const ZHIPU_PRICING: PricingRow[] = [
     currency: "USD",
   },
   {
+    // 2026-10 核对时官方价格页已不再列出，价格保持上次核对值，用于历史用量换算
     key: "glm-5-turbo",
     label: "GLM-5-Turbo",
     match: /glm[.\-_]*5[.\-_]*turbo/i,
@@ -48,6 +73,7 @@ export const ZHIPU_PRICING: PricingRow[] = [
     currency: "USD",
   },
   {
+    // 2026-10 核对时官方价格页已不再列出，价格保持上次核对值，用于历史用量换算
     key: "glm-5v-turbo",
     label: "GLM-5V-Turbo",
     match: /glm[.\-_]*5v[.\-_]*turbo/i,
@@ -104,6 +130,17 @@ export const ZHIPU_PRICING: PricingRow[] = [
     inputPerM: 0,
     outputPerM: 0,
     cacheReadPerM: 0,
+    cacheWritePerM: 0,
+    currency: "USD",
+  },
+  {
+    // 2026-10 新增；须排在宽松的 glm-4.6v 之前
+    key: "glm-4.6v-flashx",
+    label: "GLM-4.6V-FlashX",
+    match: /glm[.\-_]*4[.\-_]*6v[.\-_]*flashx/i,
+    inputPerM: 0.04,
+    outputPerM: 0.4,
+    cacheReadPerM: 0.004,
     cacheWritePerM: 0,
     currency: "USD",
   },

@@ -3,10 +3,35 @@ import type { PricingRow } from "../pricing";
 export const OPENAI_PRICING: PricingRow[] = [
   // ==========================================================================
   // OpenAI — developers.openai.com/api/docs/pricing（标准档、短上下文）
+  // 核对日期 2026-10-08；gpt-6.1-sol / gpt-6-luna 另见 /api/docs/models/<id>
   //
-  // 长上下文档价格翻倍（sol 8/30、terra 4/18、luna 0.4/1.8），此处取短上下文：
+  // 超过 272K 输入的长上下文档：输入与缓存 ×2、输出 ×1.5（整次请求），
+  // 例如 6.1 sol 4/15、6 luna 0.2/0.75、5.6 sol 8/30。此处取短上下文：
   // 编码 agent 绝大多数请求在阈值以内，按长上下文价算会普遍高估。
   // ==========================================================================
+  {
+    // 2026-10 新增。必须排在 gpt-6-astra 之前：astra 的 \bgpt-6\b 兜底
+    // 会把 gpt-6.1-sol / gpt-6-luna 也吃掉（"-" 与 "." 都算词边界）
+    key: "gpt-6.1-sol",
+    label: "GPT-6.1 Sol",
+    match: /gpt[.\-_]*6[.\-_]*1[.\-_]*sol/i,
+    inputPerM: 2,
+    outputPerM: 10,
+    cacheReadPerM: 0.1,
+    cacheWritePerM: 2.5,
+    currency: "USD",
+  },
+  {
+    // 2026-10 新增，同上须排在 gpt-6-astra 之前
+    key: "gpt-6-luna",
+    label: "GPT-6 Luna",
+    match: /gpt[.\-_]*6[.\-_]*luna/i,
+    inputPerM: 0.1,
+    outputPerM: 0.5,
+    cacheReadPerM: 0.01,
+    cacheWritePerM: 0.125,
+    currency: "USD",
+  },
   {
     key: "gpt-6-astra",
     label: "GPT-6 Astra",

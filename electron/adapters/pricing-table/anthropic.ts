@@ -2,10 +2,11 @@ import type { PricingRow } from "../pricing";
 
 export const ANTHROPIC_PRICING: PricingRow[] = [
   // ==========================================================================
-  // Anthropic — platform.claude.com/docs/zh-CN/about-claude/pricing
+  // Anthropic — platform.claude.com/docs/en/about-claude/pricing（核对 2026-10-08）
   //
   // cacheWritePerM 取 5 分钟档（基础输入 ×1.25）。1 小时档是 ×2，但本地 agent
-  // 默认走 5 分钟缓存。cacheReadPerM 固定为基础输入 ×0.1。
+  // 默认走 5 分钟缓存。cacheReadPerM 一般为基础输入 ×0.1，例外：
+  // Fable/Mythos 5.1 为 ×0.025，Opus 5.5 / Sonnet 5.5 为 ×0.05。
   //
   // 顺序关键：Opus 4.5 起降到 $5/$25，而 Opus 4/4.1 仍是 $15/$75。宽松的
   // `opus-4` 正则会连 4.6/4.8 一起吃掉，按 $15/$75 算等于虚报 3 倍，
@@ -30,6 +31,18 @@ export const ANTHROPIC_PRICING: PricingRow[] = [
     outputPerM: 50,
     cacheReadPerM: 1,
     cacheWritePerM: 12.5,
+    currency: "USD",
+  },
+  {
+    // 2026-10 新增，缓存命中 0.05× 输入（$0.20）。必须排在宽松的 opus-5 之前，
+    // 否则 claude-opus-5-5 会落到 Opus 5 的 $5/$25 上
+    key: "claude-opus-5-5",
+    label: "Claude Opus 5.5",
+    match: /opus[.\-_]*5[.\-_]*5(?!\d)/i,
+    inputPerM: 4,
+    outputPerM: 20,
+    cacheReadPerM: 0.2,
+    cacheWritePerM: 5,
     currency: "USD",
   },
   {
@@ -65,6 +78,18 @@ export const ANTHROPIC_PRICING: PricingRow[] = [
     currency: "USD",
   },
   {
+    // 2026-10 新增，与 Sonnet 5 同为 $2/$10，但缓存命中是 0.05×（$0.10 而非 $0.20）；
+    // 必须排在宽松的 sonnet-5 之前
+    key: "claude-sonnet-5-5",
+    label: "Claude Sonnet 5.5",
+    match: /sonnet[.\-_]*5[.\-_]*5(?!\d)/i,
+    inputPerM: 2,
+    outputPerM: 10,
+    cacheReadPerM: 0.1,
+    cacheWritePerM: 2.5,
+    currency: "USD",
+  },
+  {
     key: "claude-sonnet-5",
     label: "Claude Sonnet 5",
     match: /sonnet[.\-_]*5/i,
@@ -84,6 +109,19 @@ export const ANTHROPIC_PRICING: PricingRow[] = [
     outputPerM: 15,
     cacheReadPerM: 0.3,
     cacheWritePerM: 3.75,
+    currency: "USD",
+  },
+  {
+    // 2026-10 新增。按提示长度分档：≤100k 为 0.10/0.50（缓存读 0.01、5 分钟写 0.125），
+    // >100k 为 0.50/2.50（缓存读 0.05、写 0.625）。此处取 ≤100k 档：Claude Code 里
+    // Haiku 主要跑标题、摘要等短请求；长提示会算少，需要时在价格表页覆盖
+    key: "claude-haiku-5-5",
+    label: "Claude Haiku 5.5",
+    match: /haiku[.\-_]*5[.\-_]*5(?!\d)/i,
+    inputPerM: 0.1,
+    outputPerM: 0.5,
+    cacheReadPerM: 0.01,
+    cacheWritePerM: 0.125,
     currency: "USD",
   },
   {

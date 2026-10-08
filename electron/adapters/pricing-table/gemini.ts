@@ -2,18 +2,29 @@ import type { PricingRow } from "../pricing";
 
 export const GEMINI_PRICING: PricingRow[] = [
   // ==========================================================================
-  // Google Gemini — ai.google.dev/gemini-api/docs/pricing（Standard 档）
+  // Google Gemini — ai.google.dev/gemini-api/docs/pricing（Standard 档，核对 2026-10-08）
   //
   // Antigravity 的本地用量走这里换算。输出价已含 thinking tokens，与
   // local-usage/index.ts 里把 reasoningTokens 并入 output 的做法一致。
   //
-  // 注意 3.7 / 3.6 Flash 是**按日期分档**的：官方明示 $0.75 仅到 2026-12-31，
+  // 注意 3.8 / 3.7 / 3.6 Flash 是**按日期分档**的：官方明示 $0.75 仅到 2026-12-31，
   // 2027-01-01 起翻倍到 $1.50（输出 3.75 → 7.50，缓存 0.075 → 0.15）。
   // 表内先填现价，跨年后需要手动改或在价格表页覆盖。
   //
   // Flash-Lite 与 3.1 Flash-Lite 的音频输入单价是文本的两倍，本表按文本价填；
   // 编码 agent 不传音频，不影响。
   // ==========================================================================
+  {
+    // 2026-10 新增，与 3.7 Flash 同价，含同一个 2027 年翻倍条款
+    key: "gemini-3.8-flash",
+    label: "Gemini 3.8 Flash",
+    match: /gemini[.\-_]*3[.\-_]*8[.\-_]*flash/i,
+    inputPerM: 0.75,
+    outputPerM: 3.75,
+    cacheReadPerM: 0.075,
+    cacheWritePerM: 0,
+    currency: "USD",
+  },
   {
     key: "gemini-3.7-flash",
     label: "Gemini 3.7 Flash",

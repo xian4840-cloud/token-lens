@@ -61,11 +61,15 @@ describe("Anthropic 正则顺序", () => {
     ["claude-opus-4-20250514", "claude-opus-4"],
     ["claude-opus-4-1-20250805", "claude-opus-4"],
     ["claude-opus-5", "claude-opus-5"],
+    ["claude-opus-5-5", "claude-opus-5-5"],
+    ["anthropic.claude-opus-5-5", "claude-opus-5-5"],
     ["claude-fable-5-1", "claude-fable-5-1"],
     ["claude-mythos-5-1", "claude-fable-5-1"],
     ["claude-fable-5", "claude-fable-5"],
     ["claude-mythos-5", "claude-fable-5"],
     ["claude-sonnet-5", "claude-sonnet-5"],
+    ["claude-sonnet-5-5", "claude-sonnet-5-5"],
+    ["claude-haiku-5-5", "claude-haiku-5-5"],
     ["claude-sonnet-4-6", "claude-sonnet-4"],
     ["claude-sonnet-4-5-20250929", "claude-sonnet-4"],
     ["claude-haiku-4-5-20251001", "claude-haiku-4-5"],
@@ -73,6 +77,19 @@ describe("Anthropic 正则顺序", () => {
     ["claude-3-haiku-20240307", "claude-3-haiku"],
   ])("%s → %s", (model, key) => {
     expect(matchKey(model)).toBe(key);
+  });
+
+  it("回归：Claude 5.5 不落到宽松的 opus-5 / sonnet-5 上", () => {
+    // Opus 5.5 是 $4/$20、缓存读 $0.20；落到 Opus 5 会按 $5/$25、$0.50 算
+    expect(matchKey("claude-opus-5-5")).not.toBe("claude-opus-5");
+    expect(matchKey("claude-sonnet-5-5")).not.toBe("claude-sonnet-5");
+    const c = computeCost("claude-opus-5-5", {
+      input: 1_000_000,
+      output: 1_000_000,
+      cacheRead: 1_000_000,
+      cacheCreation: 1_000_000,
+    });
+    expect(c?.cost).toBeCloseTo(4 + 20 + 0.2 + 5, 6);
   });
 
   it("Opus 4.6 按官方 $5/$25 计费", () => {
@@ -88,6 +105,8 @@ describe("OpenAI 正则顺序", () => {
   it.each([
     ["gpt-6-astra", "gpt-6-astra"],
     ["gpt-6", "gpt-6-astra"],
+    ["gpt-6.1-sol", "gpt-6.1-sol"],
+    ["gpt-6-luna", "gpt-6-luna"],
     ["gpt-5.6-sol", "gpt-5.6-sol"],
     ["daybreak-blue-latest", "gpt-5.6-sol"],
     ["gpt-5.6-terra", "gpt-5.6-terra"],
@@ -115,6 +134,13 @@ describe("OpenAI 正则顺序", () => {
     expect(matchKey(model)).toBe(key);
   });
 
+  it("回归：gpt-6.1-sol / gpt-6-luna 不被 gpt-6-astra 的 \\bgpt-6\\b 兜底吃掉", () => {
+    // astra 是 $10/$50；luna 只有 $0.1/$0.5，错配会虚报 100 倍
+    expect(matchKey("gpt-6.1-sol")).not.toBe("gpt-6-astra");
+    expect(matchKey("gpt-6-luna")).not.toBe("gpt-6-astra");
+    expect(matchKey("gpt-5.6-luna")).toBe("gpt-5.6-luna");
+  });
+
   it("gpt-5.6-sol 不被泛化的 gpt-5 或 gpt-6 规则吃掉", () => {
     // sol 是 $4/$20，gpt-5 是 $1.25/$10，错配会低估三倍
     expect(matchKey("gpt-5.6-sol")).not.toBe("gpt-5");
@@ -125,6 +151,8 @@ describe("OpenAI 正则顺序", () => {
 describe("智谱 GLM 正则顺序", () => {
   it.each([
     ["glm-5.3", "glm-5.3"],
+    ["glm-5.3-flash", "glm-5.3-flash"],
+    ["glm-5.3-flashx", "glm-5.3-flashx"],
     ["glm-5.2", "glm-5.2"],
     ["glm-5.1", "glm-5.1"],
     ["glm-5-turbo", "glm-5-turbo"],
@@ -135,6 +163,7 @@ describe("智谱 GLM 正则顺序", () => {
     ["glm-4.7-flashx", "glm-4.7-flashx"],
     ["glm-4.6v", "glm-4.6v"],
     ["glm-4.6v-flash", "glm-4.6v-flash"],
+    ["glm-4.6v-flashx", "glm-4.6v-flashx"],
     ["glm-4.5-air", "glm-4.5-air"],
     ["glm-4.5-airx", "glm-4.5-airx"],
     ["glm-4.5-x", "glm-4.5-x"],
@@ -153,6 +182,14 @@ describe("智谱 GLM 正则顺序", () => {
     });
     expect(c?.cost).toBe(0);
   });
+
+  it("GLM-5.3-Flash 不是免费款，也不按 GLM-5.3 计费", () => {
+    const c = computeCost("glm-5.3-flash", {
+      input: 1_000_000,
+      output: 1_000_000,
+    });
+    expect(c?.cost).toBeCloseTo(0.15 + 0.5, 6);
+  });
 });
 
 describe("其余厂商正则顺序", () => {
@@ -161,9 +198,19 @@ describe("其余厂商正则顺序", () => {
     ["deepseek-v4-flash", "deepseek-v4-flash"],
     ["deepseek-v4-flash-vision-exp", "deepseek-v4-flash-vision"],
     ["deepseek-v4-pro", "deepseek-v4-pro"],
+    ["deepseek-flash", "deepseek-flash"],
+    ["deepseek-v4.1-flash", "deepseek-flash"],
     ["kimi-k3", "kimi-k3"],
+    ["kimi-k2.7-code", "kimi-k2.7-code"],
+    ["kimi-k2.7-code-highspeed", "kimi-k2.7-code-highspeed"],
+    ["kimi-k2.6", "kimi-k2.6"],
+    ["mimo-v2.6-pro", "mimo-v2.6-pro"],
+    ["mimo-v2.6-pro-ultraspeed", "mimo-v2.6-pro-ultraspeed"],
+    ["mimo-v2.6-flash", "mimo-v2.6-flash"],
     ["mimo-v2.5-pro", "mimo-v2.5-pro"],
     ["mimo-v2.5", "mimo-v2.5"],
+    ["grok-4.7", "grok-4.7"],
+    ["grok-4.7-build", "grok-4.7"],
     ["grok-4.6", "grok-4.6"],
     ["grok-4.1-fast", "grok-4.1-fast"],
     // Grok Build 本地采集上报的模型 id（~/.grok/sessions 的 modelUsage key）
@@ -171,6 +218,7 @@ describe("其余厂商正则顺序", () => {
     ["grok-4.5", "grok-4.5"],
     ["grok-4.3", "grok-4.3"],
     ["grok-build-0.1", "grok-build"],
+    ["gemini-3.8-flash", "gemini-3.8-flash"],
     ["gemini-3.7-flash", "gemini-3.7-flash"],
     ["gemini-3.7-flash-high", "gemini-3.7-flash"],
     ["gemini-3.6-flash", "gemini-3.6-flash"],
@@ -183,6 +231,21 @@ describe("其余厂商正则顺序", () => {
     ["gemini-2.5-flash", "gemini-2.5-flash"],
   ])("%s → %s", (model, key) => {
     expect(matchKey(model)).toBe(key);
+  });
+
+  it("DeepSeek 旧名 v4-flash 已退役，按新 deepseek-flash 的价计费", () => {
+    const tokens = { input: 1_000_000, output: 1_000_000, cacheRead: 1_000_000 };
+    const legacy = computeCost("deepseek-v4-flash", tokens);
+    const vision = computeCost("deepseek-v4-flash-vision-exp", tokens);
+    const current = computeCost("deepseek-flash", tokens);
+    expect(current?.cost).toBeCloseTo(0.3 + 1.2 + 0.006, 6);
+    expect(legacy?.cost).toBeCloseTo(current!.cost, 6);
+    expect(vision?.cost).toBeCloseTo(current!.cost, 6);
+  });
+
+  it("Kimi K3 的缓存写入按 5 分钟档单独计费", () => {
+    const c = computeCost("kimi-k3", { cacheCreation: 1_000_000 });
+    expect(c?.cost).toBeCloseTo(3, 6);
   });
 
   it("MiMo Pro 不与 DeepSeek Pro 混淆", () => {

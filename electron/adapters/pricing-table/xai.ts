@@ -2,11 +2,22 @@ import type { PricingRow } from "../pricing";
 
 export const XAI_PRICING: PricingRow[] = [
   // ==========================================================================
-  // xAI Grok — docs.x.ai/docs/models（取 <200k 提示档）
+  // xAI Grok — docs.x.ai/docs/models（取 <200k 提示档，核对 2026-10-08）
   //
   // 官方规则：提示达到 200k 阈值时整个请求全部 token 按高价档计费（翻倍），
   // 不是只对超出部分。此处取低档，长上下文会算少。
   // ==========================================================================
+  {
+    // 2026-10 新增，与 4.6 同价；≥200k 提示档为 4.00/12.00/1.00
+    key: "grok-4.7",
+    label: "Grok 4.7",
+    match: /grok[.\-_]*4[.\-_]*7/i,
+    inputPerM: 2,
+    outputPerM: 6,
+    cacheReadPerM: 0.5,
+    cacheWritePerM: 0,
+    currency: "USD",
+  },
   {
     key: "grok-4.6",
     label: "Grok 4.6",
