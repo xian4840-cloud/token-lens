@@ -18,22 +18,11 @@ export const CHART_TOOLTIP_STYLE: React.CSSProperties = {
   padding: "8px 12px",
 };
 
-function Row({
-  label,
-  value,
-  dot,
-}: {
-  label: string;
-  value: string;
-  dot: string;
-}) {
+function Row({ label, value, dot }: { label: string; value: string; dot: string }) {
   return (
     <div className="flex items-center justify-between gap-6">
       <span className="flex items-center gap-1.5">
-        <span
-          className="inline-block size-2 rounded-full"
-          style={{ backgroundColor: dot }}
-        />
+        <span className="inline-block size-2 rounded-full" style={{ backgroundColor: dot }} />
         {label}
       </span>
       <span className="tabular-nums">{value}</span>
@@ -66,8 +55,7 @@ export function LocalUsageTooltip({
   if (!active || !payload?.length) return null;
   const row = payload[0].payload;
   const sources = LOCAL_SOURCES.filter(
-    (s) =>
-      typeof row[s.value] === "number" && (row[s.value] as number) > 0,
+    (s) => typeof row[s.value] === "number" && (row[s.value] as number) > 0,
   );
   if (metric === "cost") {
     const total = sources.reduce((sum, s) => sum + (row[s.value] as number), 0);
@@ -83,11 +71,7 @@ export function LocalUsageTooltip({
           />
         ))}
         {sources.length > 0 && <div className="my-1 border-t border-border/60" />}
-        <Row
-          label="合计"
-          value={formatCost(total, "USD")}
-          dot="var(--muted-foreground)"
-        />
+        <Row label="合计" value={formatCost(total, "USD")} dot="var(--muted-foreground)" />
       </div>
     );
   }
@@ -107,22 +91,10 @@ export function LocalUsageTooltip({
         </div>
       ))}
       {sources.length > 0 && <div className="my-1 border-t border-border/60" />}
-      <Row
-        label="输入"
-        value={formatTokensCn(row.input ?? 0)}
-        dot="var(--muted-foreground)"
-      />
-      <Row
-        label="输出"
-        value={formatTokensCn(row.output ?? 0)}
-        dot="var(--muted-foreground)"
-      />
+      <Row label="输入" value={formatTokensCn(row.input ?? 0)} dot="var(--muted-foreground)" />
+      <Row label="输出" value={formatTokensCn(row.output ?? 0)} dot="var(--muted-foreground)" />
       {typeof row.cacheRead === "number" && row.cacheRead > 0 && (
-        <Row
-          label="缓存读"
-          value={formatTokensCn(row.cacheRead)}
-          dot="var(--muted-foreground)"
-        />
+        <Row label="缓存读" value={formatTokensCn(row.cacheRead)} dot="var(--muted-foreground)" />
       )}
       {typeof row.cacheCreation === "number" && row.cacheCreation > 0 && (
         <Row
@@ -131,11 +103,7 @@ export function LocalUsageTooltip({
           dot="var(--muted-foreground)"
         />
       )}
-      <Row
-        label="合计"
-        value={formatTokensCn(row.total ?? 0)}
-        dot="var(--muted-foreground)"
-      />
+      <Row label="合计" value={formatTokensCn(row.total ?? 0)} dot="var(--muted-foreground)" />
     </div>
   );
 }

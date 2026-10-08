@@ -9,9 +9,9 @@ import { defineConfig } from "vite";
  * 此前是硬编码字符串，发版时忘了同步就会长期停在旧版本（实际停在 v0.1.7，
  * 而 package.json 已经 0.1.10）。
  */
-const { version } = JSON.parse(
-  readFileSync(path.resolve(__dirname, "package.json"), "utf8"),
-) as { version: string };
+const { version } = JSON.parse(readFileSync(path.resolve(__dirname, "package.json"), "utf8")) as {
+  version: string;
+};
 
 export default defineConfig({
   root: "ui",
@@ -19,7 +19,11 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   define: { __APP_VERSION__: JSON.stringify(version) },
   resolve: {
-    alias: { "@": path.resolve(__dirname, "ui/src") },
+    // @shared：与主进程共用的类型与 IPC 契约（仓库根的 shared/），改动需同步 vitest.config.mts
+    alias: {
+      "@": path.resolve(__dirname, "ui/src"),
+      "@shared": path.resolve(__dirname, "shared"),
+    },
   },
   build: {
     outDir: "dist",
@@ -37,5 +41,4 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
   },
-
 });

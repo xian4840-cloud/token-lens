@@ -6,10 +6,7 @@ export function formatMoney(n: number | undefined, currency = "USD"): string {
 }
 
 /** 用量费用：四位小数，没有数字时显示破折号而不是 $0 */
-export function formatCost(
-  n: number | null | undefined,
-  currency?: string | null,
-): string {
+export function formatCost(n: number | null | undefined, currency?: string | null): string {
   if (n == null || Number.isNaN(n)) return "—";
   const symbol = currency === "USD" ? "$" : currency === "CNY" ? "¥" : "";
   return `${symbol}${n.toFixed(4)}`;
@@ -50,10 +47,7 @@ export function formatBalance(n: number | undefined, currency: string): string {
  * Math.min/Math.max 会原样透传 NaN，直接插进 CSS width 是非法样式；
  * 且脏数据宁可渲染成空条，也不能渲染成满条谎称「已用尽」。
  */
-export function usedPercent(
-  used: number | undefined,
-  total: number | undefined,
-): number {
+export function usedPercent(used: number | undefined, total: number | undefined): number {
   if (used == null || total == null) return 0;
   if (!Number.isFinite(used)) return 0;
   if (!Number.isFinite(total) || total <= 0) return 0;
@@ -90,11 +84,7 @@ export function budgetBannerKind(
  * （deepseek / 硅基流动 / 火山 / 百炼 / Kimi），不可用 used 是否存在来判断
  * 该服务有没有余额接口。
  */
-export function balanceCaption(b: {
-  remaining?: number;
-  used?: number;
-  currency: string;
-}): string {
+export function balanceCaption(b: { remaining?: number; used?: number; currency: string }): string {
   // NaN 不算有效数字，否则会谎称「可用余额」而主位却显示占位符
   const hasRemaining = b.remaining != null && Number.isFinite(b.remaining);
   const hasUsed = b.used != null && Number.isFinite(b.used);
@@ -181,10 +171,7 @@ export function formatTime(iso: string | undefined): string {
 }
 
 /** 相对时间。超过一周退回 formatTime。nowMs 可注入，方便单测。 */
-export function formatRelative(
-  iso: string | undefined,
-  nowMs: number = Date.now(),
-): string {
+export function formatRelative(iso: string | undefined, nowMs: number = Date.now()): string {
   if (!iso) return "—";
   const t = new Date(iso).getTime();
   if (!Number.isFinite(t)) return "—";

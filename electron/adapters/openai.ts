@@ -94,9 +94,7 @@ function sumCosts(json: CostsResponse): { model: string; cost: number }[] {
       const cost = toFiniteNumber(r?.amount?.value);
       if (cost == null) continue;
       const key =
-        typeof r?.model === "string" && r.model.trim()
-          ? r.model
-          : (r?.line_item ?? "未分组");
+        typeof r?.model === "string" && r.model.trim() ? r.model : (r?.line_item ?? "未分组");
       byModel.set(key, (byModel.get(key) ?? 0) + cost);
     }
   }

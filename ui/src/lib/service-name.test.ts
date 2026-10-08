@@ -35,9 +35,7 @@ describe("isAutoFilledName", () => {
 describe("nextServiceName", () => {
   // 这条就是实际发生过的错误：名称留在「百炼」而服务已切成超算互联网
   it("回归：从百炼切到超算互联网时名称跟着改", () => {
-    expect(nextServiceName("阿里云百炼", "scnet_token_plan", DEFS)).toBe(
-      "超算互联网 Token Plan",
-    );
+    expect(nextServiceName("阿里云百炼", "scnet_token_plan", DEFS)).toBe("超算互联网 Token Plan");
   });
 
   it("名称为空时填入新服务类型名", () => {

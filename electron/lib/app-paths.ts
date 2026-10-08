@@ -11,7 +11,7 @@ export function devServerUrl(): string | undefined {
   return process.env.VITE_DEV_SERVER_URL || undefined;
 }
 
-/** 打包内界面入口 ui/dist/index.html 的绝对路径（本文件编译后位于 electron-dist/lib） */
+/** 打包内界面入口 ui/dist/index.html 的绝对路径（本文件编译后位于 electron-dist/electron/lib） */
 export function appIndexHtmlPath(): string {
-  return path.join(__dirname, "..", "..", "ui", "dist", "index.html");
+  return path.join(__dirname, "..", "..", "..", "ui", "dist", "index.html");
 }

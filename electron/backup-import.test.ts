@@ -75,13 +75,38 @@ function exportedBackup(): string {
     buildBackupPayload({
       services: [svc("a", "deepseek", "DS 工作号"), svc("b", "openai", "OpenAI")],
       usageRecords: [
-        { id: 1, serviceId: "a", model: "deepseek-chat", cost: 1.5, totalTokens: 100, period: "2026-09-01|2026-09-30", currency: "CNY", recordedAt: "2026-09-30T00:00:00.000Z" },
-        { id: 2, serviceId: "a", model: "deepseek-reasoner", cost: 2, totalTokens: 50, period: "2026-09-01|2026-09-30", currency: "CNY", recordedAt: "2026-09-30T00:00:00.000Z" },
-        { id: 3, serviceId: "b", model: "gpt-5", cost: 3, totalTokens: 10, period: "2026-09-01|2026-09-30", currency: "USD", recordedAt: "2026-09-30T00:00:00.000Z" },
+        {
+          id: 1,
+          serviceId: "a",
+          model: "deepseek-chat",
+          cost: 1.5,
+          totalTokens: 100,
+          period: "2026-09-01|2026-09-30",
+          currency: "CNY",
+          recordedAt: "2026-09-30T00:00:00.000Z",
+        },
+        {
+          id: 2,
+          serviceId: "a",
+          model: "deepseek-reasoner",
+          cost: 2,
+          totalTokens: 50,
+          period: "2026-09-01|2026-09-30",
+          currency: "CNY",
+          recordedAt: "2026-09-30T00:00:00.000Z",
+        },
+        {
+          id: 3,
+          serviceId: "b",
+          model: "gpt-5",
+          cost: 3,
+          totalTokens: 10,
+          period: "2026-09-01|2026-09-30",
+          currency: "USD",
+          recordedAt: "2026-09-30T00:00:00.000Z",
+        },
       ],
-      localDailyUsage: [
-        { source: "codex", model: "gpt-5", date: "2026-09-02", inputTokens: 5 },
-      ],
+      localDailyUsage: [{ source: "codex", model: "gpt-5", date: "2026-09-02", inputTokens: 5 }],
       settings: {
         monthlyBudgetUsd: "50",
         pinnedServiceIds: JSON.stringify(["b"]),
@@ -95,10 +120,22 @@ function exportedBackup(): string {
 describe("applyBackupImport：恢复服务清单", () => {
   it("新机器导入：按原 id 恢复服务，不带 config 与密钥，并标记需重新填写密钥", () => {
     const r = applyBackupImport(parse(exportedBackup()), resolveKind);
-    expect(r).toMatchObject({ services: 2, servicesMatched: 0, servicesSkipped: 0, usage: 3, usageSkipped: 0, local: 1 });
+    expect(r).toMatchObject({
+      services: 2,
+      servicesMatched: 0,
+      servicesSkipped: 0,
+      usage: 3,
+      usageSkipped: 0,
+      local: 1,
+    });
 
     const a = getService("a");
-    expect(a).toMatchObject({ name: "DS 工作号", provider: "deepseek", kind: "api", needsCredentials: true });
+    expect(a).toMatchObject({
+      name: "DS 工作号",
+      provider: "deepseek",
+      kind: "api",
+      needsCredentials: true,
+    });
     expect(a?.config).toEqual({});
     // 备份里的 config 本来就被丢掉了，这里再确认没有任何密钥写进存储
     flushDb();
@@ -107,7 +144,9 @@ describe("applyBackupImport：恢复服务清单", () => {
     expect(disk).not.toContain("region");
 
     // 用量记录挂在恢复出来的服务上
-    const byService = listUsageRecords().map((u) => u.serviceId).sort();
+    const byService = listUsageRecords()
+      .map((u) => u.serviceId)
+      .sort();
     expect(byService).toEqual(["a", "a", "b"]);
     // 置顶/隐藏随服务一起恢复
     expect(JSON.parse(getSetting("pinnedServiceIds") ?? "[]")).toEqual(["b"]);
@@ -131,7 +170,9 @@ describe("applyBackupImport：恢复服务清单", () => {
     expect(r).toMatchObject({ services: 1, servicesMatched: 1 });
     expect(getService("a")).toBeUndefined();
     expect(getService("local-1")?.needsCredentials).toBeUndefined();
-    const ids = listUsageRecords().map((u) => u.serviceId).sort();
+    const ids = listUsageRecords()
+      .map((u) => u.serviceId)
+      .sort();
     expect(ids).toEqual(["b", "local-1", "local-1"]);
     // 隐藏列表里的 "a" 换成了本机 id
     expect(JSON.parse(getSetting("hiddenServiceIds") ?? "[]")).toEqual(["local-1"]);
@@ -146,7 +187,12 @@ describe("applyBackupImport：恢复服务清单", () => {
 
   it("本机已有同服务同周期的用量时以本机为准，不叠加", () => {
     insertService(svc("a"));
-    saveUsageRecords("a", [{ model: "deepseek-chat", cost: 9, totalTokens: 999 }], "2026-09-01|2026-09-30", "CNY");
+    saveUsageRecords(
+      "a",
+      [{ model: "deepseek-chat", cost: 9, totalTokens: 999 }],
+      "2026-09-01|2026-09-30",
+      "CNY",
+    );
     applyBackupImport(parse(exportedBackup()), resolveKind);
     const aRows = listUsageRecords("a");
     expect(aRows).toHaveLength(1);
@@ -156,7 +202,9 @@ describe("applyBackupImport：恢复服务清单", () => {
   it("不认识的服务类型跳过，其用量随之跳过", () => {
     const raw = JSON.stringify({
       ...JSON.parse(exportedBackup()),
-      services: [{ id: "x", name: "未来服务", provider: "future_vendor", kind: "api", createdAt: "t" }],
+      services: [
+        { id: "x", name: "未来服务", provider: "future_vendor", kind: "api", createdAt: "t" },
+      ],
       usageRecords: [{ serviceId: "x", model: "m", period: "p" }],
     });
     const r = applyBackupImport(parse(raw), resolveKind);
@@ -165,7 +213,13 @@ describe("applyBackupImport：恢复服务清单", () => {
   });
 
   it("备份里已有完全相同的重复行（旧版导入留下的）只写一份", () => {
-    const row = { serviceId: "a", model: "m", cost: 1, period: "p1", recordedAt: "2026-09-30T00:00:00.000Z" };
+    const row = {
+      serviceId: "a",
+      model: "m",
+      cost: 1,
+      period: "p1",
+      recordedAt: "2026-09-30T00:00:00.000Z",
+    };
     const raw = JSON.stringify({
       app: "token-lens",
       version: 1,
@@ -210,7 +264,11 @@ describe("applyBackupImport：同类型同名的多个账号", () => {
   it("新机器导入：两个同名账号各自恢复成独立服务，用量不合并、不双计", () => {
     const r = applyBackupImport(parse(twoAccounts()), resolveKind);
     expect(r).toMatchObject({ services: 2, servicesMatched: 0, usage: 2, usageSkipped: 0 });
-    expect(listServices().map((s) => s.id).sort()).toEqual(["a", "b"]);
+    expect(
+      listServices()
+        .map((s) => s.id)
+        .sort(),
+    ).toEqual(["a", "b"]);
     expect(costBy()).toEqual({ a: 10, b: 7 });
     // 没有任何一个服务在同一周期下有两组来源（即不会出现 17）
     expect(Math.max(...Object.values(costBy()))).toBe(10);
@@ -228,7 +286,11 @@ describe("applyBackupImport：同类型同名的多个账号", () => {
     insertService(svc("local-1", "deepseek", "DeepSeek"));
     const r = applyBackupImport(parse(twoAccounts()), resolveKind);
     expect(r).toMatchObject({ services: 1, servicesMatched: 1, usage: 2, usageSkipped: 0 });
-    expect(listServices().map((s) => s.id).sort()).toEqual(["b", "local-1"]);
+    expect(
+      listServices()
+        .map((s) => s.id)
+        .sort(),
+    ).toEqual(["b", "local-1"]);
     expect(getService("b")?.needsCredentials).toBe(true);
     expect(costBy()).toEqual({ "local-1": 10, b: 7 });
   });
@@ -238,7 +300,11 @@ describe("applyBackupImport：同类型同名的多个账号", () => {
     insertService(svc("b", "deepseek", "DeepSeek"));
     const r = applyBackupImport(parse(twoAccounts()), resolveKind);
     expect(r).toMatchObject({ services: 1, servicesMatched: 1 });
-    expect(listServices().map((s) => s.id).sort()).toEqual(["a", "b"]);
+    expect(
+      listServices()
+        .map((s) => s.id)
+        .sort(),
+    ).toEqual(["a", "b"]);
     expect(costBy()).toEqual({ a: 10, b: 7 });
   });
 });

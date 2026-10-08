@@ -2,13 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker, useNavigate } from "react-router-dom";
 import { ArrowLeft, ChevronDown, ChevronUp } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/store/app";
@@ -71,11 +65,7 @@ export function PricingPage() {
 
   const update = (key: string, field: NumericField, value: string) => {
     setDraft((rows) =>
-      rows.map((r) =>
-        r.key === key
-          ? { ...r, [field]: value === "" ? 0 : Number(value) }
-          : r,
-      ),
+      rows.map((r) => (r.key === key ? { ...r, [field]: value === "" ? 0 : Number(value) } : r)),
     );
     setDirty(true);
   };
@@ -142,9 +132,7 @@ export function PricingPage() {
       }
       if (result.applied === 0) {
         showToast(
-          notes.length > 0
-            ? `没有可导入的改动（${notes.join("，")}）`
-            : "没有可导入的改动",
+          notes.length > 0 ? `没有可导入的改动（${notes.join("，")}）` : "没有可导入的改动",
           "err",
         );
         return;
@@ -164,7 +152,15 @@ export function PricingPage() {
             variant="outline"
             onClick={() => {
               const csv = toCsv(
-                ["key", "label", "inputPerM", "outputPerM", "cacheReadPerM", "cacheWritePerM", "overridden"],
+                [
+                  "key",
+                  "label",
+                  "inputPerM",
+                  "outputPerM",
+                  "cacheReadPerM",
+                  "cacheWritePerM",
+                  "overridden",
+                ],
                 draft.map((r) => [
                   r.key,
                   r.label,
@@ -253,13 +249,19 @@ export function PricingPage() {
                   <tbody>
                     {visible.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-2 py-8 text-center text-sm text-muted-foreground">
+                        <td
+                          colSpan={6}
+                          className="px-2 py-8 text-center text-sm text-muted-foreground"
+                        >
                           无匹配模型
                         </td>
                       </tr>
                     ) : null}
                     {visible.map((r) => (
-                      <tr key={r.key} className="border-b border-border/60 transition-colors last:border-0 hover:bg-white/30">
+                      <tr
+                        key={r.key}
+                        className="border-b border-border/60 transition-colors last:border-0 hover:bg-white/30"
+                      >
                         <td className="px-2 py-2 whitespace-nowrap">{r.label}</td>
                         <td className="px-2 py-2 text-right">
                           <PriceInput
@@ -343,13 +345,7 @@ export function PricingPage() {
   );
 }
 
-function PriceInput({
-  value,
-  onChange,
-}: {
-  value: number;
-  onChange: (v: string) => void;
-}) {
+function PriceInput({ value, onChange }: { value: number; onChange: (v: string) => void }) {
   const ref = useRef<HTMLInputElement>(null);
   const bump = (dir: 1 | -1) => {
     const el = ref.current;

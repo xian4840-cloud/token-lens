@@ -58,10 +58,7 @@ export interface LoginWindowOptions {
 export type ExtractedCredentials = Record<string, string>;
 
 /** 大小写不敏感取请求 header（HTTP header 存储时大小写不定） */
-function getHeader(
-  headers: Record<string, string>,
-  name: string,
-): string | undefined {
+function getHeader(headers: Record<string, string>, name: string): string | undefined {
   const lower = name.toLowerCase();
   for (const [k, v] of Object.entries(headers)) {
     if (k.toLowerCase() === lower) return v;
@@ -82,10 +79,7 @@ export function isAllowedUrl(url: string, allowedDomains: string[]): boolean {
 
 /** 域名列表转 onBeforeSendHeaders 的 URL 过滤模式（仅 https，控制台均为 https） */
 function toUrlPatterns(allowedDomains: string[]): string[] {
-  return allowedDomains.flatMap((d) => [
-    `https://*.${d}/*`,
-    `https://${d}/*`,
-  ]);
+  return allowedDomains.flatMap((d) => [`https://*.${d}/*`, `https://${d}/*`]);
 }
 
 /**
@@ -94,9 +88,7 @@ function toUrlPatterns(allowedDomains: string[]): string[] {
  * 流程：加载控制台 -> 用户登录 -> 拦截允许域的请求 -> 提取指定 header ->
  * isValid 通过则延迟关闭窗口并返回凭证。
  */
-export function openLoginWindow(
-  options: LoginWindowOptions,
-): Promise<ExtractedCredentials | null> {
+export function openLoginWindow(options: LoginWindowOptions): Promise<ExtractedCredentials | null> {
   const {
     partition,
     loginUrl,
@@ -160,42 +152,39 @@ export function openLoginWindow(
     // 正在验证中的 key（防止同 key 并发重复验证）
     const validatingKeys = new Set<string>();
 
-    ses.webRequest.onBeforeSendHeaders(
-      { urls: toUrlPatterns(allowedDomains) },
-      (details, cb) => {
-        cb({}); // 先放行请求，验证异步进行，不阻塞页面加载
-        if (resolved) return;
-        const extracted: Record<string, string> = {};
-        for (const name of extractHeaders) {
-          const v = getHeader(details.requestHeaders, name);
-          if (v) extracted[name.toLowerCase()] = v;
-        }
-        if (Object.keys(extracted).length === 0 || !isValid(extracted)) return;
+    ses.webRequest.onBeforeSendHeaders({ urls: toUrlPatterns(allowedDomains) }, (details, cb) => {
+      cb({}); // 先放行请求，验证异步进行，不阻塞页面加载
+      if (resolved) return;
+      const extracted: Record<string, string> = {};
+      for (const name of extractHeaders) {
+        const v = getHeader(details.requestHeaders, name);
+        if (v) extracted[name.toLowerCase()] = v;
+      }
+      if (Object.keys(extracted).length === 0 || !isValid(extracted)) return;
 
-        const key = JSON.stringify(extracted);
-        // 同一候选已验证过或正在验证：跳过，等用户重登产生新 cookie（key 不同）再验
-        if (seenKeys.has(key) || validatingKeys.has(key)) return;
-        validatingKeys.add(key);
+      const key = JSON.stringify(extracted);
+      // 同一候选已验证过或正在验证：跳过，等用户重登产生新 cookie（key 不同）再验
+      if (seenKeys.has(key) || validatingKeys.has(key)) return;
+      validatingKeys.add(key);
 
-        void (async () => {
-          try {
-            const ok = validate ? await validate(extracted) : true;
-            seenKeys.add(key);
-            if (ok && !resolved) {
-              finish(extracted);
-              // 延迟关闭，避免在请求回调内同步关闭导致异常
-              setTimeout(() => win.close(), 0);
-            }
-            // ok=false：候选无效（如残留的过期 cookie），保持监听等新凭证
-          } catch {
-            seenKeys.add(key);
-            // 验证异常视为无效，继续等待
-          } finally {
-            validatingKeys.delete(key);
+      void (async () => {
+        try {
+          const ok = validate ? await validate(extracted) : true;
+          seenKeys.add(key);
+          if (ok && !resolved) {
+            finish(extracted);
+            // 延迟关闭，避免在请求回调内同步关闭导致异常
+            setTimeout(() => win.close(), 0);
           }
-        })();
-      },
-    );
+          // ok=false：候选无效（如残留的过期 cookie），保持监听等新凭证
+        } catch {
+          seenKeys.add(key);
+          // 验证异常视为无效，继续等待
+        } finally {
+          validatingKeys.delete(key);
+        }
+      })();
+    });
 
     win.on("closed", () => finish(null));
     void win.loadURL(loginUrl);

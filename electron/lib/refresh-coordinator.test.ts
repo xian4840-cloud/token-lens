@@ -27,11 +27,14 @@ describe("createRefreshCoordinator", () => {
   });
 
   it("手动与定时共享同一个并发上限", async () => {
-    let active = 0, peak = 0;
+    let active = 0,
+      peak = 0;
     const gates = new Map<string, ReturnType<typeof deferred<void>>>();
     const c = createRefreshCoordinator(async (id) => {
-      active++; peak = Math.max(peak, active);
-      const g = deferred<void>(); gates.set(id, g);
+      active++;
+      peak = Math.max(peak, active);
+      const g = deferred<void>();
+      gates.set(id, g);
       await g.promise;
       active--;
       return id;
@@ -42,8 +45,12 @@ describe("createRefreshCoordinator", () => {
     expect(active).toBe(3);
     // 逐个放行，任何时刻都不超过 3
     for (let i = 0; i < 10 && gates.size; i++) {
-      for (const [id, g] of [...gates]) { gates.delete(id); g.resolve(); }
-      await tick(); await tick();
+      for (const [id, g] of [...gates]) {
+        gates.delete(id);
+        g.resolve();
+      }
+      await tick();
+      await tick();
     }
     const [s, m] = await Promise.all([scheduled, manual]);
     expect(peak).toBe(3);
@@ -65,7 +72,8 @@ describe("createRefreshCoordinator", () => {
   it("复用在途请求的调用方拿到同一个失败", async () => {
     const d = deferred<number>();
     const c = createRefreshCoordinator(() => d.promise);
-    const a = c.refresh("x"), b = c.refresh("x");
+    const a = c.refresh("x"),
+      b = c.refresh("x");
     d.reject(new Error("down"));
     await expect(a).rejects.toThrow("down");
     await expect(b).rejects.toThrow("down");
@@ -73,7 +81,11 @@ describe("createRefreshCoordinator", () => {
 
   describe("invalidate：配置变了不复用、不交出旧结果", () => {
     it("作废后再刷新会发新请求；旧请求的调用方跟随新结果，旧结果晚到也不会交出去", async () => {
-      const runs: { id: string; isCurrent: () => boolean; d: ReturnType<typeof deferred<string>> }[] = [];
+      const runs: {
+        id: string;
+        isCurrent: () => boolean;
+        d: ReturnType<typeof deferred<string>>;
+      }[] = [];
       const c = createRefreshCoordinator((id, isCurrent) => {
         const d = deferred<string>();
         runs.push({ id, isCurrent, d });
@@ -183,4 +195,3 @@ describe("createRefreshCoordinator", () => {
     });
   });
 });
-

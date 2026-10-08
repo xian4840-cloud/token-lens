@@ -36,9 +36,7 @@ describe("isEnvelopeOk", () => {
   });
 
   it("HTTP 200 但 body.code=401 是鉴权失败（智谱业务接口的真实形态）", () => {
-    expect(isEnvelopeOk(true, { code: 401, success: false, msg: "token expired" })).toBe(
-      false,
-    );
+    expect(isEnvelopeOk(true, { code: 401, success: false, msg: "token expired" })).toBe(false);
     expect(isEnvelopeOk(true, { code: 401, msg: "unauthorized" })).toBe(false);
   });
 
@@ -95,15 +93,19 @@ describe("parseCustomerBalance", () => {
     expect(parseCustomerBalance({ account: { balance: "7" } })).toEqual({
       available: 7,
     });
-    expect(
-      parseCustomerBalance({ wallet: { rechargeBalance: 10, giftBalance: 2 } }),
-    ).toEqual({ available: 12, cash: 10, voucher: 2 });
+    expect(parseCustomerBalance({ wallet: { rechargeBalance: 10, giftBalance: 2 } })).toEqual({
+      available: 12,
+      cash: 10,
+      voucher: 2,
+    });
   });
 
   it("认识充值/赠金字段别名", () => {
-    expect(
-      parseCustomerBalance({ rechargeAmount: "9.9", bonusAmount: "1.1" }),
-    ).toEqual({ available: 11, cash: 9.9, voucher: 1.1 });
+    expect(parseCustomerBalance({ rechargeAmount: "9.9", bonusAmount: "1.1" })).toEqual({
+      available: 11,
+      cash: 9.9,
+      voucher: 1.1,
+    });
   });
 
   it("空对象返回空，不把 NaN 塞回去", () => {
@@ -143,12 +145,8 @@ describe("parseTokenAccounts", () => {
 
 describe("classifyPackageUnit", () => {
   it("体验包 / 次数包不是人民币", () => {
-    expect(classifyPackageUnit("【实名认证】500万GLM-4.7体验包", 5_000_000)).toBe(
-      "tokens",
-    );
-    expect(classifyPackageUnit("【新用户专享】600万GLM-4.6资源包", 6_000_000)).toBe(
-      "tokens",
-    );
+    expect(classifyPackageUnit("【实名认证】500万GLM-4.7体验包", 5_000_000)).toBe("tokens");
+    expect(classifyPackageUnit("【新用户专享】600万GLM-4.6资源包", 6_000_000)).toBe("tokens");
     expect(classifyPackageUnit("【新用户专享】20次图片/视频生成资源包", 20)).toBe("次");
     expect(classifyPackageUnit("【新用户专享】100次搜索资源包", 100)).toBe("次");
   });
@@ -286,9 +284,7 @@ describe("measureLimit / parseQuotaLimits", () => {
       remaining: 672_305_536,
       unit: "tokens",
     });
-    expect(measureLimit({ type: "TIME_LIMIT", usage: 1000, remaining: 200 })?.unit).toBe(
-      "次",
-    );
+    expect(measureLimit({ type: "TIME_LIMIT", usage: 1000, remaining: 200 })?.unit).toBe("次");
   });
 
   it("只有百分比时退回 100 分制", () => {

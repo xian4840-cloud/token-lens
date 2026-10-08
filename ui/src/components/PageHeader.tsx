@@ -11,9 +11,7 @@ export function PageHeader({ title, description, children }: PageHeaderProps) {
     <div className="flex items-end justify-between px-8 pb-2 pt-8">
       <div>
         <h1 className="font-display text-3xl tracking-tight">{title}</h1>
-        {description && (
-          <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>
-        )}
+        {description && <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>}
       </div>
       {children}
     </div>

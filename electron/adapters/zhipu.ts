@@ -176,11 +176,7 @@ function packageLabel(row: Record<string, unknown>): string {
  * 资源包单位：体验包的 tokenBalance 是 token 数或次数，不是人民币。
  * 把 500 万 GLM-4.7 体验包加进 ¥ 会得到卡片上那种 ¥23000120。
  */
-export function classifyPackageUnit(
-  label: string,
-  remaining: number,
-  declared?: string,
-): string {
+export function classifyPackageUnit(label: string, remaining: number, declared?: string): string {
   const unit = (declared ?? "").trim();
   if (unit) {
     if (/次|count|times/i.test(unit)) return "次";
@@ -274,8 +270,7 @@ export const zhipuAdapter: Adapter = {
     label: "智谱 GLM",
     kind: "api",
     official: true,
-    description:
-      "智谱开放平台按量账户。卡片主数字是现金/赠金余额，体验包与次数包在明细里单独列出",
+    description: "智谱开放平台按量账户。卡片主数字是现金/赠金余额，体验包与次数包在明细里单独列出",
     configSchema: [API_KEY_FIELD, REGION_FIELD],
   },
 
@@ -296,9 +291,7 @@ export const zhipuAdapter: Adapter = {
         ? parseAccountReport(cashResult.value.data ?? cashResult.value)
         : undefined;
     const packs =
-      packResult.status === "fulfilled"
-        ? mergeSameLabel(parseTokenAccounts(packResult.value))
-        : [];
+      packResult.status === "fulfilled" ? mergeSameLabel(parseTokenAccounts(packResult.value)) : [];
 
     if (cashResult.status === "rejected" && packResult.status === "rejected") {
       return fallbackValidateKey(base, apiKey, currency, fetchedAt, cashResult.reason);
@@ -309,15 +302,9 @@ export const zhipuAdapter: Adapter = {
     // 当作单一币种显示——而 currency 是按区域定的（国内 CNY / 国际 USD），
     // 混进来的另一种货币既没换算也没标注。宁可少一个数字，也不能给错数字。
     const walletPacks = packs.filter((p) => p.unit === currency);
-    const otherPacks = packs.filter(
-      (p) => p.unit !== currency && p.remaining > 0,
-    );
+    const otherPacks = packs.filter((p) => p.unit !== currency && p.remaining > 0);
     const walletPackSum = walletPacks.reduce((s, p) => s + p.remaining, 0);
-    const remaining = pickZhipuWallet(
-      cash?.available,
-      walletPackSum,
-      walletPacks.length > 0,
-    );
+    const remaining = pickZhipuWallet(cash?.available, walletPackSum, walletPacks.length > 0);
 
     const parts: BreakdownItem[] = [];
     for (const p of walletPacks) {

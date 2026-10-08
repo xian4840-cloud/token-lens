@@ -97,9 +97,7 @@ describe("resolveRequestTimeoutMs", () => {
     // 退回 0 会让 setTimeout 立刻触发，把每次请求都判成超时
     for (const bad of ["abc", "0", "-5", "  "]) {
       setSetting("requestTimeout", bad);
-      expect(resolveRequestTimeoutMs(), `输入 ${JSON.stringify(bad)}`).toBe(
-        DEFAULT_TIMEOUT_MS,
-      );
+      expect(resolveRequestTimeoutMs(), `输入 ${JSON.stringify(bad)}`).toBe(DEFAULT_TIMEOUT_MS);
     }
   });
 

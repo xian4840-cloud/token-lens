@@ -18,12 +18,15 @@
     "noEmit": true,
     "types": ["node", "vitest/globals"],
     // 不设 baseUrl（TS 7.0 起移除）：paths 未配 baseUrl 时按本配置文件所在目录解析
-    "paths": { "@/*": ["./ui/src/*"] }
+    "paths": { "@/*": ["./ui/src/*"], "@shared/*": ["./shared/*"] }
   },
   "include": [
     "ui/src/**/*.test.ts",
     "ui/src/**/*.test.tsx",
     "electron/**/*.test.ts",
+    "shared/**/*.test.ts",
+    // window.tokenLens 的声明：界面模块（如 lib/ipc.ts）被测试引入时需要
+    "ui/src/types/global.d.ts",
     "vitest.config.mts"
   ]
 }

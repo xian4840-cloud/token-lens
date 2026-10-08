@@ -113,10 +113,7 @@ function readCodexConfig(): CodexConfig {
   try {
     text = fs.readFileSync(CODEX_CONFIG, "utf8");
   } catch (e) {
-    logWarn(
-      "local-usage",
-      `读取 Codex 配置失败：${e instanceof Error ? e.message : String(e)}`,
-    );
+    logWarn("local-usage", `读取 Codex 配置失败：${e instanceof Error ? e.message : String(e)}`);
     return {};
   }
   const cfg: CodexConfig = {};
@@ -159,14 +156,7 @@ function addIncrement(
   const date = toDateKey(ts);
   if (!date) return;
   const split = splitCodexUsage(usage);
-  if (
-    split.input +
-      split.output +
-      split.cacheCreation +
-      split.cacheRead +
-      split.reasoning ===
-    0
-  ) {
+  if (split.input + split.output + split.cacheCreation + split.cacheRead + split.reasoning === 0) {
     return;
   }
   const key = `${model}|${date}`;
@@ -371,9 +361,7 @@ export async function scanCodex(since?: string): Promise<LocalUsageRow[]> {
       markScanCacheDirty();
     }
 
-    const fallbackModel =
-      modelHint ??
-      (threadSource === "subagent" ? subModel : mainModel);
+    const fallbackModel = modelHint ?? (threadSource === "subagent" ? subModel : mainModel);
 
     for (const inc of increments) {
       if (since && inc.ts < since) continue;

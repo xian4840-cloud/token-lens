@@ -76,14 +76,12 @@ describe("OpenRouter 余额", () => {
     state.ok = false;
     state.status = 401;
     state.body = { error: "unauthorized" };
-    await expect(
-      openrouterAdapter.fetchBalance({}, { apiKey: "sk-or-x" }),
-    ).rejects.toThrow(/OpenRouter 401/);
+    await expect(openrouterAdapter.fetchBalance({}, { apiKey: "sk-or-x" })).rejects.toThrow(
+      /OpenRouter 401/,
+    );
   });
 
   it("缺少 API Key 时立刻报错，不发请求", async () => {
-    await expect(openrouterAdapter.fetchBalance({}, {})).rejects.toThrow(
-      /缺少 API Key/,
-    );
+    await expect(openrouterAdapter.fetchBalance({}, {})).rejects.toThrow(/缺少 API Key/);
   });
 });

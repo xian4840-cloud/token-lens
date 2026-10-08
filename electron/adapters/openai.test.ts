@@ -101,14 +101,15 @@ describe("OpenAI 本月花费", () => {
 
   it("跨时间桶按模型聚合，不产生重复行", async () => {
     // fetchUsage 在 Adapter 里是可选的，openai 适配器实现了它
-    const usage = await openaiAdapter.fetchUsage!({}, { apiKey: "sk-x" }, {
-      start: "2026-09-01T00:00:00Z",
-      end: "2026-09-30T00:00:00Z",
-    });
-    expect(usage.items.map((i) => i.model).sort()).toEqual([
-      "gpt-5",
-      "gpt-5.6-sol",
-    ]);
+    const usage = await openaiAdapter.fetchUsage!(
+      {},
+      { apiKey: "sk-x" },
+      {
+        start: "2026-09-01T00:00:00Z",
+        end: "2026-09-30T00:00:00Z",
+      },
+    );
+    expect(usage.items.map((i) => i.model).sort()).toEqual(["gpt-5", "gpt-5.6-sol"]);
     const sol = usage.items.find((i) => i.model === "gpt-5.6-sol");
     expect(sol?.cost).toBeCloseTo(2.5, 6);
   });
@@ -155,9 +156,7 @@ describe("OpenAI 本月花费", () => {
     state.ok = false;
     state.status = 401;
     state.body = { error: "unauthorized" };
-    await expect(openaiAdapter.fetchBalance({}, { apiKey: "sk-x" })).rejects.toThrow(
-      /OpenAI 401/,
-    );
+    await expect(openaiAdapter.fetchBalance({}, { apiKey: "sk-x" })).rejects.toThrow(/OpenAI 401/);
   });
 
   it("填写组织 ID 时带上 OpenAI-Organization 头", async () => {

@@ -154,11 +154,7 @@ function addTurn(
 }
 
 /** 缓存命中且整文件在界内：直接合并缓存的 per-model-per-day 全量聚合 */
-function mergeEntry(
-  agg: Map<string, ModelDayAgg>,
-  filePath: string,
-  entry: GrokFileEntry,
-): void {
+function mergeEntry(agg: Map<string, ModelDayAgg>, filePath: string, entry: GrokFileEntry): void {
   for (const [model, days] of Object.entries(entry.models)) {
     for (const [date, m] of Object.entries(days)) {
       const key = `${model}|${date}`;
@@ -169,8 +165,7 @@ function mergeEntry(
       cur.cacheCreation += m.cacheCreation;
       cur.cacheRead += m.cacheRead;
       cur.reasoning += m.reasoning;
-      if (m.firstTs && (!cur.firstAt || m.firstTs < cur.firstAt))
-        cur.firstAt = m.firstTs;
+      if (m.firstTs && (!cur.firstAt || m.firstTs < cur.firstAt)) cur.firstAt = m.firstTs;
       if (m.lastTs && (!cur.lastAt || m.lastTs > cur.lastAt)) cur.lastAt = m.lastTs;
       agg.set(key, cur);
     }
@@ -193,8 +188,7 @@ export async function scanGrokBuild(since?: string): Promise<GrokScanResult> {
   if (!fs.existsSync(GROK_SESSIONS_DIR)) {
     return {
       available: false,
-      unavailableReason:
-        "未找到 Grok Build 会话目录（~/.grok/sessions，可能未安装或未使用）",
+      unavailableReason: "未找到 Grok Build 会话目录（~/.grok/sessions，可能未安装或未使用）",
       rows: [],
     };
   }
@@ -224,10 +218,7 @@ export async function scanGrokBuild(since?: string): Promise<GrokScanResult> {
     if (entry && entry.mtimeMs === file.mtimeMs && isGrokEntryValid(entry)) {
       if (Object.keys(entry.models).length === 0) continue; // 无 usage 行的空文件
       // B 类：全量扫描，或文件最早 usage 行已在界内 -> 整文件复用缓存
-      if (
-        since === undefined ||
-        (entry.firstTs !== undefined && entry.firstTs >= since)
-      ) {
+      if (since === undefined || (entry.firstTs !== undefined && entry.firstTs >= since)) {
         mergeEntry(agg, file.path, entry);
         continue;
       }

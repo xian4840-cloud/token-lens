@@ -4,6 +4,7 @@ import { getSetting } from "../db";
 import { logError, logWarn } from "./logger";
 import { redactError, redactUrl } from "./redact";
 import type { ProxyTestResult } from "../types";
+import type { ProxyConfigOverride } from "../../shared/types";
 
 /**
  * 网络与外部链接的安全工具集合。
@@ -15,7 +16,6 @@ import type { ProxyTestResult } from "../types";
  * - safeOpenExternal：仅放行 http/https 的 shell.openExternal，拦截 javascript:/file: 等危险协议
  * - CSP 构造：主窗口内容安全策略，限制脚本来源与外联目标
  */
-
 
 /** 默认请求超时（ms）。远端未响应则中止，避免调度器卡死。 */
 export const DEFAULT_TIMEOUT_MS = 15_000;
@@ -157,11 +157,8 @@ export function shouldBypassProxy(targetUrl: string, rulesStr?: string): boolean
   return false;
 }
 
-export interface ProxyConfigOverride {
-  mode?: string;
-  customUrl?: string;
-  bypassRules?: string;
-}
+/** 代理测试的临时覆盖（定义在 shared/types/app.ts，界面共用） */
+export type { ProxyConfigOverride };
 
 /** 根据 URL 及当前配置获取 undici Dispatcher（支持 override 供测试用） */
 export async function getDispatcherForUrl(
@@ -226,8 +223,7 @@ export async function getDispatcherForUrl(
     }
   }
 
-  const envProxy =
-    process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.ALL_PROXY;
+  const envProxy = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.ALL_PROXY;
   if (envProxy) {
     return getOrCreateAgent(envProxy);
   }
@@ -288,8 +284,7 @@ export async function fetchWithTimeout(
   const timer = setTimeout(() => controller.abort(), configuredTimeout);
   try {
     const dispatcher =
-      (init as { dispatcher?: Dispatcher }).dispatcher ??
-      (await getDispatcherForUrl(url));
+      (init as { dispatcher?: Dispatcher }).dispatcher ?? (await getDispatcherForUrl(url));
 
     return await fetch(url, {
       ...init,
@@ -371,9 +366,7 @@ export async function testNetworkConnectivity(
           ok: false,
           latencyMs,
           // 报出实际用的秒数，便于用户判断该不该调大超时
-          error: aborted
-            ? `连接超时 (${Math.round(timeoutMs / 1000)}s)`
-            : msg,
+          error: aborted ? `连接超时 (${Math.round(timeoutMs / 1000)}s)` : msg,
         };
       }
     }),
@@ -417,9 +410,7 @@ export function buildCsp(dev: boolean): string {
     );
   }
 
-  const scriptSrc = dev
-    ? "'self' 'unsafe-eval' 'unsafe-inline'"
-    : "'self'";
+  const scriptSrc = dev ? "'self' 'unsafe-eval' 'unsafe-inline'" : "'self'";
   return [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
@@ -432,4 +423,3 @@ export function buildCsp(dev: boolean): string {
     "frame-ancestors 'none'",
   ].join("; ");
 }
-

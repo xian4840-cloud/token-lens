@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  refreshFailureMessage,
-  usageRefreshFailureMessage,
-} from "./refresh-summary";
+import { refreshFailureMessage, usageRefreshFailureMessage } from "./refresh-summary";
 
 describe("refreshFailureMessage", () => {
   it("没服务或全成功不提示", () => {

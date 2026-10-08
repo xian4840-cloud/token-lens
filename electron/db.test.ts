@@ -145,9 +145,7 @@ describe("数据文件损坏时的处理", () => {
     const backups = fs.readdirSync(dir).filter((f) => f.includes(".corrupt-"));
     expect(backups).toHaveLength(1);
     // 留档的是原始内容，用户还能拿它去抢救密钥
-    expect(fs.readFileSync(path.join(dir, backups[0]), "utf8")).toBe(
-      "{ 这不是合法 JSON",
-    );
+    expect(fs.readFileSync(path.join(dir, backups[0]), "utf8")).toBe("{ 这不是合法 JSON");
   });
 
   it("结构不符（services 不是数组）同样按损坏处理", () => {
@@ -197,10 +195,7 @@ describe("本地用量落盘", () => {
   });
 
   it("replaceLocalDailyUsageBySource 只清掉该来源", () => {
-    upsertLocalDailyUsage([
-      row("codex", "m1", "2026-09-01"),
-      row("opencode", "m2", "2026-09-01"),
-    ]);
+    upsertLocalDailyUsage([row("codex", "m1", "2026-09-01"), row("opencode", "m2", "2026-09-01")]);
     replaceLocalDailyUsageBySource("codex", [row("codex", "m3", "2026-09-02")]);
     flushDb();
 
@@ -212,10 +207,7 @@ describe("本地用量落盘", () => {
   it("replaceLocalDailyUsageBySource 会删掉新结果里不再出现的旧日期", () => {
     // 这正是「整体替换」相对 upsert 的意义：修好统计口径后，
     // 虚高的历史桶必须能被清掉，只 upsert 是清不掉的
-    upsertLocalDailyUsage([
-      row("codex", "m1", "2026-08-01"),
-      row("codex", "m1", "2026-09-01"),
-    ]);
+    upsertLocalDailyUsage([row("codex", "m1", "2026-08-01"), row("codex", "m1", "2026-09-01")]);
     replaceLocalDailyUsageBySource("codex", [row("codex", "m1", "2026-09-01")]);
     flushDb();
 
@@ -454,10 +446,7 @@ describe("clearAllLocalDailyUsage", () => {
   beforeEach(() => initDbAt(file));
 
   it("清空全部来源的桶", () => {
-    upsertLocalDailyUsage([
-      row("codex", "m1", "2026-09-01"),
-      row("opencode", "m2", "2026-09-01"),
-    ]);
+    upsertLocalDailyUsage([row("codex", "m1", "2026-09-01"), row("opencode", "m2", "2026-09-01")]);
     expect(listLocalDailyUsage()).toHaveLength(2);
 
     clearAllLocalDailyUsage();
@@ -504,9 +493,7 @@ describe("密钥解密失败时留痕", () => {
 
     expect(getSecrets("svc-1")).toEqual({});
 
-    const entry = getRecentLogs().find(
-      (e) => e.scope === "db" && e.message.includes("解密失败"),
-    );
+    const entry = getRecentLogs().find((e) => e.scope === "db" && e.message.includes("解密失败"));
     expect(entry, "解密失败没有留下任何日志").toBeDefined();
     expect(entry?.message).toContain("svc-1");
     expect(entry?.message).toContain("apiKey");
@@ -518,9 +505,9 @@ describe("密钥解密失败时留痕", () => {
     writeStore({ services: [service("svc-2")], secrets: {} });
     initDbAt(file);
     expect(getSecrets("svc-2")).toEqual({});
-    expect(
-      getRecentLogs().some((e) => e.scope === "db" && e.message.includes("svc-2")),
-    ).toBe(false);
+    expect(getRecentLogs().some((e) => e.scope === "db" && e.message.includes("svc-2"))).toBe(
+      false,
+    );
   });
 });
 
@@ -635,7 +622,9 @@ describe("只在数据真的变化时落盘", () => {
     writeStore({
       services: [service("a")],
       lastBalances: {},
-      balanceSnapshots: [{ id: 1, serviceId: "a", balance: 1, currency: "USD", recordedAt: daysAgo(0) }],
+      balanceSnapshots: [
+        { id: 1, serviceId: "a", balance: 1, currency: "USD", recordedAt: daysAgo(0) },
+      ],
     });
     const writes = countWrites();
     expect(initDbAt(file).rewritten).toBe(false);
@@ -645,7 +634,22 @@ describe("只在数据真的变化时落盘", () => {
   });
 
   it("旧版 pretty-print 文件启动后转成紧凑格式", () => {
-    writeRaw(JSON.stringify({ services: [], secrets: {}, balanceSnapshots: [], usageRecords: [], localDailyUsage: [], lastBalances: {}, settings: {}, counters: { balanceSnapshot: 0, usageRecord: 0, localDailyUsage: 0 } }, null, 2));
+    writeRaw(
+      JSON.stringify(
+        {
+          services: [],
+          secrets: {},
+          balanceSnapshots: [],
+          usageRecords: [],
+          localDailyUsage: [],
+          lastBalances: {},
+          settings: {},
+          counters: { balanceSnapshot: 0, usageRecord: 0, localDailyUsage: 0 },
+        },
+        null,
+        2,
+      ),
+    );
     expect(initDbAt(file).rewritten).toBe(true);
     flushDb();
     expect(fs.readFileSync(file, "utf8")).not.toContain("\n");
@@ -659,7 +663,13 @@ describe("只在数据真的变化时落盘", () => {
       lastBalances: {},
       balanceSnapshots: [
         { id: 1, serviceId: "a", balance: 1, currency: "USD", recordedAt: daysAgo(30) },
-        { id: 2, serviceId: "a", balance: 2, currency: "USD", recordedAt: new Date(Date.parse(daysAgo(30)) + 1000).toISOString() },
+        {
+          id: 2,
+          serviceId: "a",
+          balance: 2,
+          currency: "USD",
+          recordedAt: new Date(Date.parse(daysAgo(30)) + 1000).toISOString(),
+        },
       ],
     });
     expect(initDbAt(file).rewritten).toBe(true);
@@ -694,7 +704,10 @@ describe("只在数据真的变化时落盘", () => {
 
   it("用量变了、或有旧日期要删时照旧落盘", () => {
     initDbAt(file);
-    replaceLocalDailyUsageBySource("codex", [row("codex", "m1", "2026-09-01"), row("codex", "m1", "2026-09-02")]);
+    replaceLocalDailyUsageBySource("codex", [
+      row("codex", "m1", "2026-09-01"),
+      row("codex", "m1", "2026-09-02"),
+    ]);
     flushDb();
     const writes = countWrites();
     expect(replaceLocalDailyUsageBySource("codex", [row("codex", "m1", "2026-09-02")])).toBe(true);
@@ -710,7 +723,11 @@ describe("只在数据真的变化时落盘", () => {
     initDbAt(file);
     insertService(service("a"));
     setSetting("refreshInterval", "5");
-    const bal = { remaining: 1, currency: "USD", fetchedAt: daysAgo(0) } as unknown as BalanceResult;
+    const bal = {
+      remaining: 1,
+      currency: "USD",
+      fetchedAt: daysAgo(0),
+    } as unknown as BalanceResult;
     saveLastBalance("a", bal);
     flushDb();
     const writes = countWrites();

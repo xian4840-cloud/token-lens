@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { FileText, FolderOpen, RotateCw, Trash2 } from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { formatTime } from "@/lib/format";
@@ -159,15 +153,13 @@ export function DiagnosticsCard() {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="text-xs text-muted-foreground">
-          共 {logs.length} 条
-          {errorCount > 0 ? `，其中 ${errorCount} 条错误` : "，暂无错误"}
+          共 {logs.length} 条{errorCount > 0 ? `，其中 ${errorCount} 条错误` : "，暂无错误"}
           {logPath ? ` · 文件位置：${logPath}` : ""}
         </div>
         {stats ? (
           <div className="text-xs text-muted-foreground">
-            数据文件 {(stats.bytes / 1024).toFixed(1)} KB · 服务 {stats.services} ·
-            API 用量 {stats.usageRecords} · 本地日桶 {stats.localDaily} · 余额快照{" "}
-            {stats.snapshots}
+            数据文件 {(stats.bytes / 1024).toFixed(1)} KB · 服务 {stats.services} · API 用量{" "}
+            {stats.usageRecords} · 本地日桶 {stats.localDaily} · 余额快照 {stats.snapshots}
           </div>
         ) : null}
 

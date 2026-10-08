@@ -7,6 +7,7 @@ import { mapErrorToUserMessage } from "./lib/user-error";
 import { createBusyLock } from "./lib/concurrency";
 import { flushDb } from "./db";
 import type { BalanceResult } from "./types";
+import type { EventChannel, EventPayload } from "../shared/ipc";
 
 /** 后台自动刷新调度器。应用运行期间按间隔刷新所有服务并记录快照，
  * 同时扫描本地 agent 用量落盘每日快照供趋势页使用。 */
@@ -20,13 +21,11 @@ export function setMainWindow(win: BrowserWindow | null): void {
 }
 
 /** 通知前端某服务余额更新（或出错） */
-function notify(
-  id: string,
-  payload: { balance?: BalanceResult; error?: string },
-): void {
+function notify(id: string, payload: { balance?: BalanceResult; error?: string }): void {
   // 窗口可能已关闭或正在销毁，send 前检查
   if (mainWin && !mainWin.isDestroyed()) {
-    mainWin.webContents.send("balance:updated", { id, ...payload });
+    const event: EventPayload<"balance:updated"> = { id, ...payload };
+    mainWin.webContents.send("balance:updated" satisfies EventChannel, event);
   }
 }
 
@@ -72,9 +71,7 @@ const DEFAULT_INTERVAL_MIN = 5;
  * 取值规则：显式的数值且 ≤0 才表示关闭，其余一律退回默认值。
  * 不把「关闭」和「疯狂刷新」这两个相反的后果交给一个比较运算的副作用决定。
  */
-export function normalizeIntervalMinutes(
-  raw: string | number | undefined,
-): number | null {
+export function normalizeIntervalMinutes(raw: string | number | undefined): number | null {
   // 空字符串按「未设置」处理，不按 Number("") === 0 理解成关闭
   if (raw === undefined || raw === "") return DEFAULT_INTERVAL_MIN;
   const n = typeof raw === "number" ? raw : Number(raw);

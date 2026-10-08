@@ -229,8 +229,7 @@ export function getScanCache(): ScanCacheData {
             version: CACHE_FORMAT_VERSION,
             claude: parsed.claude,
             codex: parsed.codex,
-            antigravity:
-              typeof parsed.antigravity === "object" ? parsed.antigravity : {},
+            antigravity: typeof parsed.antigravity === "object" ? parsed.antigravity : {},
             grok: typeof parsed.grok === "object" ? parsed.grok : {},
             opencode:
               parsed.opencode &&
@@ -242,9 +241,7 @@ export function getScanCache(): ScanCacheData {
         : emptyCache();
   } catch (e) {
     const code =
-      e && typeof e === "object" && "code" in e
-        ? String((e as { code?: unknown }).code)
-        : "";
+      e && typeof e === "object" && "code" in e ? String((e as { code?: unknown }).code) : "";
     // 文件不存在是首次运行的正常路径，不当成故障
     if (code !== "ENOENT") {
       logWarn(

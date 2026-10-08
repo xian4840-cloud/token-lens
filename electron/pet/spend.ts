@@ -41,10 +41,7 @@ export function rowTokens(row: SpendRow): number {
  * 按日期汇总本地 agent 花费。
  * cost 只加能换算出的行；未知价格的用量计 tokens 并标 unpriced，不把未知当成 0。
  */
-export function summarizeLocalSpend(
-  rows: SpendRow[],
-  date: string,
-): PetSpendSummary {
+export function summarizeLocalSpend(rows: SpendRow[], date: string): PetSpendSummary {
   const groups = new Map<
     LocalSource,
     { tokens: number; cost: number; priced: boolean; unpriced: boolean }

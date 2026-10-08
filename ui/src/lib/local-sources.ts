@@ -28,11 +28,9 @@ export const LOCAL_SOURCE_COLORS = [
   "var(--chart-5)",
 ];
 
-export const LOCAL_SOURCE_LABEL: Record<LocalSource, string> =
-  Object.fromEntries(LOCAL_SOURCES.map((s) => [s.value, s.label])) as Record<
-    LocalSource,
-    string
-  >;
+export const LOCAL_SOURCE_LABEL: Record<LocalSource, string> = Object.fromEntries(
+  LOCAL_SOURCES.map((s) => [s.value, s.label]),
+) as Record<LocalSource, string>;
 
 /** 某来源某天使用的单个模型用量 */
 export type DailyModelUsage = { model: string; tokens: number };
@@ -52,11 +50,7 @@ export interface DailyUsageRow {
   total?: number;
   /** 各来源当日按模型分项（按用量降序） */
   models?: Record<string, DailyModelUsage[]>;
-  [key: string]:
-    | number
-    | string
-    | undefined
-    | Record<string, DailyModelUsage[]>;
+  [key: string]: number | string | undefined | Record<string, DailyModelUsage[]>;
 }
 
 /** 本地用量的图表指标：token 数或费用 */
@@ -200,10 +194,7 @@ export function summarizeLocalRecords(
 /**
  * 某一天的本地 agent 合计。未知价格的用量计 tokens 并标 unpriced，不把未知当成 $0。
  */
-export function summarizeLocalDay(
-  records: LocalDailyUsageRecord[],
-  date: string,
-): LocalDaySummary {
+export function summarizeLocalDay(records: LocalDailyUsageRecord[], date: string): LocalDaySummary {
   return summarizeLocalRecords(
     records.filter((r) => r.date === date),
     date,

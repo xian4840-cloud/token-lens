@@ -12,37 +12,10 @@
 import { logWarn } from "../lib/logger";
 import { DEFAULT_PRICING } from "./pricing-table";
 
-export interface ModelPricing {
-  /** 输入 token 单价（/ 1M tokens） */
-  inputPerM: number;
-  /** 输出 token 单价（/ 1M tokens） */
-  outputPerM: number;
-  /** 缓存读取（命中）单价（/ 1M tokens） */
-  cacheReadPerM?: number;
-  /** 缓存写入（创建）单价（/ 1M tokens） */
-  cacheWritePerM?: number;
-  /** 货币，默认 USD */
-  currency?: string;
-}
+import type { ModelPricing, PricingRowDisplay } from "../../shared/types";
 
-/** 设置页展示用的价格行（无正则，可序列化） */
-export interface PricingRowDisplay {
-  key: string;
-  label: string;
-  inputPerM: number;
-  outputPerM: number;
-  cacheReadPerM: number;
-  cacheWritePerM: number;
-  currency: string;
-  /** 该行是否有用户覆盖（用于显示「恢复默认」） */
-  overridden?: boolean;
-  defaults?: {
-    inputPerM: number;
-    outputPerM: number;
-    cacheReadPerM: number;
-    cacheWritePerM: number;
-  };
-}
+/** 单价与设置页价格行的定义在 shared/types/service.ts（界面共用） */
+export type { ModelPricing, PricingRowDisplay };
 
 /** 内置价格行：多一个 match 正则用于按模型名分派 */
 export interface PricingRow extends PricingRowDisplay {
@@ -144,8 +117,7 @@ export function pruneDefaultOverrides(
       (o.inputPerM ?? row.inputPerM) === row.inputPerM &&
       (o.outputPerM ?? row.outputPerM) === row.outputPerM &&
       (o.cacheReadPerM ?? row.cacheReadPerM ?? 0) === (row.cacheReadPerM ?? 0) &&
-      (o.cacheWritePerM ?? row.cacheWritePerM ?? 0) ===
-        (row.cacheWritePerM ?? 0) &&
+      (o.cacheWritePerM ?? row.cacheWritePerM ?? 0) === (row.cacheWritePerM ?? 0) &&
       (o.currency ?? row.currency ?? USD) === (row.currency ?? USD);
     if (!same) out[key] = o;
   }
@@ -158,16 +130,12 @@ export function pruneDefaultOverrides(
  * 这是唯一把存储字符串变成对象的入口（设置页展示与用量换算都经过它），
  * 所以冗余项的剔除放在这里做：存量数据也能在下次读取时自愈。
  */
-export function parseOverrides(
-  raw: string | undefined,
-): Record<string, Partial<ModelPricing>> {
+export function parseOverrides(raw: string | undefined): Record<string, Partial<ModelPricing>> {
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object") {
-      return pruneDefaultOverrides(
-        parsed as Record<string, Partial<ModelPricing>>,
-      );
+      return pruneDefaultOverrides(parsed as Record<string, Partial<ModelPricing>>);
     }
   } catch (e) {
     logWarn(

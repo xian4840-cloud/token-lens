@@ -102,9 +102,7 @@ export function redactText(text: string): string {
   out = out.replace(
     /([?&])([A-Za-z_][A-Za-z0-9_-]*)=([^&\s"'\\]+)/g,
     (whole, sep: string, name: string, value: string) =>
-      SENSITIVE_QUERY_KEYS.has(name.toLowerCase())
-        ? `${sep}${name}=${MASK}`
-        : whole,
+      SENSITIVE_QUERY_KEYS.has(name.toLowerCase()) ? `${sep}${name}=${MASK}` : whole,
   );
   for (const re of SECRET_PATTERNS) {
     out = out.replace(re, MASK);
@@ -145,9 +143,7 @@ export function redactError(e: unknown, depth = 0): string {
  * 脱敏请求头对象，用于记录请求上下文。
  * 白名单式思路不可行（头名字五花八门），故按敏感名单打码。
  */
-export function redactHeaders(
-  headers: Record<string, string> | undefined,
-): Record<string, string> {
+export function redactHeaders(headers: Record<string, string> | undefined): Record<string, string> {
   if (!headers) return {};
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(headers)) {

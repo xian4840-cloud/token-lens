@@ -4,13 +4,10 @@ import { getSetting, listLocalDailyUsage, setSetting } from "../db";
 import { logError } from "../lib/logger";
 import { appIndexHtmlPath, devServerUrl } from "../lib/app-paths";
 import { registerWindowRole } from "../lib/ipc-guard";
+import type { EventPayload } from "../../shared/ipc";
 import { scanAndPersistLocalUsage } from "../local-usage";
 import { toDateKey } from "../local-usage/date";
-import {
-  getLastActivity,
-  startActivityWatch,
-  stopActivityWatch,
-} from "./activity";
+import { getLastActivity, startActivityWatch, stopActivityWatch } from "./activity";
 import { summarizeLocalSpend } from "./spend";
 import type { PetActivity, PetSpendSummary } from "./types";
 
@@ -31,7 +28,10 @@ export function isPetOpen(): boolean {
   return petWin != null && !petWin.isDestroyed();
 }
 
-export function sendToPet(channel: string, payload: unknown): void {
+export function sendToPet<C extends "pet:activity" | "pet:spend-updated">(
+  channel: C,
+  payload: EventPayload<C>,
+): void {
   if (!petWin || petWin.isDestroyed() || petWin.webContents.isDestroyed()) return;
   petWin.webContents.send(channel, payload);
 }

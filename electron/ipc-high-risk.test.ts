@@ -37,7 +37,10 @@ const CHANNELS: Record<string, HighRiskAction> = {
   "model-monitor:disable-opencode": "disable-opencode",
   "model-monitor:launch-codex": "launch-codex",
 };
-const event = (route = "/model-monitor") => ({ sender: { id: 1 }, senderFrame: { url: `file://${INDEX}#${route}`, parent: null } });
+const event = (route = "/model-monitor") => ({
+  sender: { id: 1 },
+  senderFrame: { url: `file://${INDEX}#${route}`, parent: null },
+});
 
 function setup(showMessageBox: DialogLike["showMessageBox"]) {
   const listeners = new Map<string, (...args: unknown[]) => unknown>();
@@ -46,7 +49,11 @@ function setup(showMessageBox: DialogLike["showMessageBox"]) {
     on: (c: string, l: (...args: unknown[]) => unknown) => void listeners.set(c, l),
   };
   const dialog = { showMessageBox: vi.fn(showMessageBox) };
-  registerIpc(ipc, () => cfg, createHighRiskConfirm({ dialog, getParent: () => "main-window", getContext: () => ctx }));
+  registerIpc(
+    ipc,
+    () => cfg,
+    createHighRiskConfirm({ dialog, getParent: () => "main-window", getContext: () => ctx }),
+  );
   const invoke = (channel: string, ...args: unknown[]) => listeners.get(channel)!(event(), ...args);
   return { dialog, invoke, listeners };
 }
@@ -54,7 +61,11 @@ function setup(showMessageBox: DialogLike["showMessageBox"]) {
 describe("高危 IPC 通道的系统确认框", () => {
   it("渲染进程传来的文本和参数一律忽略：确认框内容只由主进程状态决定", async () => {
     const { dialog, invoke } = setup(async () => ({ response: 0 }));
-    const spoof = ["伪造的提示：安全更新，请点继续", { title: "伪造标题", message: "伪造", detail: "伪造", path: "C:/evil.exe" }, "<b>evil</b>"];
+    const spoof = [
+      "伪造的提示：安全更新，请点继续",
+      { title: "伪造标题", message: "伪造", detail: "伪造", path: "C:/evil.exe" },
+      "<b>evil</b>",
+    ];
     for (const [channel, action] of Object.entries(CHANNELS)) {
       await expect(invoke(channel, ...spoof)).resolves.toEqual({ status: "cancelled" });
       const options = dialog.showMessageBox.mock.calls.at(-1)![1];
@@ -68,12 +79,18 @@ describe("高危 IPC 通道的系统确认框", () => {
   it("用户取消：不执行（不会走到写文件 / 改注册表 / 启动程序）", async () => {
     // 若真的执行了，测试环境里 electron 的 app 不存在，会直接抛错
     const { invoke } = setup(async () => ({ response: 0 }));
-    for (const channel of Object.keys(CHANNELS)) await expect(invoke(channel)).resolves.toEqual({ status: "cancelled" });
+    for (const channel of Object.keys(CHANNELS))
+      await expect(invoke(channel)).resolves.toEqual({ status: "cancelled" });
   });
 
   it("一个确认框开着时，其他高危通道立即返回 confirm-pending", async () => {
     let close!: (v: { response: number }) => void;
-    const { dialog, invoke } = setup(() => new Promise((r) => { close = r; }));
+    const { dialog, invoke } = setup(
+      () =>
+        new Promise((r) => {
+          close = r;
+        }),
+    );
     const first = invoke("model-monitor:enable-claude");
     expect(await invoke("model-monitor:disable-opencode")).toEqual({ status: "confirm-pending" });
     expect(await invoke("model-monitor:launch-codex")).toEqual({ status: "confirm-pending" });
@@ -86,13 +103,36 @@ describe("高危 IPC 通道的系统确认框", () => {
     let close!: (v: { response: number }) => void;
     let dialogOpen = false;
     const listeners = new Map<string, (...args: unknown[]) => unknown>();
-    const ipc = { handle: (c: string, l: (...a: unknown[]) => unknown) => void listeners.set(c, l), on: () => undefined };
-    const showMessageBox = vi.fn(() => { dialogOpen = true; return new Promise<{ response: number }>((r) => { close = (v) => { dialogOpen = false; r(v); }; }); });
-    registerIpc(ipc, () => ({ ...cfg, isFocused: () => !dialogOpen }), createHighRiskConfirm({ dialog: { showMessageBox }, getParent: () => "main-window", getContext: () => ctx }));
+    const ipc = {
+      handle: (c: string, l: (...a: unknown[]) => unknown) => void listeners.set(c, l),
+      on: () => undefined,
+    };
+    const showMessageBox = vi.fn(() => {
+      dialogOpen = true;
+      return new Promise<{ response: number }>((r) => {
+        close = (v) => {
+          dialogOpen = false;
+          r(v);
+        };
+      });
+    });
+    registerIpc(
+      ipc,
+      () => ({ ...cfg, isFocused: () => !dialogOpen }),
+      createHighRiskConfirm({
+        dialog: { showMessageBox },
+        getParent: () => "main-window",
+        getContext: () => ctx,
+      }),
+    );
     const first = listeners.get("model-monitor:enable-opencode")!(event());
-    expect(await listeners.get("model-monitor:disable-claude")!(event())).toEqual({ status: "confirm-pending" });
+    expect(await listeners.get("model-monitor:disable-claude")!(event())).toEqual({
+      status: "confirm-pending",
+    });
     // 不在模型监测页的请求照样先被页面校验拒绝
-    expect(() => listeners.get("model-monitor:disable-claude")!(event("/overview"))).toThrow("拒绝来自未授权页面的请求");
+    expect(() => listeners.get("model-monitor:disable-claude")!(event("/overview"))).toThrow(
+      "拒绝来自未授权页面的请求",
+    );
     close({ response: 0 });
     await expect(first).resolves.toEqual({ status: "cancelled" });
     // 确认框关了、主窗口回到前台后，新的请求正常弹框
@@ -105,7 +145,9 @@ describe("高危 IPC 通道的系统确认框", () => {
 
   it("前台 / 页面限制仍在确认框之前生效：不在模型监测页时直接拒绝，不弹框", async () => {
     const { dialog, listeners } = setup(async () => ({ response: 1 }));
-    expect(() => listeners.get("model-monitor:enable-claude")!(event("/overview"))).toThrow("拒绝来自未授权页面的请求");
+    expect(() => listeners.get("model-monitor:enable-claude")!(event("/overview"))).toThrow(
+      "拒绝来自未授权页面的请求",
+    );
     expect(dialog.showMessageBox).not.toHaveBeenCalled();
   });
 });

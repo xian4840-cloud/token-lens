@@ -34,11 +34,7 @@ export function LocalUsageBarChart({
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} accessibilityLayer={false}>
-        <CartesianGrid
-          strokeDasharray="3 3"
-          stroke="rgba(110, 95, 70, 0.12)"
-          vertical={false}
-        />
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(110, 95, 70, 0.12)" vertical={false} />
         <XAxis
           dataKey="date"
           tick={{ fontSize: tickSize, fill: "var(--muted-foreground)" }}

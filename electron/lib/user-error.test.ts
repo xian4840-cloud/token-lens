@@ -21,7 +21,7 @@ describe("mapErrorToUserMessage", () => {
   });
 
   it("401 / 403 提示去管理页更新凭证", () => {
-    expect(mapErrorToUserMessage(new Error("OpenAI 401: {\"error\":\"invalid_api_key\"}"))).toBe(
+    expect(mapErrorToUserMessage(new Error('OpenAI 401: {"error":"invalid_api_key"}'))).toBe(
       "Key 无效或已过期，请到管理页更新",
     );
     expect(mapErrorToUserMessage(new Error("DeepSeek 403: forbidden"))).toBe(
@@ -36,18 +36,12 @@ describe("mapErrorToUserMessage", () => {
   });
 
   it("缺凭证走补全提示", () => {
-    expect(mapErrorToUserMessage(new Error("缺少 API Key"))).toBe(
-      "缺少凭证，请到管理页补全",
-    );
-    expect(mapErrorToUserMessage(new Error("缺少 Cookie"))).toBe(
-      "缺少凭证，请到管理页补全",
-    );
+    expect(mapErrorToUserMessage(new Error("缺少 API Key"))).toBe("缺少凭证，请到管理页补全");
+    expect(mapErrorToUserMessage(new Error("缺少 Cookie"))).toBe("缺少凭证，请到管理页补全");
   });
 
   it("已经是短中文、不含上游原文的句子原样保留", () => {
-    expect(mapErrorToUserMessage(new Error("请重新登录获取凭证"))).toBe(
-      "请重新登录获取凭证",
-    );
+    expect(mapErrorToUserMessage(new Error("请重新登录获取凭证"))).toBe("请重新登录获取凭证");
   });
 
   it("其余情况给一句能去日志里看的兜底，不把 JSON 原文甩到卡片", () => {

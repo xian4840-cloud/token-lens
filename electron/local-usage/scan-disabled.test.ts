@@ -15,21 +15,46 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../db", () => ({
   markLocalScanned: () => {},
-  getSetting: (key: string) => (key === "disabledLocalSources" ? JSON.stringify(mocks.disabled) : undefined),
+  getSetting: (key: string) =>
+    key === "disabledLocalSources" ? JSON.stringify(mocks.disabled) : undefined,
   replaceLocalDailyUsageBySource: () => {},
   upsertLocalDailyUsage: () => {},
 }));
 vi.mock("./cache", () => ({ persistScanCache: () => false }));
 
 const row = (source: LocalSource) => ({
-  source, model: "m", date: "2026-09-01", sessions: 1,
-  inputTokens: 1, outputTokens: 1, cacheCreationTokens: 0, cacheReadTokens: 0, reasoningTokens: 0,
+  source,
+  model: "m",
+  date: "2026-09-01",
+  sessions: 1,
+  inputTokens: 1,
+  outputTokens: 1,
+  cacheCreationTokens: 0,
+  cacheReadTokens: 0,
+  reasoningTokens: 0,
 });
-vi.mock("./claude-code", () => ({ scanClaudeCode: async () => (mocks.calls.push("claude-code"), [row("claude-code")]) }));
+vi.mock("./claude-code", () => ({
+  scanClaudeCode: async () => (mocks.calls.push("claude-code"), [row("claude-code")]),
+}));
 vi.mock("./codex", () => ({ scanCodex: async () => (mocks.calls.push("codex"), [row("codex")]) }));
-vi.mock("./opencode", () => ({ scanOpenCode: async () => (mocks.calls.push("opencode"), { available: true, rows: [row("opencode")] }) }));
-vi.mock("./antigravity", () => ({ scanAntigravity: async () => (mocks.calls.push("antigravity"), { available: true, rows: [row("antigravity")] }) }));
-vi.mock("./grok-build", () => ({ scanGrokBuild: async () => (mocks.calls.push("grok-build"), { available: true, rows: [row("grok-build")] }) }));
+vi.mock("./opencode", () => ({
+  scanOpenCode: async () => (
+    mocks.calls.push("opencode"),
+    { available: true, rows: [row("opencode")] }
+  ),
+}));
+vi.mock("./antigravity", () => ({
+  scanAntigravity: async () => (
+    mocks.calls.push("antigravity"),
+    { available: true, rows: [row("antigravity")] }
+  ),
+}));
+vi.mock("./grok-build", () => ({
+  scanGrokBuild: async () => (
+    mocks.calls.push("grok-build"),
+    { available: true, rows: [row("grok-build")] }
+  ),
+}));
 
 const { scanLocalUsage } = await import("./index");
 
@@ -57,6 +82,12 @@ describe("scanLocalUsage 跳过已关闭的来源", () => {
 
   it("全部开启时五家都扫", async () => {
     await scanLocalUsage();
-    expect(mocks.calls.sort()).toEqual(["antigravity", "claude-code", "codex", "grok-build", "opencode"]);
+    expect(mocks.calls.sort()).toEqual([
+      "antigravity",
+      "claude-code",
+      "codex",
+      "grok-build",
+      "opencode",
+    ]);
   });
 });

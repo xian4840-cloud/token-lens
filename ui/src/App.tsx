@@ -1,5 +1,12 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { createHashRouter, Navigate, Outlet, RouterProvider, useLocation, useNavigate } from "react-router-dom";
+import {
+  createHashRouter,
+  Navigate,
+  Outlet,
+  RouterProvider,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import { BackgroundLayer } from "@/components/BackgroundLayer";
 import { Sidebar } from "@/components/Sidebar";
 import { Dashboard } from "@/pages/Dashboard";
@@ -15,24 +22,14 @@ import {
 import { CommandPalette } from "@/components/CommandPalette";
 import { useAppStore } from "@/store/app";
 
-const Usage = lazy(() =>
-  import("@/pages/Usage").then((m) => ({ default: m.Usage })),
-);
-const Trends = lazy(() =>
-  import("@/pages/Trends").then((m) => ({ default: m.Trends })),
-);
-const Services = lazy(() =>
-  import("@/pages/Services").then((m) => ({ default: m.Services })),
-);
+const Usage = lazy(() => import("@/pages/Usage").then((m) => ({ default: m.Usage })));
+const Trends = lazy(() => import("@/pages/Trends").then((m) => ({ default: m.Trends })));
+const Services = lazy(() => import("@/pages/Services").then((m) => ({ default: m.Services })));
 const SettingsPage = lazy(() =>
   import("@/pages/Settings").then((m) => ({ default: m.SettingsPage })),
 );
-const PricingPage = lazy(() =>
-  import("@/pages/Pricing").then((m) => ({ default: m.PricingPage })),
-);
-const PetPage = lazy(() =>
-  import("@/pages/Pet").then((m) => ({ default: m.PetPage })),
-);
+const PricingPage = lazy(() => import("@/pages/Pricing").then((m) => ({ default: m.PricingPage })));
+const PetPage = lazy(() => import("@/pages/Pet").then((m) => ({ default: m.PetPage })));
 const ModelMonitor = lazy(() =>
   import("@/pages/ModelMonitor").then((m) => ({ default: m.ModelMonitor })),
 );
@@ -134,12 +131,54 @@ const router = createHashRouter([
     element: <MainShell />,
     children: [
       { index: true, element: <Dashboard /> },
-      { path: "usage", element: <LazyPage><Usage /></LazyPage> },
-      { path: "trends", element: <LazyPage><Trends /></LazyPage> },
-      { path: "model-monitor", element: <LazyPage><ModelMonitor /></LazyPage> },
-      { path: "services", element: <LazyPage><Services /></LazyPage> },
-      { path: "settings", element: <LazyPage><SettingsPage /></LazyPage> },
-      { path: "settings/pricing", element: <LazyPage><PricingPage /></LazyPage> },
+      {
+        path: "usage",
+        element: (
+          <LazyPage>
+            <Usage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "trends",
+        element: (
+          <LazyPage>
+            <Trends />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "model-monitor",
+        element: (
+          <LazyPage>
+            <ModelMonitor />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "services",
+        element: (
+          <LazyPage>
+            <Services />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "settings",
+        element: (
+          <LazyPage>
+            <SettingsPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "settings/pricing",
+        element: (
+          <LazyPage>
+            <PricingPage />
+          </LazyPage>
+        ),
+      },
       { path: "*", element: <Navigate to="/" replace /> },
     ],
   },

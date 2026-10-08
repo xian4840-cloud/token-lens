@@ -32,17 +32,59 @@ afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-interface Msg { id: string; ts: string; input: number; output: number; cacheRead?: number; cacheWrite?: number; model?: string }
+interface Msg {
+  id: string;
+  ts: string;
+  input: number;
+  output: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  model?: string;
+}
 
 /** 与真实日志同形：user 行 + 同一 message.id 的流式中间态 / 终态两行 assistant */
 function lines(sessionId: string, msgs: Msg[]): string[] {
   const out: string[] = [];
   for (const m of msgs) {
-    out.push(JSON.stringify({ type: "user", sessionId, timestamp: m.ts, uuid: `u-${m.id}`, message: { role: "user", content: "hi" } }));
-    const usage = { input_tokens: m.input, output_tokens: m.output, cache_read_input_tokens: m.cacheRead ?? 0, cache_creation_input_tokens: m.cacheWrite ?? 0 };
-    const base = { type: "assistant", sessionId, timestamp: m.ts, requestId: `req-${m.id}`, uuid: `a-${m.id}` };
-    out.push(JSON.stringify({ ...base, message: { id: m.id, model: m.model ?? "claude-sonnet-4-5", role: "assistant", usage: { ...usage, output_tokens: 1 } } }));
-    out.push(JSON.stringify({ ...base, message: { id: m.id, model: m.model ?? "claude-sonnet-4-5", role: "assistant", usage } }));
+    out.push(
+      JSON.stringify({
+        type: "user",
+        sessionId,
+        timestamp: m.ts,
+        uuid: `u-${m.id}`,
+        message: { role: "user", content: "hi" },
+      }),
+    );
+    const usage = {
+      input_tokens: m.input,
+      output_tokens: m.output,
+      cache_read_input_tokens: m.cacheRead ?? 0,
+      cache_creation_input_tokens: m.cacheWrite ?? 0,
+    };
+    const base = {
+      type: "assistant",
+      sessionId,
+      timestamp: m.ts,
+      requestId: `req-${m.id}`,
+      uuid: `a-${m.id}`,
+    };
+    out.push(
+      JSON.stringify({
+        ...base,
+        message: {
+          id: m.id,
+          model: m.model ?? "claude-sonnet-4-5",
+          role: "assistant",
+          usage: { ...usage, output_tokens: 1 },
+        },
+      }),
+    );
+    out.push(
+      JSON.stringify({
+        ...base,
+        message: { id: m.id, model: m.model ?? "claude-sonnet-4-5", role: "assistant", usage },
+      }),
+    );
   }
   return out;
 }
@@ -54,15 +96,16 @@ function writeSession(name: string, content: string[]): string {
 }
 
 const total = (rows: Awaited<ReturnType<typeof scanClaudeCode>>) =>
-  rows.reduce((s, r) => s + r.inputTokens + r.outputTokens + r.cacheReadTokens + r.cacheCreationTokens, 0);
+  rows.reduce(
+    (s, r) => s + r.inputTokens + r.outputTokens + r.cacheReadTokens + r.cacheCreationTokens,
+    0,
+  );
 
 const day1 = [
   { id: "msg_01A", ts: "2026-09-01T02:00:00.000Z", input: 10, output: 100, cacheRead: 1000 },
   { id: "msg_01B", ts: "2026-09-01T02:05:00.000Z", input: 20, output: 200, cacheWrite: 50 },
 ];
-const day3 = [
-  { id: "msg_03A", ts: "2026-09-03T02:00:00.000Z", input: 30, output: 300 },
-];
+const day3 = [{ id: "msg_03A", ts: "2026-09-03T02:00:00.000Z", input: 30, output: 300 }];
 
 describe("scanClaudeCode 跨文件去重", () => {
   it("续接会话复制进来的历史只算一次（回归）", async () => {
@@ -73,8 +116,17 @@ describe("scanClaudeCode 跨文件去重", () => {
     const rows = await scanClaudeCode(undefined, projects);
     expect(total(rows)).toBe(1110 + 270 + 330);
     const sept1 = rows.find((r) => r.date === "2026-09-01")!;
-    expect(sept1).toMatchObject({ inputTokens: 30, outputTokens: 300, cacheReadTokens: 1000, cacheCreationTokens: 50, sessions: 1 });
-    expect(rows.find((r) => r.date === "2026-09-03")).toMatchObject({ inputTokens: 30, sessions: 1 });
+    expect(sept1).toMatchObject({
+      inputTokens: 30,
+      outputTokens: 300,
+      cacheReadTokens: 1000,
+      cacheCreationTokens: 50,
+      sessions: 1,
+    });
+    expect(rows.find((r) => r.date === "2026-09-03")).toMatchObject({
+      inputTokens: 30,
+      sessions: 1,
+    });
   });
 
   it("续接文件排在原文件前面时，总量同样只算一次", async () => {
@@ -106,7 +158,12 @@ describe("scanClaudeCode 跨文件去重", () => {
     writeSession("bbbb-resumed", lines("bbbb-resumed", [...day1, ...day3]));
     await scanClaudeCode(undefined, projects);
 
-    fs.appendFileSync(a, lines("aaaa-original", [{ id: "msg_01C", ts: "2026-09-01T03:00:00.000Z", input: 1, output: 1 }]).join("\n") + "\n");
+    fs.appendFileSync(
+      a,
+      lines("aaaa-original", [
+        { id: "msg_01C", ts: "2026-09-01T03:00:00.000Z", input: 1, output: 1 },
+      ]).join("\n") + "\n",
+    );
     const t = new Date(Date.now() + 5000);
     fs.utimesSync(a, t, t);
     const rows = await scanClaudeCode(undefined, projects);
@@ -134,7 +191,14 @@ describe("scanClaudeCode 跨文件去重", () => {
   });
 
   it("没有 message.id 的行不参与跨文件去重（保持原口径）", async () => {
-    const anon = (sid: string) => [JSON.stringify({ type: "assistant", sessionId: sid, timestamp: "2026-09-01T00:00:00Z", message: { model: "claude-sonnet-4-5", usage: { input_tokens: 5, output_tokens: 5 } } })];
+    const anon = (sid: string) => [
+      JSON.stringify({
+        type: "assistant",
+        sessionId: sid,
+        timestamp: "2026-09-01T00:00:00Z",
+        message: { model: "claude-sonnet-4-5", usage: { input_tokens: 5, output_tokens: 5 } },
+      }),
+    ];
     writeSession("a", anon("a"));
     writeSession("b", anon("b"));
     expect(total(await scanClaudeCode(undefined, projects))).toBe(20);

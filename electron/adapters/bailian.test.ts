@@ -80,35 +80,27 @@ describe("百炼余额", () => {
 
   it("Code 不是 Success 时抛错", async () => {
     respond({ Code: "Forbidden", Message: "无权限" });
-    await expect(bailianAdapter.fetchBalance(config, secrets)).rejects.toThrow(
-      /百炼/,
-    );
+    await expect(bailianAdapter.fetchBalance(config, secrets)).rejects.toThrow(/百炼/);
   });
 
   it("响应不是 JSON 时给出可读错误", async () => {
     state.ok = true;
     state.status = 200;
     state.text = "<html>502 Bad Gateway</html>";
-    await expect(bailianAdapter.fetchBalance(config, secrets)).rejects.toThrow(
-      /非 JSON/,
-    );
+    await expect(bailianAdapter.fetchBalance(config, secrets)).rejects.toThrow(/非 JSON/);
   });
 
   it("HTTP 错误时带上状态码", async () => {
     state.ok = false;
     state.status = 500;
     state.text = "internal error";
-    await expect(bailianAdapter.fetchBalance(config, secrets)).rejects.toThrow(
-      /百炼 500/,
-    );
+    await expect(bailianAdapter.fetchBalance(config, secrets)).rejects.toThrow(/百炼 500/);
   });
 
   it("缺少 AccessKey 时立刻报错，不发请求", async () => {
-    await expect(bailianAdapter.fetchBalance({}, secrets)).rejects.toThrow(
+    await expect(bailianAdapter.fetchBalance({}, secrets)).rejects.toThrow(/缺少 AccessKey/);
+    await expect(bailianAdapter.fetchBalance({ accessKeyId: "x" }, {})).rejects.toThrow(
       /缺少 AccessKey/,
     );
-    await expect(
-      bailianAdapter.fetchBalance({ accessKeyId: "x" }, {}),
-    ).rejects.toThrow(/缺少 AccessKey/);
   });
 });

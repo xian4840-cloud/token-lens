@@ -41,17 +41,13 @@ describe("validateServiceInput", () => {
   it("拒绝空名称与超长名称", () => {
     const base = { provider: "deepseek", fields: { apiKey: "k" } };
     expect(() => validateServiceInput({ ...base, name: "   " })).toThrow(/不能为空/);
-    expect(() => validateServiceInput({ ...base, name: "a".repeat(101) })).toThrow(
-      /过长/,
-    );
+    expect(() => validateServiceInput({ ...base, name: "a".repeat(101) })).toThrow(/过长/);
   });
 
   it("拒绝非对象输入与缺失的字段集合", () => {
     expect(() => validateServiceInput(null)).toThrow(/无效/);
     expect(() => validateServiceInput("x")).toThrow(/无效/);
-    expect(() =>
-      validateServiceInput({ name: "x", provider: "deepseek" }),
-    ).toThrow(/缺少字段数据/);
+    expect(() => validateServiceInput({ name: "x", provider: "deepseek" })).toThrow(/缺少字段数据/);
   });
 
   it("丢弃 schema 之外的字段（防止任意键写进存储）", () => {
@@ -86,9 +82,9 @@ describe("validateServiceInput", () => {
   });
 
   it("必填字段缺失或为空串时报错", () => {
-    expect(() =>
-      validateServiceInput({ name: "x", provider: "deepseek", fields: {} }),
-    ).toThrow(/缺少必填字段/);
+    expect(() => validateServiceInput({ name: "x", provider: "deepseek", fields: {} })).toThrow(
+      /缺少必填字段/,
+    );
     expect(() =>
       validateServiceInput({ name: "x", provider: "deepseek", fields: { apiKey: "" } }),
     ).toThrow(/缺少必填字段/);
@@ -133,25 +129,17 @@ describe("validatePeriod", () => {
   it("起止需为字符串且是合法日期", () => {
     expect(() => validatePeriod(null)).toThrow(/无效/);
     expect(() => validatePeriod({ start: 1, end: 2 })).toThrow(/字符串/);
-    expect(() =>
-      validatePeriod({ start: "不是日期", end: "2026-09-30" }),
-    ).toThrow(/非合法日期/);
+    expect(() => validatePeriod({ start: "不是日期", end: "2026-09-30" })).toThrow(/非合法日期/);
   });
 
   it("拒绝起始晚于结束", () => {
-    expect(() =>
-      validatePeriod({ start: "2026-09-30", end: "2026-09-01" }),
-    ).toThrow(/不能晚于/);
+    expect(() => validatePeriod({ start: "2026-09-30", end: "2026-09-01" })).toThrow(/不能晚于/);
   });
 
   it("拒绝跨度超过 366 天（防止一次拉取过大范围）", () => {
-    expect(() =>
-      validatePeriod({ start: "2024-01-01", end: "2026-01-01" }),
-    ).toThrow(/跨度超过/);
+    expect(() => validatePeriod({ start: "2024-01-01", end: "2026-01-01" })).toThrow(/跨度超过/);
     // 恰好 365 天应放行
-    expect(() =>
-      validatePeriod({ start: "2026-01-01", end: "2027-01-01" }),
-    ).not.toThrow();
+    expect(() => validatePeriod({ start: "2026-01-01", end: "2027-01-01" })).not.toThrow();
   });
 });
 

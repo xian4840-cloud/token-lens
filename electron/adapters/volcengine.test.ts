@@ -56,16 +56,12 @@ describe("火山引擎余额", () => {
 
   it("Result 整个缺失时也不产生 NaN", async () => {
     respond({ ResponseMetadata: { RequestId: "r1" } });
-    expect(
-      (await volcengineAdapter.fetchBalance(config, secrets)).remaining,
-    ).toBeUndefined();
+    expect((await volcengineAdapter.fetchBalance(config, secrets)).remaining).toBeUndefined();
   });
 
   it("金额是非数字字符串时不产生 NaN", async () => {
     respond({ Result: { AvailableBalance: "N/A" } });
-    expect(
-      (await volcengineAdapter.fetchBalance(config, secrets)).remaining,
-    ).toBeUndefined();
+    expect((await volcengineAdapter.fetchBalance(config, secrets)).remaining).toBeUndefined();
   });
 
   it("业务错误写在 ResponseMetadata.Error 时抛错（HTTP 仍是 200）", async () => {
@@ -81,14 +77,10 @@ describe("火山引擎余额", () => {
     state.ok = false;
     state.status = 403;
     state.text = "forbidden";
-    await expect(volcengineAdapter.fetchBalance(config, secrets)).rejects.toThrow(
-      /火山引擎 403/,
-    );
+    await expect(volcengineAdapter.fetchBalance(config, secrets)).rejects.toThrow(/火山引擎 403/);
   });
 
   it("缺少 AccessKey 时立刻报错，不发请求", async () => {
-    await expect(volcengineAdapter.fetchBalance({}, secrets)).rejects.toThrow(
-      /缺少 AccessKey/,
-    );
+    await expect(volcengineAdapter.fetchBalance({}, secrets)).rejects.toThrow(/缺少 AccessKey/);
   });
 });

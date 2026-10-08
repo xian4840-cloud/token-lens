@@ -9,7 +9,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "paths": { "@/*": ["./src/*"] }
+    "paths": { "@/*": ["./src/*"], "@shared/*": ["../shared/*"] }
   },
-  "include": ["src"]
+  "include": ["src", "../shared"]
 }

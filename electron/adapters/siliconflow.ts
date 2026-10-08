@@ -25,9 +25,7 @@ interface SiliconFlowUserResponse {
  * totalBalance 缺失时退回 balance + chargeBalance 自行求和，
  * 两者都取不到才返回 undefined（让卡片显示占位符而不是 NaN）。
  */
-export function pickBalance(
-  data: SiliconFlowUserResponse["data"] | undefined,
-): number | undefined {
+export function pickBalance(data: SiliconFlowUserResponse["data"] | undefined): number | undefined {
   if (!data) return undefined;
   const total = Number(data.totalBalance);
   if (Number.isFinite(total)) return total;

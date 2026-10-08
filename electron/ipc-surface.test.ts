@@ -1,8 +1,73 @@
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { EVENT_CHANNELS, INVOKE_CHANNELS, SEND_CHANNELS } from "../shared/ipc";
 import { registerIpc } from "./ipc";
 import type { GuardConfig } from "./lib/ipc-guard";
+
+/**
+ * 两个 preload 实际用到的通道：替换 electron 的 contextBridge / ipcRenderer，
+ * 加载 preload 拿到它暴露的 api，逐个调用并记录打到了哪个通道。
+ */
+const electronFake = vi.hoisted(() => ({
+  exposed: undefined as Record<string, (...args: unknown[]) => unknown> | undefined,
+  calls: [] as { kind: "invoke" | "send" | "on"; channel: string }[],
+}));
+vi.mock("electron", () => ({
+  contextBridge: {
+    exposeInMainWorld: (_key: string, api: Record<string, (...args: unknown[]) => unknown>) => {
+      electronFake.exposed = api;
+    },
+  },
+  ipcRenderer: {
+    invoke: (channel: string) => (
+      electronFake.calls.push({ kind: "invoke", channel }),
+      Promise.resolve()
+    ),
+    send: (channel: string) => void electronFake.calls.push({ kind: "send", channel }),
+    on: (channel: string) => void electronFake.calls.push({ kind: "on", channel }),
+    removeListener: () => undefined,
+  },
+  // ipc.ts 用到的其余导出：测试里不会真的调用
+  app: undefined,
+  BrowserWindow: undefined,
+  dialog: undefined,
+  ipcMain: undefined,
+  shell: undefined,
+  webContents: undefined,
+  session: undefined,
+  safeStorage: undefined,
+  screen: undefined,
+  net: undefined,
+}));
+
+interface PreloadUsage {
+  methods: Record<string, { kind: string; channel: string }>;
+  channels: string[];
+}
+
+async function loadPreload(file: "./preload" | "./pet-preload"): Promise<PreloadUsage> {
+  vi.resetModules();
+  electronFake.exposed = undefined;
+  await import(file);
+  const api = electronFake.exposed!;
+  const methods: PreloadUsage["methods"] = {};
+  for (const [name, fn] of Object.entries(api)) {
+    electronFake.calls.length = 0;
+    void fn(() => undefined);
+    expect(electronFake.calls, name).toHaveLength(1);
+    methods[name] = electronFake.calls[0];
+  }
+  return {
+    methods,
+    channels: Object.values(methods)
+      .filter((m) => m.kind !== "on")
+      .map((m) => m.channel),
+  };
+}
+
+const mainPreload = await loadPreload("./preload");
+const petPreload = await loadPreload("./pet-preload");
 
 /**
  * IPC 暴露面的整体约束：
@@ -28,9 +93,8 @@ const cfg: GuardConfig = {
   isFocused: () => false,
 };
 
-function channelsUsedBy(file: string): string[] {
-  const src = fs.readFileSync(path.join(__dirname, file), "utf8");
-  return [...src.matchAll(/ipcRenderer\.(?:invoke|send)\(\s*"([^"]+)"/g)].map((m) => m[1]);
+function channelsUsedBy(file: "preload.ts" | "pet-preload.ts"): string[] {
+  return (file === "preload.ts" ? mainPreload : petPreload).channels;
 }
 
 describe("IPC 暴露面", () => {
@@ -77,13 +141,22 @@ describe("IPC 暴露面", () => {
   });
 
   it("除上述通道外，没有任何通道对桌宠窗口开放", () => {
-    const petOpen = [...policies].filter(([, p]) => p.roles.includes("pet")).map(([c]) => c).sort();
+    const petOpen = [...policies]
+      .filter(([, p]) => p.roles.includes("pet"))
+      .map(([c]) => c)
+      .sort();
     expect(petOpen).toEqual(channelsUsedBy("pet-preload.ts").sort());
   });
 
   it("主窗口 preload 不再暴露桌宠专用通道", () => {
     const used = channelsUsedBy("preload.ts");
-    for (const c of ["pet:todaySpend", "pet:getActivity", "pet:drag-start", "pet:drag-move", "pet:drag-end"]) {
+    for (const c of [
+      "pet:todaySpend",
+      "pet:getActivity",
+      "pet:drag-start",
+      "pet:drag-move",
+      "pet:drag-end",
+    ]) {
       expect(used).not.toContain(c);
     }
   });
@@ -96,7 +169,50 @@ describe("IPC 暴露面", () => {
       "model-monitor:disable-opencode",
       "model-monitor:launch-codex",
     ]) {
-      expect(policies.get(c), c).toEqual({ roles: ["main"], highRisk: { route: "/model-monitor" } });
+      expect(policies.get(c), c).toEqual({
+        roles: ["main"],
+        highRisk: { route: "/model-monitor" },
+      });
+    }
+  });
+
+  it("preload 的每个方法都打到 shared/ipc.ts 通道表里登记的通道", () => {
+    for (const usage of [mainPreload, petPreload]) {
+      for (const [method, { kind, channel }] of Object.entries(usage.methods)) {
+        if (kind === "invoke")
+          expect(channel, method).toBe(INVOKE_CHANNELS[method as keyof typeof INVOKE_CHANNELS]);
+        else if (kind === "send")
+          expect(channel, method).toBe(SEND_CHANNELS[method as keyof typeof SEND_CHANNELS]);
+        else {
+          // onXxxUpdated / onXxx -> 事件名 xxxUpdated / xxx
+          const event = method.replace(/^on(.)/, (_m, c: string) => c.toLowerCase());
+          expect(channel, method).toBe(EVENT_CHANNELS[event as keyof typeof EVENT_CHANNELS]);
+        }
+      }
+    }
+  });
+
+  it("通道表里的 invoke / send 通道都已在主进程注册，主进程也没有表外的通道", () => {
+    const declared = [...Object.values(INVOKE_CHANNELS), ...Object.values(SEND_CHANNELS)].sort();
+    expect([...ipc.registered].sort()).toEqual(declared);
+  });
+
+  it("通道名在各表内外都不重复", () => {
+    const all = [
+      ...Object.values(INVOKE_CHANNELS),
+      ...Object.values(SEND_CHANNELS),
+      ...Object.values(EVENT_CHANNELS),
+    ];
+    expect(new Set(all).size).toBe(all.length);
+  });
+
+  it("preload 运行在沙箱里，运行时只能 require electron（其余只允许 import type）", () => {
+    for (const file of ["preload.ts", "pet-preload.ts"]) {
+      const src = fs.readFileSync(path.join(__dirname, file), "utf8");
+      const runtimeImports = [...src.matchAll(/^import\s+(?!type\b)[^;]*?from\s+"([^"]+)"/gm)].map(
+        (m) => m[1],
+      );
+      expect(runtimeImports, file).toEqual(["electron"]);
     }
   });
 });

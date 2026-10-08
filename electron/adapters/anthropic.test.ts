@@ -58,9 +58,7 @@ describe("groupByModel", () => {
 
   it("promptTokens 与 completionTokens 之和等于 totalTokens", () => {
     const it0 = groupByModel(report())[0];
-    expect((it0.promptTokens ?? 0) + (it0.completionTokens ?? 0)).toBe(
-      it0.totalTokens,
-    );
+    expect((it0.promptTokens ?? 0) + (it0.completionTokens ?? 0)).toBe(it0.totalTokens);
   });
 
   it("按模型分组，不同模型各自成项", () => {
@@ -68,10 +66,7 @@ describe("groupByModel", () => {
       { date: "2026-09-01", model: "claude-sonnet-5", input_tokens: 1, output_tokens: 1 },
       { date: "2026-09-01", model: "claude-opus-5", input_tokens: 2, output_tokens: 2 },
     ]);
-    expect(items.map((i) => i.model).sort()).toEqual([
-      "claude-opus-5",
-      "claude-sonnet-5",
-    ]);
+    expect(items.map((i) => i.model).sort()).toEqual(["claude-opus-5", "claude-sonnet-5"]);
   });
 
   it("缺字段按 0 计，不产生 NaN", () => {
@@ -88,18 +83,12 @@ describe("groupByModel", () => {
 
 describe("fetchBalance 的卡片主数字", () => {
   it("与用量明细的合计一致，含缓存读写（回归）", async () => {
-    const bal = await anthropicAdapter.fetchBalance(
-      { organizationId: "org-1" },
-      { apiKey: "k" },
-    );
+    const bal = await anthropicAdapter.fetchBalance({ organizationId: "org-1" }, { apiKey: "k" });
     // 旧实现这里是 2000（只加了 input + output）
     expect(bal.used).toBe(EXPECTED_TOTAL);
     expect(bal.currency).toBe("tokens");
 
     const items = groupByModel(report());
-    expect(bal.used).toBe(
-      items.reduce((sum, it) => sum + (it.totalTokens ?? 0), 0),
-    );
+    expect(bal.used).toBe(items.reduce((sum, it) => sum + (it.totalTokens ?? 0), 0));
   });
 });
-

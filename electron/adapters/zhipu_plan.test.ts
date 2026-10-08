@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  measureLimit,
-  parseQuotaLimits,
-  planLevelLabel,
-} from "./zhipu_plan";
+import { measureLimit, parseQuotaLimits, planLevelLabel } from "./zhipu_plan";
 import type { ZhipuEnvelope } from "./zhipu-common";
 
 /**
@@ -20,9 +16,12 @@ function envelope(limits: unknown[], data: Record<string, unknown> = {}): ZhipuE
 
 describe("measureLimit", () => {
   it("有总量与当前值时给出绝对值", () => {
-    expect(
-      measureLimit({ type: "TOKENS_LIMIT", usage: 100, currentValue: 30 }),
-    ).toEqual({ used: 30, total: 100, remaining: 70, unit: "tokens" });
+    expect(measureLimit({ type: "TOKENS_LIMIT", usage: 100, currentValue: 30 })).toEqual({
+      used: 30,
+      total: 100,
+      remaining: 70,
+      unit: "tokens",
+    });
   });
 
   it("有总量与剩余值时反推已用", () => {
@@ -52,9 +51,12 @@ describe("measureLimit", () => {
   });
 
   it("MCP / 工具类窗口的单位是「次」而不是 tokens", () => {
-    expect(
-      measureLimit({ type: "TIME_LIMIT", usage: 200, currentValue: 50 }),
-    ).toEqual({ used: 50, total: 200, remaining: 150, unit: "次" });
+    expect(measureLimit({ type: "TIME_LIMIT", usage: 200, currentValue: 50 })).toEqual({
+      used: 50,
+      total: 200,
+      remaining: 150,
+      unit: "次",
+    });
   });
 
   it("没有任何可用数字时返回 undefined（而不是编一个 0）", () => {
@@ -66,9 +68,7 @@ describe("measureLimit", () => {
   });
 
   it("绝对值优先于百分比", () => {
-    expect(measureLimit({ usage: 100, currentValue: 30, percentage: 99 })?.total).toBe(
-      100,
-    );
+    expect(measureLimit({ usage: 100, currentValue: 30, percentage: 99 })?.total).toBe(100);
   });
 });
 
@@ -108,9 +108,7 @@ describe("parseQuotaLimits", () => {
   });
 
   it("取不到数字的窗口被跳过，不占位", () => {
-    const { windows } = parseQuotaLimits(
-      envelope([{ type: "TOKENS_LIMIT", unit: 3, number: 5 }]),
-    );
+    const { windows } = parseQuotaLimits(envelope([{ type: "TOKENS_LIMIT", unit: 3, number: 5 }]));
     expect(windows).toEqual([]);
   });
 
@@ -118,9 +116,7 @@ describe("parseQuotaLimits", () => {
     expect(parseQuotaLimits({ code: 200, data: {} }).windows).toEqual([]);
     expect(parseQuotaLimits({ code: 200, data: [] }).windows).toEqual([]);
     expect(parseQuotaLimits({ code: 200 }).windows).toEqual([]);
-    expect(parseQuotaLimits({ code: 200, data: { limits: "oops" } }).windows).toEqual(
-      [],
-    );
+    expect(parseQuotaLimits({ code: 200, data: { limits: "oops" } }).windows).toEqual([]);
   });
 
   it("重置时间兼容秒级与毫秒级时间戳", () => {

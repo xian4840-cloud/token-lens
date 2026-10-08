@@ -37,7 +37,10 @@ function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
 
 function DialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)} {...props} />
+    <div
+      className={cn("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)}
+      {...props}
+    />
   );
 }
 

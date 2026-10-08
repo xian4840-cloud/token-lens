@@ -11,11 +11,7 @@ import { redactUrl } from "./lib/redact";
 import { closePetWindow, openPetIfEnabled, preparePetQuit } from "./pet/window";
 import { appIndexHtmlPath, devServerUrl } from "./lib/app-paths";
 import { registerWindowRole } from "./lib/ipc-guard";
-import {
-  clampWindowBounds,
-  DEFAULT_WINDOW,
-  parseWindowBounds,
-} from "./lib/window-bounds";
+import { clampWindowBounds, DEFAULT_WINDOW, parseWindowBounds } from "./lib/window-bounds";
 
 let win: BrowserWindow | null = null;
 
@@ -68,10 +64,7 @@ function createWindow() {
 
   // 捕获页面加载异常
   win.webContents.on("did-fail-load", (_e, errorCode, errorDescription, validatedURL) => {
-    logError(
-      "page-load",
-      `加载失败 ${errorCode} ${errorDescription}: ${redactUrl(validatedURL)}`,
-    );
+    logError("page-load", `加载失败 ${errorCode} ${errorDescription}: ${redactUrl(validatedURL)}`);
   });
 
   // 渲染进程崩溃：此前完全静默，用户只看到窗口变白或直接消失
@@ -135,7 +128,6 @@ function createWindow() {
     setMainWindow(null);
     setRendererNotify(null);
   });
-
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -192,7 +184,6 @@ if (!gotLock) {
     createWindow();
     startScheduler();
     openPetIfEnabled();
-
   });
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();

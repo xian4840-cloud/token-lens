@@ -46,9 +46,7 @@ function extractCookieValue(cookie: string, name: string): string | undefined {
 }
 
 /** 尝试从错误响应体解析火山引擎标准错误（ResponseMetadata.Error） */
-function parseApiError(
-  text: string,
-): { Code?: string; Message?: string } | undefined {
+function parseApiError(text: string): { Code?: string; Message?: string } | undefined {
   try {
     const json = JSON.parse(text) as UsageResponse;
     return json.ResponseMetadata?.Error;
@@ -118,9 +116,7 @@ export const volcenginePlanAdapter: Adapter = {
       if (apiErr) {
         // 401 多为 Cookie/csrf 过期，给出可操作提示；其余状态直接展示 Code/Message
         const hint =
-          res.status === 401
-            ? "（Cookie 可能已过期，请在「管理」页重新「登录获取凭证」）"
-            : "";
+          res.status === 401 ? "（Cookie 可能已过期，请在「管理」页重新「登录获取凭证」）" : "";
         throw new Error(
           `火山方舟套餐 ${res.status} ${apiErr.Code ?? ""}: ${apiErr.Message ?? ""}${hint}`.replace(
             /\s+/g,

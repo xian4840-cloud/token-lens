@@ -227,8 +227,7 @@ export function signAcs3(p: Acs3Params): SignedRequest {
 
   const stringToSign = `${ACS3_ALGORITHM}\n${sha256Hex(canonicalRequest)}`;
   const signature = hmacSha256(p.sk, stringToSign).toString("hex");
-  const authorization =
-    `${ACS3_ALGORITHM} Credential=${p.ak},SignedHeaders=${signed},Signature=${signature}`;
+  const authorization = `${ACS3_ALGORITHM} Credential=${p.ak},SignedHeaders=${signed},Signature=${signature}`;
 
   // 发送时去掉 host：fetch 依 URL 自动设置，手动传入会被 undici 拒绝
   const sendHeaders: Record<string, string> = { ...headers, Authorization: authorization };

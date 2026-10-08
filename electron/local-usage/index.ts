@@ -12,11 +12,7 @@ import {
   upsertLocalDailyUsage,
 } from "../db";
 import { parseIdList } from "../lib/id-list";
-import type {
-  LocalSource,
-  LocalUsageRow,
-  ScanLocalUsageResult,
-} from "./types";
+import type { LocalSource, LocalUsageRow, ScanLocalUsageResult } from "./types";
 import { ALL_LOCAL_SOURCES } from "./types";
 import { notifyRenderer } from "../lib/renderer-notify";
 
@@ -136,7 +132,7 @@ export async function scanLocalUsage(since?: string): Promise<ScanLocalUsageResu
         r.cacheCreationTokens +
         r.cacheReadTokens +
         r.reasoningTokens >
-      0,
+        0,
   );
 
   // 按来源 + 模型 + 日期排序
@@ -165,9 +161,7 @@ export async function scanLocalUsage(since?: string): Promise<ScanLocalUsageResu
  *   （调度器默认 5 分钟一次）通常会从会话文件里重建回来，但会话文件一旦被清理
  *   就是永久丢失，而且中间这段时间图表与费用都是错的。
  */
-export async function scanAndPersistLocalUsage(
-  since?: string,
-): Promise<ScanLocalUsageResult> {
+export async function scanAndPersistLocalUsage(since?: string): Promise<ScanLocalUsageResult> {
   // 全量扫描可以满足任何窗口请求；窗口扫描不能拿来顶全量（会漏掉窗口外的替换）。
   while (scanFlight) {
     if (scanFlight.since === undefined || scanFlight.since === since) {
@@ -182,9 +176,7 @@ export async function scanAndPersistLocalUsage(
   return promise;
 }
 
-async function persistScannedUsage(
-  since?: string,
-): Promise<ScanLocalUsageResult> {
+async function persistScannedUsage(since?: string): Promise<ScanLocalUsageResult> {
   const result = await scanLocalUsage(since);
   const grouped = new Map<LocalSource, LocalUsageRow[]>();
   for (const r of result.rows) {

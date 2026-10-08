@@ -11,11 +11,10 @@
  * 那个测试查源码，这个脚本查构建产物——两者的用途不同，
  * 但向量值必须一致，改动时两处都要改。
  */
-const { signAcs3 } = require("../electron-dist/adapters/signing.js");
+const { signAcs3 } = require("../electron-dist/electron/adapters/signing.js");
 
 // 官方固定参数示例：help.aliyun.com/zh/sdk/product-overview/v3-request-structure-and-signature
-const EXPECTED_SIGNATURE =
-  "06563a9e1b43f5dfe96b81484da74bceab24a1d853912eee15083a6f0f3283c0";
+const EXPECTED_SIGNATURE = "06563a9e1b43f5dfe96b81484da74bceab24a1d853912eee15083a6f0f3283c0";
 
 const { authorization, headers } = signAcs3({
   method: "POST",
@@ -49,7 +48,10 @@ const checks = [
       "SignedHeaders=host;x-acs-action;x-acs-content-sha256;x-acs-date;x-acs-signature-nonce;x-acs-version,",
     ),
   ],
-  ["Credential 只含 AccessKeyId（无 scope）", authorization.includes("Credential=YourAccessKeyId,")],
+  [
+    "Credential 只含 AccessKeyId（无 scope）",
+    authorization.includes("Credential=YourAccessKeyId,"),
+  ],
   ["发送头保留 accept（仅签名时排除）", headers.accept === "application/json"],
   ["发送头已移除 host", headers.host === undefined],
 ];

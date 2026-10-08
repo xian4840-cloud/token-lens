@@ -19,9 +19,7 @@ export function splitFields(
   const def = getDefinition(provider);
   if (!def) throw new Error(`未知服务类型: ${provider}`);
   const secretKeys = new Set(
-    def.configSchema
-      .filter((f) => f.type === "password" || f.secret)
-      .map((f) => f.key),
+    def.configSchema.filter((f) => f.type === "password" || f.secret).map((f) => f.key),
   );
   const config: Record<string, unknown> = {};
   const secrets: Record<string, string> = {};
@@ -61,10 +59,7 @@ export function createServiceFromInput(input: unknown): ServiceRecord {
  * 从 ipc 抽出来是为了能测「备份恢复的服务 -> 补填密钥 -> 标记清除 -> 能刷新」
  * 这条完整链路：ipc 依赖 Electron 起不来，这里只依赖 db 与适配器注册表。
  */
-export function updateServiceFromInput(
-  id: string,
-  input: unknown,
-): ServiceRecord | undefined {
+export function updateServiceFromInput(id: string, input: unknown): ServiceRecord | undefined {
   const existing = getService(id);
   if (!existing) throw new Error("服务不存在");
   // 服务类型以库里的记录为准，不信渲染进程传来的 provider：否则传一个别的类型，

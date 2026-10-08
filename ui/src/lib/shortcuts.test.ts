@@ -7,9 +7,7 @@ import {
   pagePathForAltKey,
 } from "./shortcuts";
 
-function key(
-  partial: Partial<KeyboardEvent> & { key: string },
-): KeyboardEvent {
+function key(partial: Partial<KeyboardEvent> & { key: string }): KeyboardEvent {
   return {
     altKey: false,
     ctrlKey: false,
@@ -31,9 +29,7 @@ describe("pagePathForAltKey", () => {
     expect(pagePathForAltKey(key({ key: "1" }))).toBeNull();
     const input = { tagName: "INPUT", isContentEditable: false };
     expect(
-      pagePathForAltKey(
-        key({ key: "1", altKey: true, target: input as unknown as EventTarget }),
-      ),
+      pagePathForAltKey(key({ key: "1", altKey: true, target: input as unknown as EventTarget })),
     ).toBeNull();
   });
 });
@@ -57,9 +53,7 @@ describe("documentTitleForPath", () => {
   it("已知页带中文名", () => {
     expect(documentTitleForPath("/")).toBe("Token Lens · 总览");
     expect(documentTitleForPath("/usage")).toBe("Token Lens · 用量明细");
-    expect(documentTitleForPath("/settings/pricing")).toBe(
-      "Token Lens · 模型价格表",
-    );
+    expect(documentTitleForPath("/settings/pricing")).toBe("Token Lens · 模型价格表");
     expect(documentTitleForPath("/pet")).toBe("Token Lens · 桌面宠物");
   });
 

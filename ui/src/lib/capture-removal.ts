@@ -1,8 +1,7 @@
-/** 主进程 disable*Capture 的返回值（electron/agent-response-capture.ts 的 CaptureRemovalResult） */
-export interface CaptureRemovalResult {
-  removed: string[];
-  kept: string[];
-}
+import type { CaptureRemovalResult } from "@shared/types";
+
+/** 主进程 disable*Capture 的返回值（定义在 shared/types/model-monitor.ts） */
+export type { CaptureRemovalResult };
 
 /** 「关闭采集」完成后的提示文案 */
 export function formatCaptureRemoval(
@@ -30,7 +29,9 @@ export function formatCaptureRemoval(
     );
   }
   if (result.kept.length) {
-    parts.push(`以下内容不是 Token Lens 创建的（或目录里还有其他文件），已保留：${result.kept.join("；")}`);
+    parts.push(
+      `以下内容不是 Token Lens 创建的（或目录里还有其他文件），已保留：${result.kept.join("；")}`,
+    );
   }
   return parts.join(" ");
 }

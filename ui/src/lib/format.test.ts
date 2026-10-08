@@ -172,15 +172,9 @@ describe("formatRelative", () => {
   const now = Date.parse("2026-09-12T12:00:00.000Z");
   it("刚刚 / 分钟 / 小时 / 天", () => {
     expect(formatRelative(new Date(now - 10_000).toISOString(), now)).toBe("刚刚");
-    expect(formatRelative(new Date(now - 5 * 60_000).toISOString(), now)).toBe(
-      "5 分钟前",
-    );
-    expect(formatRelative(new Date(now - 3 * 3600_000).toISOString(), now)).toBe(
-      "3 小时前",
-    );
-    expect(formatRelative(new Date(now - 2 * 86400_000).toISOString(), now)).toBe(
-      "2 天前",
-    );
+    expect(formatRelative(new Date(now - 5 * 60_000).toISOString(), now)).toBe("5 分钟前");
+    expect(formatRelative(new Date(now - 3 * 3600_000).toISOString(), now)).toBe("3 小时前");
+    expect(formatRelative(new Date(now - 2 * 86400_000).toISOString(), now)).toBe("2 天前");
   });
   it("非法值占位", () => {
     expect(formatRelative(undefined)).toBe("—");
@@ -209,9 +203,7 @@ describe("budgetBannerKind", () => {
 
 describe("balanceCaption", () => {
   it("同时有余额与已用时说明已用多少", () => {
-    expect(balanceCaption({ remaining: 70, used: 30, currency: "USD" })).toBe(
-      "已用 $30.00",
-    );
+    expect(balanceCaption({ remaining: 70, used: 30, currency: "USD" })).toBe("已用 $30.00");
   });
 
   it("只有已用时标为本月用量（OpenAI / Anthropic）", () => {
@@ -229,15 +221,11 @@ describe("balanceCaption", () => {
   });
 
   it("NaN 不算有效数字，不谎称可用余额", () => {
-    expect(balanceCaption({ remaining: Number.NaN, currency: "USD" })).toBe(
-      "该服务无余额查询 API",
-    );
+    expect(balanceCaption({ remaining: Number.NaN, currency: "USD" })).toBe("该服务无余额查询 API");
   });
 
   it("已用为 0 仍算有效（刚开通未消费）", () => {
-    expect(balanceCaption({ remaining: 100, used: 0, currency: "USD" })).toBe(
-      "已用 $0.00",
-    );
+    expect(balanceCaption({ remaining: 100, used: 0, currency: "USD" })).toBe("已用 $0.00");
   });
 });
 

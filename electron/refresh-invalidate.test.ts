@@ -18,7 +18,11 @@ vi.mock("./secrets", () => ({
   decrypt: (buf: Buffer) => buf.toString("utf8").replace(/^enc:/, ""),
 }));
 
-type Pending = { auth: string | undefined; respond: (balance: string) => void; fail: (status: number) => void };
+type Pending = {
+  auth: string | undefined;
+  respond: (balance: string) => void;
+  fail: (status: number) => void;
+};
 const http = vi.hoisted(() => ({ calls: [] as Pending[] }));
 
 vi.mock("./lib/http", async (importOriginal) => ({
@@ -27,13 +31,25 @@ vi.mock("./lib/http", async (importOriginal) => ({
     const headers = (init?.headers ?? {}) as Record<string, string>;
     return new Promise((resolve) => {
       const reply = (status: number, body: unknown) =>
-        resolve({ ok: status === 200, status, json: async () => body, text: async () => JSON.stringify(body) });
+        resolve({
+          ok: status === 200,
+          status,
+          json: async () => body,
+          text: async () => JSON.stringify(body),
+        });
       http.calls.push({
         auth: headers.Authorization ?? headers.authorization,
         respond: (balance) =>
           reply(200, {
             is_available: true,
-            balance_infos: [{ currency: "CNY", total_balance: balance, granted_balance: "0.00", topped_up_balance: balance }],
+            balance_infos: [
+              {
+                currency: "CNY",
+                total_balance: balance,
+                granted_balance: "0.00",
+                topped_up_balance: balance,
+              },
+            ],
           }),
         fail: (status) => reply(status, { error: { message: "Authentication Fails" } }),
       });
@@ -78,7 +94,8 @@ async function waitCalls(n: number) {
 }
 
 function createDeepseek(key: string): string {
-  return createServiceFromInput({ name: "DeepSeek", provider: "deepseek", fields: { apiKey: key } }).id;
+  return createServiceFromInput({ name: "DeepSeek", provider: "deepseek", fields: { apiKey: key } })
+    .id;
 }
 function changeKey(id: string, key: string) {
   updateServiceFromInput(id, { name: "DeepSeek", provider: "deepseek", fields: { apiKey: key } });
@@ -185,10 +202,21 @@ describe("服务变更通知覆盖所有改动入口", () => {
       expect(seen).toEqual([id]);
       seen.length = 0;
       saveBalanceSnapshot(id, 1, "CNY");
-      saveLastBalance(id, { remaining: 1, currency: "CNY", fetchedAt: "2026-10-08T00:00:00.000Z" } as never);
+      saveLastBalance(id, {
+        remaining: 1,
+        currency: "CNY",
+        fetchedAt: "2026-10-08T00:00:00.000Z",
+      } as never);
       expect(seen).toEqual([]);
       importBackupServices(
-        [{ id: "restored-1", name: "Kimi", provider: "moonshot", createdAt: "2026-09-01T00:00:00.000Z" }],
+        [
+          {
+            id: "restored-1",
+            name: "Kimi",
+            provider: "moonshot",
+            createdAt: "2026-09-01T00:00:00.000Z",
+          },
+        ],
         () => "api",
       );
       expect(seen).toEqual(["restored-1"]);
@@ -205,7 +233,10 @@ describe("服务变更通知覆盖所有改动入口", () => {
     const inflight = refreshService(id);
     await waitCalls(1);
     deleteServiceRow(id);
-    importBackupServices([{ id, name: "DeepSeek", provider: "deepseek", createdAt: "2026-09-01T00:00:00.000Z" }], () => "api");
+    importBackupServices(
+      [{ id, name: "DeepSeek", provider: "deepseek", createdAt: "2026-09-01T00:00:00.000Z" }],
+      () => "api",
+    );
     http.calls[0].respond("10.00");
     // 恢复出来的服务需要重新填写密钥，刷新报这个而不是旧密钥的余额
     await expect(inflight).rejects.toThrow(NEEDS_CREDENTIALS_MESSAGE);

@@ -60,8 +60,7 @@ export interface GuardConfig {
 }
 
 export type SenderCheck =
-  | { ok: true; role: WindowRole; busyResult?: unknown }
-  | { ok: false; reason: string };
+  { ok: true; role: WindowRole; busyResult?: unknown } | { ok: false; reason: string };
 
 /** 页面 URL 是否是本应用自己的页面 */
 export function isTrustedAppUrl(
