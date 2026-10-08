@@ -593,13 +593,17 @@ export interface ImportServicesResult {
 /**
  * 导入备份里的服务清单。
  *
- * 对应规则（按顺序）：
+ * 对应规则：
  * 1. 本机已有同 id 的服务：视为同一个（同一台机器导回自己的备份），不改动；
- * 2. 本机已有同类型、同名的服务：视为用户已手工重建过，对到它上面，不再新建；
+ * 2. 导入**之前**本机就有的同类型、同名服务：视为用户已手工重建过，对到它上面。
+ *    只看导入前就存在的服务，本次导入新建的不参与；且每个本机服务最多被一条
+ *    备份服务对上——同一份备份里两个同名账号（如两个都叫「DeepSeek」的号）
+ *    不会被并成一个，用量也就不会叠加双计；
  * 3. 否则按备份里的 id 新建，config 为空、不带密钥，标记 needsCredentials。
  *    沿用原 id 是为了让用量记录、置顶/隐藏列表不用改写就能对上，
  *    也让重复导入天然幂等（第二次全部落到规则 1）。
- * 服务类型不认识（resolveKind 返回 undefined）的跳过，其用量记录随之跳过。
+ * 规则 1 先于规则 2 整体跑一遍，免得排在前面的同名条目抢走后面同 id 条目的本机服务。
+ * 服务类型不认识（resolveKind 返回 undefined）或条目残缺的跳过，其用量记录随之跳过。
  */
 export function importBackupServices(
   rows: BackupServiceRow[],
@@ -608,22 +612,31 @@ export function importBackupServices(
   if (!data) data = defaultData();
   const idMap = new Map<string, string>();
   const byId = new Map(data.services.map((s) => [s.id, s]));
-  const byKey = new Map<string, ServiceRecord>();
+  // 规则 2 的候选：只取导入前就存在的服务，同 key 可能有多个（按创建时间排）
+  const byKey = new Map<string, ServiceRecord[]>();
   for (const s of listServices()) {
     const key = `${s.provider}|${s.name}`;
-    if (!byKey.has(key)) byKey.set(key, s);
+    const list = byKey.get(key);
+    if (list) list.push(s);
+    else byKey.set(key, [s]);
   }
+  /** 已被某条备份服务对上的本机服务 id（规则 1 或 2） */
+  const claimed = new Set<string>();
   let restored = 0;
   let matched = 0;
   let skipped = 0;
   const now = new Date().toISOString();
 
+  const valid: { row: BackupServiceRow; kind: ServiceRecord["kind"] }[] = [];
   for (const row of rows) {
-    if (!row || typeof row.id !== "string" || !row.id || row.id.length > 200) {
-      skipped += 1;
-      continue;
-    }
-    if (typeof row.provider !== "string" || typeof row.name !== "string") {
+    if (
+      !row ||
+      typeof row.id !== "string" ||
+      !row.id ||
+      row.id.length > 200 ||
+      typeof row.provider !== "string" ||
+      typeof row.name !== "string"
+    ) {
       skipped += 1;
       continue;
     }
@@ -632,19 +645,41 @@ export function importBackupServices(
       skipped += 1;
       continue;
     }
-    const sameId = byId.get(row.id);
+    valid.push({ row, kind });
+  }
+
+  // 规则 1：同 id
+  const rest: typeof valid = [];
+  for (const v of valid) {
+    const sameId = byId.get(v.row.id);
     if (sameId) {
-      idMap.set(row.id, sameId.id);
+      idMap.set(v.row.id, sameId.id);
+      claimed.add(sameId.id);
+      matched += 1;
+    } else {
+      rest.push(v);
+    }
+  }
+
+  for (const { row, kind } of rest) {
+    // 备份里重复出现的同一个 id（前面已新建过）：同一个服务
+    const created = idMap.get(row.id);
+    if (created) {
       matched += 1;
       continue;
     }
     const name = row.name.trim().slice(0, 100) || row.provider;
-    const sameName = byKey.get(`${row.provider}|${name}`);
-    if (sameName) {
-      idMap.set(row.id, sameName.id);
+    // 规则 2：导入前就有、且还没被别的备份服务对上的同类型同名服务
+    const candidate = byKey
+      .get(`${row.provider}|${name}`)
+      ?.find((s) => !claimed.has(s.id));
+    if (candidate) {
+      idMap.set(row.id, candidate.id);
+      claimed.add(candidate.id);
       matched += 1;
       continue;
     }
+    // 规则 3：新建
     const createdAt =
       typeof row.createdAt === "string" && Number.isFinite(Date.parse(row.createdAt))
         ? row.createdAt
@@ -660,9 +695,8 @@ export function importBackupServices(
       needsCredentials: true,
     };
     data.services.push(record);
-    byId.set(record.id, record);
-    byKey.set(`${record.provider}|${record.name}`, record);
     idMap.set(row.id, record.id);
+    claimed.add(record.id);
     restored += 1;
   }
   if (restored) persist();
@@ -723,6 +757,8 @@ export function importUsageRecords(
   }
 
   const batchContent = new Set<string>();
+  /** 本次导入里每个 (服务, 周期) 组来自哪个备份服务 id */
+  const unitOwner = new Map<string, string>();
   let imported = 0;
   let skipped = 0;
   const now = new Date().toISOString();
@@ -758,12 +794,21 @@ export function importUsageRecords(
     };
     const key = usageContentKey(rec);
     if (period != null) {
+      const unit = `${serviceId}|${period}`;
       // 只拿导入前的本机状态判断：同一组在本次导入里的多行要一起写进去。
       // 但完全相同的行只留一份：旧版导入会原样追加，导出的备份里可能已有重复。
-      if (existingUnits.has(`${serviceId}|${period}`) || batchContent.has(key)) {
+      // 同一 (服务, 周期) 只认第一个写入它的备份服务：万一两条备份服务映射到
+      // 同一个本机服务，也不会写出两组同周期用量叠加双计。
+      const owner = unitOwner.get(unit);
+      if (
+        existingUnits.has(unit) ||
+        (owner !== undefined && owner !== rawId) ||
+        batchContent.has(key)
+      ) {
         skipped += 1;
         continue;
       }
+      unitOwner.set(unit, rawId);
       batchContent.add(key);
     } else {
       if (existingContent.has(key)) {

@@ -6,6 +6,7 @@ import {
   flushDb,
   getService,
   getSetting,
+  importUsageRecords,
   initDbAt,
   insertService,
   listServices,
@@ -174,6 +175,90 @@ describe("applyBackupImport：恢复服务清单", () => {
     });
     const r = applyBackupImport(parse(raw), resolveKind);
     expect(r).toMatchObject({ usage: 2, usageSkipped: 1 });
+  });
+});
+
+describe("applyBackupImport：同类型同名的多个账号", () => {
+  const SEPT = "2026-09-01|2026-09-30";
+  const usage = (id: number, serviceId: string, cost: number) => ({
+    id,
+    serviceId,
+    model: "deepseek-chat",
+    cost,
+    totalTokens: cost * 10,
+    period: SEPT,
+    currency: "CNY",
+    recordedAt: "2026-09-30T00:00:00.000Z",
+  });
+  /** 评审复现：两个都叫「DeepSeek」的 deepseek 账号，9 月用量 a=10、b=7 */
+  const twoAccounts = () =>
+    JSON.stringify(
+      buildBackupPayload({
+        services: [svc("a", "deepseek", "DeepSeek"), svc("b", "deepseek", "DeepSeek")],
+        usageRecords: [usage(1, "a", 10), usage(2, "b", 7)],
+        localDailyUsage: [],
+        settings: {},
+        exportedAt: "2026-10-01T00:00:00.000Z",
+      }),
+    );
+  const costBy = () => {
+    const m: Record<string, number> = {};
+    for (const u of listUsageRecords()) m[u.serviceId] = (m[u.serviceId] ?? 0) + (u.cost ?? 0);
+    return m;
+  };
+
+  it("新机器导入：两个同名账号各自恢复成独立服务，用量不合并、不双计", () => {
+    const r = applyBackupImport(parse(twoAccounts()), resolveKind);
+    expect(r).toMatchObject({ services: 2, servicesMatched: 0, usage: 2, usageSkipped: 0 });
+    expect(listServices().map((s) => s.id).sort()).toEqual(["a", "b"]);
+    expect(costBy()).toEqual({ a: 10, b: 7 });
+    // 没有任何一个服务在同一周期下有两组来源（即不会出现 17）
+    expect(Math.max(...Object.values(costBy()))).toBe(10);
+  });
+
+  it("重复导入仍各自独立且幂等", () => {
+    applyBackupImport(parse(twoAccounts()), resolveKind);
+    const second = applyBackupImport(parse(twoAccounts()), resolveKind);
+    expect(second).toMatchObject({ services: 0, servicesMatched: 2, usage: 0, usageSkipped: 2 });
+    expect(listUsageRecords()).toHaveLength(2);
+    expect(costBy()).toEqual({ a: 10, b: 7 });
+  });
+
+  it("本机已有一个同名服务：只被一个账号对上，另一个新建，用量各归各的", () => {
+    insertService(svc("local-1", "deepseek", "DeepSeek"));
+    const r = applyBackupImport(parse(twoAccounts()), resolveKind);
+    expect(r).toMatchObject({ services: 1, servicesMatched: 1, usage: 2, usageSkipped: 0 });
+    expect(listServices().map((s) => s.id).sort()).toEqual(["b", "local-1"]);
+    expect(getService("b")?.needsCredentials).toBe(true);
+    expect(costBy()).toEqual({ "local-1": 10, b: 7 });
+  });
+
+  it("同名条目排在同 id 条目前面时，不抢走同 id 的本机服务", () => {
+    // 本机有 b（同机导回），备份里 a 与 b 同名且 a 在前：a 不应对到 b 上
+    insertService(svc("b", "deepseek", "DeepSeek"));
+    const r = applyBackupImport(parse(twoAccounts()), resolveKind);
+    expect(r).toMatchObject({ services: 1, servicesMatched: 1 });
+    expect(listServices().map((s) => s.id).sort()).toEqual(["a", "b"]);
+    expect(costBy()).toEqual({ a: 10, b: 7 });
+  });
+});
+
+describe("importUsageRecords：同一 (服务, 周期) 只写一组", () => {
+  it("两个备份服务映射到同一本机服务时，只认第一个，不叠加", () => {
+    insertService(svc("x"));
+    const r = importUsageRecords(
+      [
+        { serviceId: "a", model: "m1", cost: 10, period: "2026-09-01|2026-09-30" },
+        { serviceId: "a", model: "m2", cost: 1, period: "2026-09-01|2026-09-30" },
+        { serviceId: "b", model: "m1", cost: 7, period: "2026-09-01|2026-09-30" },
+      ],
+      new Map([
+        ["a", "x"],
+        ["b", "x"],
+      ]),
+    );
+    expect(r).toEqual({ imported: 2, skipped: 1 });
+    expect(listUsageRecords().reduce((t, u) => t + (u.cost ?? 0), 0)).toBe(11);
   });
 });
 
