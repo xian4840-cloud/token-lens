@@ -1,0 +1,17 @@
+# 构建产物与依赖
+node_modules/
+electron-dist/
+dist-electron/
+ui/dist/
+package-lock.json
+
+# 注入到第三方程序（Claude Code / OpenCode / Codex）的采集脚本：内容会被写到用户目录并按文件首行标记识别，
+# 重排版会让已安装的副本被视为过期，保持原样
+electron/agent-capture/
+electron/codex-capture/
+
+# 文档与打包配置不参与格式化
+*.md
+*.yml
+*.yaml
+build/

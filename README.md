@@ -149,7 +149,11 @@ npm run dev            # 同时启动前端 HMR + Electron
 npm test               # 跑单元测试（vitest，覆盖 ui/ 与 electron/ 两侧）
 npm run test:watch     # watch 模式
 npm run typecheck      # 前端 + 主进程分别做类型检查
+npm run lint           # ESLint（eslint.config.mjs）
+npm run format         # Prettier 格式化（format:check 只检查不改）
 ```
+
+> 全量格式化的提交记录在 `.git-blame-ignore-revs`，本地执行一次 `git config blame.ignoreRevsFile .git-blame-ignore-revs` 后 `git blame` 会跳过它（GitHub 网页的 blame 自动识别）。
 
 > 改了 `electron/` 下的主进程代码需要重启 Electron，Vite HMR 只覆盖渲染进程。
 
