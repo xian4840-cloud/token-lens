@@ -16,6 +16,20 @@ electronLanguages:
   - en-US
 asarUnpack:
   - "**/*.node"
+# Electron fuses：打包时直接改写 exe 里的开关，运行期无法再打开。
+# - runAsNode: false                    禁止 ELECTRON_RUN_AS_NODE 把本程序当 node 用（常见的「借壳执行」手法）
+# - enableNodeCliInspectArguments: false 忽略 --inspect / --inspect-brk，SIGUSR1 也不再开调试端口
+# - enableNodeOptionsEnvironmentVariable: false 忽略 NODE_OPTIONS / NODE_EXTRA_CA_CERTS
+# - onlyLoadAppFromAsar: true           只从 app.asar 加载应用代码，不认旁边放的 app/ 目录
+# - enableEmbeddedAsarIntegrityValidation: true 校验 app.asar 头部哈希（Windows 需 Electron >= 30；
+#   哈希由 electron-builder 用 resedit 写进 exe 资源，不依赖 wine/rcedit）
+# 本应用运行期不依赖以上任何能力（不 fork 自身当 node、不读 NODE_OPTIONS、代码全在 asar 里）。
+electronFuses:
+  runAsNode: false
+  enableNodeCliInspectArguments: false
+  enableNodeOptionsEnvironmentVariable: false
+  onlyLoadAppFromAsar: true
+  enableEmbeddedAsarIntegrityValidation: true
 win:
   target: dir
   icon: build/icon.ico

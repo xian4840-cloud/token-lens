@@ -11,6 +11,9 @@
   },
   "private": true,
   "main": "electron-dist/main.js",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "dev:ui": "vite",
     "dev:electron:watch": "tsc -p tsconfig.electron.json --watch --preserveWatchOutput",

@@ -205,12 +205,23 @@ describe("additional local agent model records", () => {
     const reopened = new DatabaseSync(file);
     reopened.prepare("INSERT INTO gen_metadata VALUES(?,?)").run(5, Buffer.concat([b(3, Buffer.concat([n(1, 100), b(28, "other-name")]))]));
     reopened.prepare("DELETE FROM gen_metadata WHERE idx=1").run(); reopened.close();
+    // 读取缓存按 mtime + 大小判断是否变化；内核的文件时间戳是粗粒度时钟（毫秒级跳变），
+    // 几毫秒内连写两次、页数又没变时会得到完全相同的 stamp，测试因此偶发失败。
+    // 真实的 Antigravity 写入间隔远大于此，这里显式把 mtime 往后推，模拟「之后又写了一次」。
+    touchLater(file, 1);
     const updated = await getAgentModelMonitorState(date, "antigravity", undefined, dir);
     expect(updated.records[0].requestedModel).toBe("other-name");
     const missingConfig = new DatabaseSync(file);
     missingConfig.prepare("DELETE FROM gen_metadata WHERE idx=5").run(); missingConfig.close();
+    touchLater(file, 2);
     const unverified = await getAgentModelMonitorState(date, "antigravity", undefined, dir);
     expect(unverified.records[0]).toMatchObject({ responseModel: "returned-base", status: "unknown" });
     expect(unverified.records[0].requestedModel).toBeUndefined();
   });
 });
+
+/** 把文件 mtime 设为「现在 + seconds 秒」，确保与上一次读取的 stamp 不同 */
+function touchLater(file: string, seconds: number): void {
+  const t = new Date(Date.now() + seconds * 1000);
+  fs.utimesSync(file, t, t);
+}

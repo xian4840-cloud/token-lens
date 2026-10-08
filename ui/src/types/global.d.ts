@@ -24,9 +24,11 @@ declare global {
   interface Window {
     tokenLens: {
       getModelMonitorState: (date?: string, source?: import("@/types").ModelMonitorSource) => Promise<ModelMonitorState>;
-      launchCapturedCodex: () => Promise<ModelMonitorState["capture"]>;
-      enableOpenCodeCapture: () => Promise<void>;
-      enableClaudeCapture: () => Promise<void>;
+      launchCapturedCodex: () => Promise<import("@/lib/high-risk").HighRiskResult<ModelMonitorState["capture"]>>;
+      enableOpenCodeCapture: () => Promise<import("@/lib/high-risk").HighRiskResult<void>>;
+      enableClaudeCapture: () => Promise<import("@/lib/high-risk").HighRiskResult<void>>;
+      disableOpenCodeCapture: () => Promise<import("@/lib/high-risk").HighRiskResult<import("@/lib/capture-removal").CaptureRemovalResult>>;
+      disableClaudeCapture: () => Promise<import("@/lib/high-risk").HighRiskResult<import("@/lib/capture-removal").CaptureRemovalResult>>;
       ping: () => Promise<string>;
       isEncryptionAvailable: () => Promise<boolean>;
       bootstrap: () => Promise<AppBootstrap>;

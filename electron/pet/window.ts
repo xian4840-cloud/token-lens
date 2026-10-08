@@ -2,6 +2,8 @@ import { BrowserWindow, screen } from "electron";
 import path from "node:path";
 import { getSetting, listLocalDailyUsage, setSetting } from "../db";
 import { logError } from "../lib/logger";
+import { appIndexHtmlPath, devServerUrl } from "../lib/app-paths";
+import { registerWindowRole } from "../lib/ipc-guard";
 import { scanAndPersistLocalUsage } from "../local-usage";
 import { toDateKey } from "../local-usage/date";
 import {
@@ -20,12 +22,9 @@ let allowClose = false;
 let dragOffset = { x: 0, y: 0 };
 let lastSpendScanAt = 0;
 
+/** 桌宠专用的最小 preload（见 pet-preload.ts），不与主窗口共用 */
 function preloadPath(): string {
-  return path.join(__dirname, "..", "preload.js");
-}
-
-function uiIndexPath(): string {
-  return path.join(__dirname, "..", "..", "ui", "dist", "index.html");
+  return path.join(__dirname, "..", "pet-preload.js");
 }
 
 export function isPetOpen(): boolean {
@@ -124,6 +123,7 @@ export function openPetWindow(): void {
     },
   });
 
+  registerWindowRole(petWin.webContents, "pet");
   petWin.setAlwaysOnTop(true, "floating");
   petWin.setMenu(null);
 
@@ -138,7 +138,7 @@ export function openPetWindow(): void {
   });
   petWin.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   petWin.webContents.on("will-navigate", (e, url) => {
-    if (process.env.VITE_DEV_SERVER_URL) {
+    if (devServerUrl()) {
       try {
         const u = new URL(url);
         if (u.hostname === "localhost" || u.hostname === "127.0.0.1") return;
@@ -149,10 +149,11 @@ export function openPetWindow(): void {
     e.preventDefault();
   });
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    void petWin.loadURL(`${process.env.VITE_DEV_SERVER_URL}#/pet`);
+  const dev = devServerUrl();
+  if (dev) {
+    void petWin.loadURL(`${dev}#/pet`);
   } else {
-    void petWin.loadFile(uiIndexPath(), { hash: "/pet" });
+    void petWin.loadFile(appIndexHtmlPath(), { hash: "/pet" });
   }
 
   petWin.once("ready-to-show", () => {

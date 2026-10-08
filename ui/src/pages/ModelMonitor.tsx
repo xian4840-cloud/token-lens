@@ -5,6 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { formatCaptureRemoval } from "@/lib/capture-removal";
+import { highRiskNotExecutedMessage } from "@/lib/high-risk";
 import { ipc } from "@/lib/ipc";
 import type { ModelMonitorState, ModelMonitorSource, ModelMonitorRecord, ModelMonitorSessionDay } from "@/types";
 
@@ -28,17 +30,33 @@ export function ModelMonitor() {
   async function enableAgentCapture() {
     setLaunching(true); setCaptureMessage("");
     try {
-      if (source === "claude-code") await ipc.enableClaudeCapture(); else await ipc.enableOpenCodeCapture();
+      const result = source === "claude-code" ? await ipc.enableClaudeCapture() : await ipc.enableOpenCodeCapture();
+      // 主进程会先弹系统确认框；用户取消时什么也不显示
+      if (result.status !== "ok") { setCaptureMessage(highRiskNotExecutedMessage(result)); return; }
       setCaptureMessage(source === "claude-code" ? "已启用。关闭旧终端，打开新终端后正常启动 Claude Code 即可。" : "已启用。重新打开 OpenCode 后正常聊天即可。");
     }
     catch (e) { setCaptureMessage(e instanceof Error ? e.message : "安装失败"); }
     finally { setLaunching(false); setRefresh(v => v + 1); }
   }
 
+  async function disableAgentCapture() {
+    if (source !== "claude-code" && source !== "opencode") return;
+    setLaunching(true); setCaptureMessage("");
+    try {
+      // 确认由主进程的系统确认框负责（列出要改的环境变量和文件），页面里不再重复弹框
+      const result = source === "claude-code" ? await ipc.disableClaudeCapture() : await ipc.disableOpenCodeCapture();
+      if (result.status !== "ok") { setCaptureMessage(highRiskNotExecutedMessage(result)); return; }
+      setCaptureMessage(formatCaptureRemoval(source, result.value));
+    }
+    catch (e) { setCaptureMessage(e instanceof Error ? e.message : "关闭失败"); }
+    finally { setLaunching(false); setRefresh(v => v + 1); }
+  }
+
   async function launchCodex() {
     setLaunching(true); setCaptureMessage("");
     try {
-      await ipc.launchCapturedCodex();
+      const result = await ipc.launchCapturedCodex();
+      if (result.status !== "ok") { setCaptureMessage(highRiskNotExecutedMessage(result)); return; }
       setCaptureMessage("已发送启动命令，正在等待 Codex 后端连接。连接后正常聊天即可采集。");
     } catch (e) {
       setCaptureMessage(e instanceof Error ? e.message : "桌面采集启动失败");
@@ -112,7 +130,10 @@ export function ModelMonitor() {
             {(source === "opencode" || source === "claude-code") && <div className="mb-4 rounded-lg border bg-muted/30 p-4" data-opencode-capture={source === "opencode" ? true : undefined} data-claude-capture={source === "claude-code" ? true : undefined}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div><p className="text-sm font-medium">响应模型核验</p><p className="mt-1 text-xs text-muted-foreground">{state?.agentCapture?.requestCount ? `已采集 ${state.agentCapture.requestCount} 次请求，读到 ${state.agentCapture.responseCount} 次响应模型。` : state?.agentCapture?.enabled ? source === "claude-code" ? "在新终端中启动 Claude Code，正常聊天即可。" : "重新打开 OpenCode，正常聊天即可。" : "启用一次，在 Agent 自身进程内记录请求与响应模型，无额外后台进程。"}</p></div>
-                <Button size="sm" disabled={launching || state?.agentCapture?.enabled} onClick={() => void enableAgentCapture()}>{launching ? "正在安装…" : state?.agentCapture?.enabled ? "已启用" : "启用响应核验"}</Button>
+                <div className="flex gap-2">
+                  {(state?.agentCapture?.enabled || state?.agentCapture?.installed) && <Button size="sm" variant="outline" data-disable-capture disabled={launching} onClick={() => void disableAgentCapture()}>关闭采集</Button>}
+                  <Button size="sm" disabled={launching || state?.agentCapture?.enabled} onClick={() => void enableAgentCapture()}>{launching ? "正在处理…" : state?.agentCapture?.enabled ? "已启用" : "启用响应核验"}</Button>
+                </div>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">仅记录模型、标识、时间和用量，不保存聊天正文或密钥。</p>
               {captureMessage && <p className="mt-2 text-sm" role="status">{captureMessage}</p>}
