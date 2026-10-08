@@ -92,7 +92,7 @@ Google Gemini、Groq、Together。注意这三家均同时提供免费与付费�
 ### 费用估算的口径
 
 本地 agent 的会话记录里只有 token 数，没有金额，费用是用内置价格表换算出来的
-**估算值，不是账单**。内置表见 `electron/adapters/pricing-table.ts`，
+**估算值，不是账单**。内置表见 `electron/adapters/pricing-table.ts`（各厂商数据在同名目录下分文件维护），
 在「设置 → 模型价格表」里可以逐条覆盖，也可以导出/导入 CSV（按模型 key
 匹配；表里没有的模型不会被写成 $0）。几个需要知道的口径：
 
@@ -182,8 +182,11 @@ npm run dist:installer  # NSIS 安装包
 
 - `electron/` - Electron 主进程（TypeScript，与 `shared/` 一起编译到 `electron-dist/`，入口 `electron-dist/electron/main.js`）
 - `ui/` - 前端源码（React + Vite，构建到 `ui/dist/`）
+- `ui/src/pages/` - 页面；较大的页面是一个目录（`index.tsx` 为页面本身，同目录放它拆出的面板 / 卡片组件）
 - `shared/` - 主进程与界面共用的数据类型（`shared/types/`）和 IPC 契约（`shared/ipc.ts`：通道名、参数与返回值）。新增或修改 IPC 通道只改这里，preload 与主进程处理函数由编译器校验；界面经 `@shared/*` 引用
 - `electron/adapters/` - 各服务适配器（余额/用量查询）
+- `electron/adapters/pricing-table/` - 内置模型价格表，按厂商分文件；拼接顺序即匹配优先级，见 `pricing-table.ts`
+- `electron/agent-model-monitor/` - 模型监测：Claude Code / OpenCode / Grok Build 的本地会话读取与核验汇总
 - `electron/local-usage/` - 本地 agent 用量采集器（Claude Code / Codex / OpenCode / Antigravity / Grok Build）
 - `electron/pet/` - 桌面宠物（独立无边框窗口、会话目录监听、今日花费汇总）
 - `scripts/` - 维护脚本（如 `sanitize-lockfile.cjs`）
