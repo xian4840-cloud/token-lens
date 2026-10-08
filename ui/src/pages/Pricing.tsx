@@ -65,7 +65,10 @@ export function PricingPage() {
 
   const update = (key: string, field: NumericField, value: string) => {
     setDraft((rows) =>
-      rows.map((r) => (r.key === key ? { ...r, [field]: value === "" ? 0 : Number(value) } : r)),
+      rows.map((r) =>
+        // 键盘可以直接敲出负数（min 只约束步进按钮），这里夹到 0，与主进程校验一致
+        r.key === key ? { ...r, [field]: value === "" ? 0 : Math.max(0, Number(value)) } : r,
+      ),
     );
     setDirty(true);
   };
@@ -359,6 +362,7 @@ function PriceInput({ value, onChange }: { value: number; onChange: (v: string) 
       <Input
         ref={ref}
         type="number"
+        min="0"
         step="0.0001"
         value={value}
         onChange={(e) => onChange(e.target.value)}

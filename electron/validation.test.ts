@@ -162,6 +162,15 @@ describe("validatePricingOverrides", () => {
     expect(out).toEqual({});
   });
 
+  it("负数价格丢弃（与 CSV 导入一致），0 保留（免费模型）", () => {
+    const out = validatePricingOverrides({
+      a: { inputPerM: -1, outputPerM: 2 },
+      b: { cacheReadPerM: -0.0001 },
+      free: { inputPerM: 0, outputPerM: 0 },
+    });
+    expect(out).toEqual({ a: { outputPerM: 2 }, free: { inputPerM: 0, outputPerM: 0 } });
+  });
+
   it("拒绝非对象输入，跳过非对象条目", () => {
     expect(() => validatePricingOverrides(null)).toThrow(/无效/);
     expect(() => validatePricingOverrides("x")).toThrow(/无效/);

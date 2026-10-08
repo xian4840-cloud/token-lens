@@ -109,7 +109,11 @@ export function validatePeriod(period: unknown): {
   return { start, end };
 }
 
-/** 校验价格覆盖：须为对象，值清洗为 Partial<ModelPricing>（仅保留已知字段且类型正确） */
+/**
+ * 校验价格覆盖：须为对象，值清洗为 Partial<ModelPricing>（仅保留已知字段且类型正确）。
+ * 价格不能为负：负单价会让费用估算出现负数、把月度合计和预算进度一起拉低。
+ * CSV 导入（ui/src/lib/csv.ts）早已拒绝负数，这里与之保持一致。
+ */
 export function validatePricingOverrides(value: unknown): Record<string, Partial<ModelPricing>> {
   if (!value || typeof value !== "object") {
     throw new Error("无效的价格覆盖");
@@ -123,7 +127,7 @@ export function validatePricingOverrides(value: unknown): Record<string, Partial
     const sink = clean as Record<string, unknown>;
     for (const [fk, fv] of Object.entries(item)) {
       if (PRICING_NUMBER_FIELDS.has(fk)) {
-        if (typeof fv === "number" && Number.isFinite(fv)) sink[fk] = fv;
+        if (typeof fv === "number" && Number.isFinite(fv) && fv >= 0) sink[fk] = fv;
       } else if (fk === "currency") {
         if (typeof fv === "string") sink[fk] = fv;
       }
