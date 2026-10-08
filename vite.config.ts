@@ -26,15 +26,11 @@ export default defineConfig({
     emptyOutDir: true,
     // Electron 全是本地文件，预加载懒路由只会让总览顺带把宠物图打进来
     modulePreload: false,
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes("node_modules/recharts") || id.includes("node_modules/victory-vendor")) {
-            return "charts";
-          }
-        },
-      },
-    },
+    // 不再配 manualChunks。此前把 recharts 手动归到 "charts" 块，打包器会把它的
+    // 依赖（react / react-dom / scheduler 等）一并拉进去，结果入口要静态 import
+    // 整个 charts 块（约 398 kB），趋势/用量页的懒加载形同虚设，总览和桌宠窗口
+    // 启动也得先解析图表库。路由本身已是懒加载，交给默认拆分即可：recharts 只落在
+    // 趋势/用量页共用的异步块里。
   },
   server: {
     host: "127.0.0.1",
