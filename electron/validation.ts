@@ -1,6 +1,6 @@
 import type { ServiceInput } from "./types";
 import { getDefinition } from "./adapters";
-import type { ModelPricing } from "./adapters/pricing";
+import { sanitizePricingOverrides, type ModelPricing } from "./adapters/pricing";
 
 /**
  * IPC 输入校验。渲染进程经 contextBridge 只能调用预定义 API，但仍在此层
@@ -24,14 +24,6 @@ const ALLOWED_SETTING_KEYS = new Set<string>([
   "pinnedServiceIds",
   "hiddenServiceIds",
   "disabledLocalSources",
-]);
-
-/** ModelPricing 中的数值字段 */
-const PRICING_NUMBER_FIELDS = new Set<string>([
-  "inputPerM",
-  "outputPerM",
-  "cacheReadPerM",
-  "cacheWritePerM",
 ]);
 
 /**
@@ -109,26 +101,13 @@ export function validatePeriod(period: unknown): {
   return { start, end };
 }
 
-/** 校验价格覆盖：须为对象，值清洗为 Partial<ModelPricing>（仅保留已知字段且类型正确） */
+/**
+ * 校验价格覆盖（IPC 写入口）：须为对象，否则抛错；值的清洗规则（已知字段、类型正确、
+ * 价格不为负）与读入口共用 sanitizePricingOverrides，见 adapters/pricing.ts。
+ */
 export function validatePricingOverrides(value: unknown): Record<string, Partial<ModelPricing>> {
   if (!value || typeof value !== "object") {
     throw new Error("无效的价格覆盖");
   }
-  const out: Record<string, Partial<ModelPricing>> = {};
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof k !== "string" || !k) continue;
-    if (!v || typeof v !== "object") continue;
-    const item = v as Record<string, unknown>;
-    const clean: Partial<ModelPricing> = {};
-    const sink = clean as Record<string, unknown>;
-    for (const [fk, fv] of Object.entries(item)) {
-      if (PRICING_NUMBER_FIELDS.has(fk)) {
-        if (typeof fv === "number" && Number.isFinite(fv)) sink[fk] = fv;
-      } else if (fk === "currency") {
-        if (typeof fv === "string") sink[fk] = fv;
-      }
-    }
-    if (Object.keys(clean).length > 0) out[k] = clean;
-  }
-  return out;
+  return sanitizePricingOverrides(value);
 }

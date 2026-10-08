@@ -3,6 +3,7 @@ node_modules/
 electron-dist/
 dist-electron/
 ui/dist/
+coverage/
 package-lock.json
 
 # 注入到第三方程序（Claude Code / OpenCode / Codex）的采集脚本：内容会被写到用户目录并按文件首行标记识别，

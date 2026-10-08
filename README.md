@@ -1,5 +1,7 @@
 # Token Lens
 
+[![CI](https://github.com/xian4840-cloud/token-lens/actions/workflows/ci.yml/badge.svg)](https://github.com/xian4840-cloud/token-lens/actions/workflows/ci.yml)
+
 统一查看各家 API 余额与 coding plan 余量的桌面应用（Electron + React）。
 
 在一张桌面应用里集中查看所有 LLM 服务商的账户余额、订阅余量，以及本地 coding agent 的 token 用量与花费估算——不用再挨个登录控制台。
@@ -151,6 +153,7 @@ npm run test:watch     # watch 模式
 npm run typecheck      # 前端 + 主进程分别做类型检查
 npm run lint           # ESLint（eslint.config.mjs）
 npm run format         # Prettier 格式化（format:check 只检查不改）
+npm run test:coverage  # 跑测试并输出覆盖率（CI 用这个）
 ```
 
 > 全量格式化的提交记录在 `.git-blame-ignore-revs`，本地执行一次 `git config blame.ignoreRevsFile .git-blame-ignore-revs` 后 `git blame` 会跳过它（GitHub 网页的 blame 自动识别）。
