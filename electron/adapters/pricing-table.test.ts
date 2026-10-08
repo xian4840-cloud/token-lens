@@ -128,6 +128,17 @@ describe("OpenAI 正则顺序", () => {
     ["gpt-4.1-mini", "gpt-4.1-mini"],
     ["gpt-4o-mini", "gpt-4o-mini"],
     ["gpt-4o", "gpt-4o"],
+    ["gpt-4o-2024-05-13", "gpt-4o"],
+    ["gpt-4-turbo", "gpt-4-turbo"],
+    ["gpt-4-turbo-2024-04-09", "gpt-4-turbo"],
+    ["gpt-4-turbo-preview", "gpt-4-turbo"],
+    ["gpt-4-0125-preview", "gpt-4-turbo"],
+    ["gpt-4", "gpt-4"],
+    ["gpt-4-0613", "gpt-4"],
+    ["gpt-4-0314", "gpt-4"],
+    ["gpt-4.1", "gpt-4.1"],
+    ["gpt-4.1-2025-04-14", "gpt-4.1"],
+    ["gpt-4.1-nano-2025-04-14", "gpt-4.1-nano"],
     ["o4-mini", "o4-mini"],
     ["o3-pro", "o3-pro"],
   ])("%s → %s", (model, key) => {
@@ -305,10 +316,31 @@ describe("带日期后缀的快照名不被相邻小版本吃掉", () => {
     expect(matchKey(model)).toBe(key);
   });
 
-  it("没有对应价格行的旧快照不会被错算到相邻小版本", () => {
-    // 之前分别会按 GPT-4.1 与 Grok 4.20 计价；表里没有 GPT-4 / Grok 4 行，应显示「-」
+  it("官方已不给价的旧快照保持「-」，不被相邻版本或 GPT-4 / Grok 行吃掉", () => {
+    // gpt-4-1106-preview 之前会按 GPT-4.1 计价；官方 GPT-4 / Turbo 页都没列它，不收录
     expect(matchKey("gpt-4-1106-preview")).toBeUndefined();
+    expect(matchKey("gpt-4-1106-vision-preview")).toBeUndefined();
+    // GPT-4 行不能吃掉其他 4 系：32k、vision、4.5 官方表里都没有现价
+    expect(matchKey("gpt-4-32k")).toBeUndefined();
+    expect(matchKey("gpt-4-vision-preview")).toBeUndefined();
+    expect(matchKey("gpt-4.5-preview")).toBeUndefined();
+    // Grok 4（grok-4-0709）已退役，官方价格页不再列出；之前 grok-4-2025… 会按 Grok 4.20 计价
+    expect(matchKey("grok-4")).toBeUndefined();
+    expect(matchKey("grok-4-0709")).toBeUndefined();
     expect(matchKey("grok-4-20250709")).toBeUndefined();
+    expect(matchKey("grok-4-latest")).toBeUndefined();
+  });
+
+  it.each([
+    // Grok 4.x 现有名字仍命中各自的行
+    ["grok-4-20-0309-reasoning", "grok-4.20"],
+    ["grok-4.20", "grok-4.20"],
+    ["grok-4.20-multi-agent-0309", "grok-4.20"],
+    ["grok-4.7", "grok-4.7"],
+    ["grok-4-1-fast-reasoning", "grok-4.1-fast"],
+    ["grok-4.3", "grok-4.3"],
+  ])("%s → %s", (model, key) => {
+    expect(matchKey(model)).toBe(key);
   });
 });
 

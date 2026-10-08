@@ -306,4 +306,32 @@ export const OPENAI_PRICING: PricingRow[] = [
     cacheWritePerM: 0,
     currency: "USD",
   },
+  // ---- GPT-4 / GPT-4 Turbo（旧款，官方 2026-10-23 下线，保留用于历史用量换算）----
+  // 来源：developers.openai.com/api/docs/models/gpt-4-turbo 与 /models/gpt-4（核对 2026-10-08），
+  // 官方表无缓存输入价。gpt-4-1106-preview 不在这两页的快照列表里、官方也没有单列它的价，
+  // 所以不收录，保持「-」，不按 Turbo 价猜。
+  {
+    // 快照：gpt-4-turbo-2024-04-09、gpt-4-turbo-preview、gpt-4-0125-preview
+    key: "gpt-4-turbo",
+    label: "GPT-4 Turbo",
+    match: /gpt[.\-_]*4[.\-_]*(?:turbo|0125[.\-_]*preview)/i,
+    inputPerM: 10,
+    outputPerM: 30,
+    cacheReadPerM: 0,
+    cacheWritePerM: 0,
+    currency: "USD",
+  },
+  {
+    // 快照：gpt-4-0613、gpt-4-0314。只认「gpt-4」本身或后接日期：后面紧跟字母
+    // （gpt-4o、gpt-4-turbo、gpt-4-vision…）、1–3 位数字（gpt-4.1、gpt-4.5、gpt-4-32k）、
+    // 1106 / 0125（Turbo 时代的 preview）都不算，避免把别的型号按 $30/$60 计
+    key: "gpt-4",
+    label: "GPT-4",
+    match: /\bgpt[.\-_]*4(?![.\-_]*(?:[a-z]|\d{1,3}(?!\d)|1106|0125))/i,
+    inputPerM: 30,
+    outputPerM: 60,
+    cacheReadPerM: 0,
+    cacheWritePerM: 0,
+    currency: "USD",
+  },
 ];

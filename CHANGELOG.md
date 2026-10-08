@@ -56,13 +56,14 @@
 
 - **模型价格更新**（照各家官方定价页，核对日期 2026-10-08）：新增 GPT-6.1 Sol / GPT-6 Luna、
   Claude Opus 5.5 / Sonnet 5.5 / Haiku 5.5、Gemini 3.8 Flash、Grok 4.7、DeepSeek Flash（V4.1）、
-  Kimi K2.7 Code / K2.6、MiMo V2.6 系列、GLM-5.3-Flash / FlashX 等 17 款。此前 GPT-6.1 Sol、
-  GPT-6 Luna 会被按 GPT-6 Astra 计费，Claude Opus 5.5 / Sonnet 5.5 被按 5 代计费，GLM-5.3-Flash
-  被按 GLM-5.3 计费，带日期的快照名（如 `gpt-5-2025-08-07`、`glm-5-20250101`）被按 5.2 计费，
-  均已修正。调价：DeepSeek V4 Flash 旧名已退役、按新 Flash 价计（峰时 $0.44/$1.32 → $0.30/$1.20）；
-  Kimi K3 改用官方美元价（$3/$15，此前按汇率折算为 $2.82/$14.08），并补上官方新增的缓存写入费
-  （5 分钟档 $3）。费用按读取时的价格表计算，**Kimi K3（改用官方美元价并计入缓存写入费）和
-  DeepSeek 旧 Flash（降价）的历史花费会随之变化，这是按新价重算，不是计算错误。**
+  Kimi K2.7 Code / K2.6、MiMo V2.6 系列、GLM-5.3-Flash / FlashX 等 17 款，并补上官方仍列价的旧款
+  GPT-4（$30/$60）与 GPT-4 Turbo（$10/$30），供历史用量换算。此前 GPT-6.1 Sol、GPT-6 Luna 会被按
+  GPT-6 Astra 计费，Claude Opus 5.5 / Sonnet 5.5 被按 5 代计费，GLM-5.3-Flash 被按 GLM-5.3 计费，
+  带日期的快照名（如 `gpt-5-2025-08-07`、`glm-5-20250101`）被按 5.2 计费，均已修正。调价：DeepSeek
+  V4 Flash 旧名已退役、按新 Flash 价计（峰时 $0.44/$1.32 → $0.30/$1.20）；Kimi K3 改用官方美元价
+  （$3/$15，此前按汇率折算为 $2.82/$14.08），并补上官方新增的缓存写入费（5 分钟档 $3）。
+  费用按读取时的价格表计算，**Kimi K3（改用官方美元价并计入缓存写入费）和 DeepSeek 旧 Flash
+  （降价）的历史花费会随之变化，这是按新价重算，不是计算错误。**
 - 主进程和界面的 IPC 通道与类型收拢到 `shared/`，一处定义、编译器校验。打包入口变为
   `electron-dist/electron/main.js`。
 - 引入 ESLint / Prettier 并做一次全量格式化（已登记 `.git-blame-ignore-revs`）；拆分用量、设置、
