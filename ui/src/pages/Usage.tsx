@@ -34,7 +34,13 @@ import {
   pivotDailyUsage,
   summarizeLocalRecords,
 } from "@/lib/local-sources";
-import type { LocalSource } from "@/types";
+import type {
+  LocalDailyUsageRecord,
+  LocalSource,
+  ScanLocalUsageResult,
+  ServiceRecord,
+  UsageRecord,
+} from "@/types";
 
 type Range = "month" | "7d" | "30d" | "all";
 
@@ -404,291 +410,29 @@ export function Usage() {
 
           {/* ---- API 用量 ---- */}
           <TabsContent value="api">
-            <div className="space-y-4">
-              {unsupportedServices.length > 0 && (
-                <Card>
-                  <CardContent className="py-4">
-                    <div className="mb-2 text-sm font-medium text-muted-foreground">
-                      以下服务不支持用量查询（无公开 usage API，仅查看余额）
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {unsupportedServices.map((s) => (
-                        <Badge key={s.id} variant="secondary">
-                          {s.name}
-                        </Badge>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {refreshErrors.length > 0 && (
-                <Card>
-                  <CardContent className="py-4">
-                    <div className="mb-2 text-sm font-medium text-destructive">
-                      部分服务刷新失败
-                    </div>
-                    <ul className="space-y-1 text-sm text-muted-foreground">
-                      {refreshErrors.map((e) => (
-                        <li key={e.name}>
-                          <span className="font-medium text-foreground">{e.name}</span>：
-                          <button
-                            type="button"
-                            className="hover:underline"
-                            title="复制"
-                            aria-label={`复制「${e.name}」错误`}
-                            onClick={() => copyText(`${e.name}：${e.msg}`)}
-                          >
-                            {e.msg}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-              )}
-
-              {!usageReady ? (
-                <Card>
-                  <CardContent className="py-16 text-center text-sm text-muted-foreground">
-                    加载中…
-                  </CardContent>
-                </Card>
-              ) : records.length === 0 ? (
-                <Card>
-                  <CardContent className="flex flex-col items-center gap-3 py-16 text-center text-sm text-muted-foreground">
-                    <Coins className="size-6" />
-                    <p>
-                      暂无用量数据。
-                      {supportedServices.length > 0
-                        ? "点击右上角「刷新用量」拉取。"
-                        : "当前没有支持用量查询的服务。"}
-                    </p>
-                  </CardContent>
-                </Card>
-              ) : (
-                <Card>
-                  <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b text-left text-xs tracking-wide text-muted-foreground">
-                            <th className="px-4 py-3 font-medium">服务</th>
-                            <th className="px-4 py-3 font-medium">模型</th>
-                            <th className="px-4 py-3 text-right font-medium">Tokens</th>
-                            <th className="px-4 py-3 text-right font-medium">费用</th>
-                            <th className="px-4 py-3 text-right font-medium">记录时间</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {records.map((r) => (
-                            <tr
-                              key={r.id}
-                              className="border-b border-border/60 transition-colors last:border-0 hover:bg-white/30"
-                            >
-                              <td className="px-4 py-3">{nameOf(r.serviceId)}</td>
-                              <td className="px-4 py-3 font-mono text-xs">{r.model ?? "-"}</td>
-                              <td className="px-4 py-3 text-right tabular-nums">
-                                {formatTokens(
-                                  r.totalTokens ??
-                                    (r.promptTokens != null || r.completionTokens != null
-                                      ? (r.promptTokens ?? 0) + (r.completionTokens ?? 0)
-                                      : null),
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-right tabular-nums">
-                                {formatCost(r.cost, r.currency)}
-                              </td>
-                              <td className="px-4 py-3 text-right text-muted-foreground">
-                                {formatTime(r.recordedAt)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
+            <ApiUsagePanel
+              unsupportedServices={unsupportedServices}
+              supportedServices={supportedServices}
+              refreshErrors={refreshErrors}
+              usageReady={usageReady}
+              records={records}
+              nameOf={nameOf}
+            />
           </TabsContent>
 
           {/* ---- 本地 agent ---- */}
           <TabsContent value="local">
-            <div className="space-y-4">
-              {localUsageUnavailable.length > 0 && (
-                <Card>
-                  <CardContent className="py-4">
-                    <div className="mb-2 text-sm font-medium text-muted-foreground">
-                      以下来源不可用
-                    </div>
-                    <ul className="space-y-1 text-sm text-muted-foreground">
-                      {localUsageUnavailable.map((u) => (
-                        <li key={u.source}>
-                          <span className="font-medium text-foreground">
-                            {SOURCE_LABEL[u.source]}
-                          </span>
-                          ：{u.reason}
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-              )}
-
-              {!localReady ? (
-                <Card>
-                  <CardContent className="py-16 text-center text-sm text-muted-foreground">
-                    加载中…
-                  </CardContent>
-                </Card>
-              ) : localRows.length === 0 ? (
-                <Card>
-                  <CardContent className="flex flex-col items-center gap-3 py-16 text-center text-sm text-muted-foreground">
-                    <Bot className="size-6" />
-                    <p>
-                      {localUsageScanning
-                        ? "扫描中…"
-                        : "暂无本地 agent 用量数据。点击右上角「重新扫描」。"}
-                    </p>
-                  </CardContent>
-                </Card>
-              ) : (
-                <>
-                  {/* 每日堆叠柱状图（按来源） */}
-                  <Card>
-                    <CardContent className="py-4">
-                      <div className="mb-3 text-sm font-medium text-muted-foreground">
-                        每日用量（按来源堆叠；输入已拆出缓存，总量含缓存一次）
-                      </div>
-                      <LocalUsageBarChart data={dailyChartData} height={240} />
-                    </CardContent>
-                  </Card>
-
-                  {/* 按天明细表 */}
-                  <Card>
-                    <CardContent className="p-0">
-                      {groupedByDate.size > 1 ? (
-                        <div className="flex items-center justify-end px-4 pt-3">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-xs"
-                            onClick={() => {
-                              const dates = [...groupedByDate.keys()];
-                              const allOn =
-                                dates.length > 0 && dates.every((d) => expandedDates.has(d));
-                              setExpandedDates(allOn ? new Set() : new Set(dates));
-                            }}
-                          >
-                            {[...groupedByDate.keys()].every((d) => expandedDates.has(d))
-                              ? "全部收起"
-                              : "全部展开"}
-                          </Button>
-                        </div>
-                      ) : null}
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b text-left text-xs tracking-wide text-muted-foreground">
-                              <th className="px-4 py-3 font-medium">日期</th>
-                              <th className="px-4 py-3 text-right font-medium">总 Tokens</th>
-                              <th className="px-4 py-3 text-right font-medium">总费用</th>
-                              <th className="px-4 py-3 text-right font-medium">明细</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {[...groupedByDate.entries()].map(([date, rows]) => {
-                              const isExpanded = expandedDates.has(date);
-                              const day = summarizeLocalRecords(rows, date);
-
-                              return (
-                                <>
-                                  {/* 日期汇总行 */}
-                                  <tr
-                                    key={date}
-                                    className="border-b border-border/60 cursor-pointer transition-colors hover:bg-accent/30"
-                                    onClick={() => toggleDate(date)}
-                                  >
-                                    <td className="px-4 py-3 font-medium">
-                                      <div className="flex items-center gap-2">
-                                        {isExpanded ? (
-                                          <ChevronDown className="size-4 text-muted-foreground" />
-                                        ) : (
-                                          <ChevronRight className="size-4 text-muted-foreground" />
-                                        )}
-                                        {formatDateKey(date)}
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-3 text-right tabular-nums font-medium">
-                                      {formatTokensCn(day.tokens)}
-                                    </td>
-                                    <td className="px-4 py-3 text-right tabular-nums font-medium">
-                                      {formatCost(day.cost, day.currency)}
-                                      {day.hasUnpriced ? (
-                                        <span className="ml-1 text-[10px] font-normal text-muted-foreground">
-                                          含未标价
-                                        </span>
-                                      ) : null}
-                                    </td>
-                                    <td className="px-4 py-3 text-right text-muted-foreground">
-                                      {rows.length} 条记录
-                                    </td>
-                                  </tr>
-
-                                  {/* 展开的明细行 */}
-                                  {isExpanded &&
-                                    rows.map((r) => {
-                                      const total = visibleTokens(r);
-                                      return (
-                                        <tr
-                                          key={`${r.source}-${r.model}-${r.date}`}
-                                          className="border-b border-border/40 bg-accent/10 transition-colors last:border-0 hover:bg-accent/20"
-                                        >
-                                          <td className="pl-12 pr-4 py-2.5">
-                                            <div className="flex items-center gap-2">
-                                              <Badge variant="outline" className="text-xs">
-                                                {SOURCE_LABEL[r.source]}
-                                              </Badge>
-                                              <span className="font-mono text-xs text-muted-foreground">
-                                                {r.model}
-                                              </span>
-                                            </div>
-                                          </td>
-                                          <td className="px-4 py-2.5 text-right tabular-nums text-xs">
-                                            <div className="space-y-0.5">
-                                              <div>{formatTokensCn(total)}</div>
-                                              <div className="text-[10px] text-muted-foreground">
-                                                输入 {formatTokensCn(r.inputTokens)} / 输出{" "}
-                                                {formatTokensCn(r.outputTokens + r.reasoningTokens)}
-                                                {r.cacheReadTokens > 0 &&
-                                                  ` / 缓存读 ${formatTokensCn(r.cacheReadTokens)}`}
-                                                {r.cacheCreationTokens > 0 &&
-                                                  ` / 缓存写 ${formatTokensCn(r.cacheCreationTokens)}`}
-                                              </div>
-                                            </div>
-                                          </td>
-                                          <td className="px-4 py-2.5 text-right tabular-nums text-xs">
-                                            {formatCost(r.cost, r.currency)}
-                                          </td>
-                                          <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">
-                                            {r.sessions} 会话 ·{" "}
-                                            {formatDayRange(r.firstAt, r.lastAt)}
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                </>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </>
-              )}
-            </div>
+            <LocalUsagePanel
+              localUsageUnavailable={localUsageUnavailable}
+              localReady={localReady}
+              localRows={localRows}
+              localUsageScanning={localUsageScanning}
+              dailyChartData={dailyChartData}
+              groupedByDate={groupedByDate}
+              expandedDates={expandedDates}
+              setExpandedDates={setExpandedDates}
+              toggleDate={toggleDate}
+            />
           </TabsContent>
         </Tabs>
       </div>
@@ -723,6 +467,323 @@ export function Usage() {
           })();
         }}
       />
+    </div>
+  );
+}
+
+/** API 用量 tab 的内容；数据与派生值都由页面传入，本身不持有状态 */
+function ApiUsagePanel({
+  unsupportedServices,
+  supportedServices,
+  refreshErrors,
+  usageReady,
+  records,
+  nameOf,
+}: {
+  unsupportedServices: ServiceRecord[];
+  supportedServices: ServiceRecord[];
+  refreshErrors: { name: string; msg: string | undefined }[];
+  usageReady: boolean;
+  records: UsageRecord[];
+  nameOf: (id: string) => string;
+}) {
+  return (
+    <div className="space-y-4">
+      {unsupportedServices.length > 0 && (
+        <Card>
+          <CardContent className="py-4">
+            <div className="mb-2 text-sm font-medium text-muted-foreground">
+              以下服务不支持用量查询（无公开 usage API，仅查看余额）
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {unsupportedServices.map((s) => (
+                <Badge key={s.id} variant="secondary">
+                  {s.name}
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {refreshErrors.length > 0 && (
+        <Card>
+          <CardContent className="py-4">
+            <div className="mb-2 text-sm font-medium text-destructive">部分服务刷新失败</div>
+            <ul className="space-y-1 text-sm text-muted-foreground">
+              {refreshErrors.map((e) => (
+                <li key={e.name}>
+                  <span className="font-medium text-foreground">{e.name}</span>：
+                  <button
+                    type="button"
+                    className="hover:underline"
+                    title="复制"
+                    aria-label={`复制「${e.name}」错误`}
+                    onClick={() => copyText(`${e.name}：${e.msg}`)}
+                  >
+                    {e.msg}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {!usageReady ? (
+        <Card>
+          <CardContent className="py-16 text-center text-sm text-muted-foreground">
+            加载中…
+          </CardContent>
+        </Card>
+      ) : records.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-16 text-center text-sm text-muted-foreground">
+            <Coins className="size-6" />
+            <p>
+              暂无用量数据。
+              {supportedServices.length > 0
+                ? "点击右上角「刷新用量」拉取。"
+                : "当前没有支持用量查询的服务。"}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs tracking-wide text-muted-foreground">
+                    <th className="px-4 py-3 font-medium">服务</th>
+                    <th className="px-4 py-3 font-medium">模型</th>
+                    <th className="px-4 py-3 text-right font-medium">Tokens</th>
+                    <th className="px-4 py-3 text-right font-medium">费用</th>
+                    <th className="px-4 py-3 text-right font-medium">记录时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((r) => (
+                    <tr
+                      key={r.id}
+                      className="border-b border-border/60 transition-colors last:border-0 hover:bg-white/30"
+                    >
+                      <td className="px-4 py-3">{nameOf(r.serviceId)}</td>
+                      <td className="px-4 py-3 font-mono text-xs">{r.model ?? "-"}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {formatTokens(
+                          r.totalTokens ??
+                            (r.promptTokens != null || r.completionTokens != null
+                              ? (r.promptTokens ?? 0) + (r.completionTokens ?? 0)
+                              : null),
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {formatCost(r.cost, r.currency)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-muted-foreground">
+                        {formatTime(r.recordedAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/** 本地 agent tab 的内容；展开状态留在页面里，切 tab 回来不丢 */
+function LocalUsagePanel({
+  localUsageUnavailable,
+  localReady,
+  localRows,
+  localUsageScanning,
+  dailyChartData,
+  groupedByDate,
+  expandedDates,
+  setExpandedDates,
+  toggleDate,
+}: {
+  localUsageUnavailable: ScanLocalUsageResult["unavailable"];
+  localReady: boolean;
+  localRows: LocalDailyUsageRecord[];
+  localUsageScanning: boolean;
+  dailyChartData: ReturnType<typeof pivotDailyUsage>;
+  groupedByDate: Map<string, LocalDailyUsageRecord[]>;
+  expandedDates: Set<string>;
+  setExpandedDates: (next: Set<string>) => void;
+  toggleDate: (date: string) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      {localUsageUnavailable.length > 0 && (
+        <Card>
+          <CardContent className="py-4">
+            <div className="mb-2 text-sm font-medium text-muted-foreground">以下来源不可用</div>
+            <ul className="space-y-1 text-sm text-muted-foreground">
+              {localUsageUnavailable.map((u) => (
+                <li key={u.source}>
+                  <span className="font-medium text-foreground">{SOURCE_LABEL[u.source]}</span>：
+                  {u.reason}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {!localReady ? (
+        <Card>
+          <CardContent className="py-16 text-center text-sm text-muted-foreground">
+            加载中…
+          </CardContent>
+        </Card>
+      ) : localRows.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-16 text-center text-sm text-muted-foreground">
+            <Bot className="size-6" />
+            <p>
+              {localUsageScanning ? "扫描中…" : "暂无本地 agent 用量数据。点击右上角「重新扫描」。"}
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* 每日堆叠柱状图（按来源） */}
+          <Card>
+            <CardContent className="py-4">
+              <div className="mb-3 text-sm font-medium text-muted-foreground">
+                每日用量（按来源堆叠；输入已拆出缓存，总量含缓存一次）
+              </div>
+              <LocalUsageBarChart data={dailyChartData} height={240} />
+            </CardContent>
+          </Card>
+
+          {/* 按天明细表 */}
+          <Card>
+            <CardContent className="p-0">
+              {groupedByDate.size > 1 ? (
+                <div className="flex items-center justify-end px-4 pt-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => {
+                      const dates = [...groupedByDate.keys()];
+                      const allOn = dates.length > 0 && dates.every((d) => expandedDates.has(d));
+                      setExpandedDates(allOn ? new Set() : new Set(dates));
+                    }}
+                  >
+                    {[...groupedByDate.keys()].every((d) => expandedDates.has(d))
+                      ? "全部收起"
+                      : "全部展开"}
+                  </Button>
+                </div>
+              ) : null}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-xs tracking-wide text-muted-foreground">
+                      <th className="px-4 py-3 font-medium">日期</th>
+                      <th className="px-4 py-3 text-right font-medium">总 Tokens</th>
+                      <th className="px-4 py-3 text-right font-medium">总费用</th>
+                      <th className="px-4 py-3 text-right font-medium">明细</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...groupedByDate.entries()].map(([date, rows]) => {
+                      const isExpanded = expandedDates.has(date);
+                      const day = summarizeLocalRecords(rows, date);
+
+                      return (
+                        <>
+                          {/* 日期汇总行 */}
+                          <tr
+                            key={date}
+                            className="border-b border-border/60 cursor-pointer transition-colors hover:bg-accent/30"
+                            onClick={() => toggleDate(date)}
+                          >
+                            <td className="px-4 py-3 font-medium">
+                              <div className="flex items-center gap-2">
+                                {isExpanded ? (
+                                  <ChevronDown className="size-4 text-muted-foreground" />
+                                ) : (
+                                  <ChevronRight className="size-4 text-muted-foreground" />
+                                )}
+                                {formatDateKey(date)}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-right tabular-nums font-medium">
+                              {formatTokensCn(day.tokens)}
+                            </td>
+                            <td className="px-4 py-3 text-right tabular-nums font-medium">
+                              {formatCost(day.cost, day.currency)}
+                              {day.hasUnpriced ? (
+                                <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                                  含未标价
+                                </span>
+                              ) : null}
+                            </td>
+                            <td className="px-4 py-3 text-right text-muted-foreground">
+                              {rows.length} 条记录
+                            </td>
+                          </tr>
+
+                          {/* 展开的明细行 */}
+                          {isExpanded &&
+                            rows.map((r) => {
+                              const total = visibleTokens(r);
+                              return (
+                                <tr
+                                  key={`${r.source}-${r.model}-${r.date}`}
+                                  className="border-b border-border/40 bg-accent/10 transition-colors last:border-0 hover:bg-accent/20"
+                                >
+                                  <td className="pl-12 pr-4 py-2.5">
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="outline" className="text-xs">
+                                        {SOURCE_LABEL[r.source]}
+                                      </Badge>
+                                      <span className="font-mono text-xs text-muted-foreground">
+                                        {r.model}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-2.5 text-right tabular-nums text-xs">
+                                    <div className="space-y-0.5">
+                                      <div>{formatTokensCn(total)}</div>
+                                      <div className="text-[10px] text-muted-foreground">
+                                        输入 {formatTokensCn(r.inputTokens)} / 输出{" "}
+                                        {formatTokensCn(r.outputTokens + r.reasoningTokens)}
+                                        {r.cacheReadTokens > 0 &&
+                                          ` / 缓存读 ${formatTokensCn(r.cacheReadTokens)}`}
+                                        {r.cacheCreationTokens > 0 &&
+                                          ` / 缓存写 ${formatTokensCn(r.cacheCreationTokens)}`}
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-2.5 text-right tabular-nums text-xs">
+                                    {formatCost(r.cost, r.currency)}
+                                  </td>
+                                  <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">
+                                    {r.sessions} 会话 · {formatDayRange(r.firstAt, r.lastAt)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }
