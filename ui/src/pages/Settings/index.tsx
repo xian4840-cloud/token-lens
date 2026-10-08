@@ -11,11 +11,9 @@ import {
   ChevronDown,
   ChevronUp,
   RotateCw,
-  Trash2,
   PawPrint,
 } from "lucide-react";
 import { DiagnosticsCard } from "@/components/DiagnosticsCard";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -32,13 +30,9 @@ import { useAppStore } from "@/store/app";
 import { ipc } from "@/lib/ipc";
 import { showToast } from "@/lib/toast";
 import { LOCAL_SOURCES } from "@/lib/local-sources";
-import {
-  formatBackupImportResult,
-  formatBackupPreviewText,
-  prepareBackupImport,
-  type BackupPreview,
-} from "@/lib/backup-import";
 import type { ProxyMode } from "@/types";
+import { DataBackupSection } from "./DataBackupSection";
+import { LocalCacheSection } from "./LocalCacheSection";
 
 const INTERVAL_OPTIONS: { value: string; label: string }[] = [
   { value: "0", label: "关闭" },
@@ -551,179 +545,5 @@ function NetworkProxySection() {
         )}
       </CardContent>
     </Card>
-  );
-}
-
-/** 数据目录、备份导出与导入 */
-function DataBackupSection() {
-  const [backingUp, setBackingUp] = useState(false);
-  const [backupPending, setBackupPending] = useState<{
-    raw: string;
-    preview: BackupPreview;
-  } | null>(null);
-
-  return (
-    <>
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-display text-lg font-medium">数据与日志</CardTitle>
-          <CardDescription>
-            配置、密钥密文和用量历史都在本机 userData 目录，不会上传。
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={() => void ipc.revealUserData()}>
-            打开数据目录
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={backingUp}
-            onClick={() => {
-              setBackingUp(true);
-              void (async () => {
-                try {
-                  const json = await ipc.backupJson();
-                  const ok = await ipc.saveText(
-                    `token-lens-backup-${new Date().toISOString().slice(0, 10)}.json`,
-                    json,
-                  );
-                  if (ok) showToast("备份已导出（不含密钥）");
-                } catch (e) {
-                  showToast(e instanceof Error ? e.message : "导出失败", "err");
-                } finally {
-                  setBackingUp(false);
-                }
-              })();
-            }}
-          >
-            {backingUp ? "导出中…" : "导出备份"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              void (async () => {
-                const r = await prepareBackupImport();
-                if (!r.ok) {
-                  if ("error" in r) showToast(r.error, "err");
-                  return;
-                }
-                setBackupPending({ raw: r.raw, preview: r.preview });
-              })();
-            }}
-          >
-            导入备份
-          </Button>
-          <p className="w-full text-xs text-muted-foreground">
-            备份含服务清单、用量历史和价格覆盖，不含 API Key、Cookie 和代理地址。导入不会写入密钥。
-          </p>
-        </CardContent>
-      </Card>
-      <ConfirmDialog
-        open={backupPending != null}
-        onOpenChange={(open) => {
-          if (!open) setBackupPending(null);
-        }}
-        title="导入备份？"
-        description={backupPending ? formatBackupPreviewText(backupPending.preview) : "导入备份"}
-        confirmLabel="导入"
-        onConfirm={() => {
-          const pending = backupPending;
-          setBackupPending(null);
-          if (!pending) return;
-          void ipc.importBackup(pending.raw).then(
-            (r) => {
-              showToast(formatBackupImportResult(r));
-              void useAppStore.getState().reloadAfterBackupImport();
-            },
-            (e: unknown) => showToast(e instanceof Error ? e.message : "导入失败", "err"),
-          );
-        }}
-      />
-    </>
-  );
-}
-
-/** 本地用量缓存清理 */
-function LocalCacheSection() {
-  const [clearingCache, setClearingCache] = useState(false);
-  const [clearCacheOpen, setClearCacheOpen] = useState(false);
-  const [clearCacheMessage, setClearCacheMessage] = useState<string | null>(null);
-
-  const handleClearCache = async () => {
-    setClearingCache(true);
-    setClearCacheMessage(null);
-    try {
-      const result = await ipc.clearLocalUsageCache();
-      if (result.success) {
-        setClearCacheMessage("缓存已清除，并重新扫描了用量数据。");
-        showToast("缓存已清除并重新扫描");
-      } else {
-        setClearCacheMessage(`清除失败：${result.error || "未知错误"}`);
-        showToast(result.error || "清除失败", "err");
-      }
-      setClearCacheOpen(false);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setClearCacheMessage(`清除失败：${msg}`);
-      showToast(msg, "err");
-    } finally {
-      setClearingCache(false);
-    }
-  };
-
-  return (
-    <>
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-display text-lg font-medium">本地用量缓存</CardTitle>
-          <CardDescription>
-            清除缓存后会重新扫描所有 agent 会话记录。如果发现统计数据异常，可以尝试清除缓存。
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => {
-              setClearCacheMessage(null);
-              setClearCacheOpen(true);
-            }}
-            disabled={clearingCache}
-            className="gap-1.5"
-          >
-            {clearingCache ? (
-              <>
-                <Loader2 className="size-3.5 animate-spin" />
-                清除中...
-              </>
-            ) : (
-              <>
-                <Trash2 className="size-3.5" />
-                清除缓存并重新扫描
-              </>
-            )}
-          </Button>
-          {clearCacheMessage ? (
-            <p className="mt-3 text-xs text-muted-foreground">{clearCacheMessage}</p>
-          ) : (
-            <p className="mt-3 text-xs text-muted-foreground">
-              注意：此操作会清空所有历史统计记录，重新扫描可能需要几秒到几分钟（取决于会话文件数量）。
-            </p>
-          )}
-        </CardContent>
-      </Card>
-      <ConfirmDialog
-        open={clearCacheOpen}
-        onOpenChange={setClearCacheOpen}
-        title="清除本地用量缓存？"
-        description="将删除所有缓存数据和历史统计记录，然后重新扫描。此操作不可撤销。"
-        confirmLabel="清除并重扫"
-        destructive
-        busy={clearingCache}
-        onConfirm={handleClearCache}
-      />
-    </>
   );
 }
