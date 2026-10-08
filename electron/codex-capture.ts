@@ -53,7 +53,11 @@ async function eachLine(text: string, fn: (line: string) => void): Promise<strin
   return tail;
 }
 
-interface JournalCursor { offset: number; mtimeMs: number; partial: string }
+/**
+ * offset 只推进到最后一个换行之后：末尾没写完的半行（可能截断在多字节 UTF-8 字符中间）
+ * 不落进游标，下次连同新内容按字节重新读、再整体解码。size/mtimeMs 是上次看到的文件状态。
+ */
+interface JournalCursor { offset: number; size: number; mtimeMs: number }
 interface CaptureReader { models: Map<string, Set<string>>; files: Map<string, JournalCursor>; lastCompactAt: number }
 const readers = new Map<string, CaptureReader>();
 
@@ -68,7 +72,7 @@ function acceptRow(models: Map<string, Set<string>>, line: string): void {
   } catch { /* Partial append or unsupported record. */ }
 }
 
-async function readRange(file: string, start: number, end: number): Promise<string> {
+async function readRange(file: string, start: number, end: number): Promise<Buffer> {
   const handle = await fs.promises.open(file, "r");
   try {
     const buf = Buffer.alloc(end - start);
@@ -78,7 +82,7 @@ async function readRange(file: string, start: number, end: number): Promise<stri
       if (bytesRead === 0) break;
       read += bytesRead;
     }
-    return buf.subarray(0, read).toString("utf8");
+    return buf.subarray(0, read);
   } finally { await handle.close(); }
 }
 
@@ -177,16 +181,17 @@ async function readCapturedModelsOnce(dataRoot: string): Promise<ReadonlyMap<str
     [...stats].some(([name, st]) => st.size < (reader!.files.get(name)?.offset ?? 0));
   if (rebuild) { reader.models = new Map(); reader.files.clear(); }
   for (const [name, st] of stats) {
-    const cursor = reader.files.get(name) ?? { offset: 0, mtimeMs: 0, partial: "" };
-    if (st.size === cursor.offset) { reader.files.set(name, cursor); continue; }
+    const cursor = reader.files.get(name) ?? { offset: 0, size: 0, mtimeMs: 0 };
+    if (st.size === cursor.size && st.mtimeMs === cursor.mtimeMs) { reader.files.set(name, cursor); continue; }
     try {
-      const chunk = cursor.partial + await readRange(path.join(dir, name), cursor.offset, st.size);
+      const bytes = await readRange(path.join(dir, name), cursor.offset, st.size);
       const models = reader.models;
-      const tail = await eachLine(chunk, line => acceptRow(models, line.trim()));
-      // 半行若已是完整 JSON（写入方漏了换行）先收下；下次拼接后重复收录无害（集合去重）
-      acceptRow(models, tail.trim());
-      // 末尾没有换行的半行：可能是写到一半，留到下一次拼上
-      reader.files.set(name, { offset: st.size, mtimeMs: st.mtimeMs, partial: tail });
+      // 按字节找最后一个换行：之前是完整行，整体解码不会切坏多字节字符
+      const end = bytes.lastIndexOf(0x0a) + 1;
+      await eachLine(bytes.subarray(0, end).toString("utf8"), line => acceptRow(models, line.trim()));
+      // 半行若已是完整 JSON（写入方漏了换行）先收下；下次补全后重复收录无害（集合去重）
+      if (end < bytes.length) acceptRow(models, bytes.subarray(end).toString("utf8").trim());
+      reader.files.set(name, { offset: cursor.offset + end, size: cursor.offset + bytes.length, mtimeMs: st.mtimeMs });
     } catch { /* Retry locked/unreadable journals on the next refresh. */ }
   }
   return reader.models;

@@ -50,6 +50,22 @@ describe("readCapturedModels 增量读取", () => {
     expect(spy.mock.calls.length).toBe(opens);
   });
 
+  it("读取边界切在多字节字符中间（中文 / emoji）时不会把该行解码坏", async () => {
+    const journal = path.join(dir, "responses-1.jsonl");
+    const line = Buffer.from(row("r-中文", "通义千问-🚀") + "\n", "utf8");
+    // 分别切在 emoji（4 字节）和汉字（3 字节）中间
+    for (const [needle, inside] of [["🚀", 2], ["问", 1]] as const) {
+      resetCaptureReaders();
+      const cut = line.indexOf(Buffer.from(needle, "utf8")) + inside;
+      fs.writeFileSync(journal, Buffer.concat([Buffer.from(row("r0", "m0") + "\n"), line.subarray(0, cut)]));
+      expect([...(await readCapturedModels(root)).keys()]).toEqual(["r0"]);
+      fs.appendFileSync(journal, line.subarray(cut));
+      const models = await readCapturedModels(root);
+      expect([...models.keys()].sort()).toEqual(["r-中文", "r0"]);
+      expect([...models.get("r-中文")!]).toEqual(["通义千问-🚀"]);
+    }
+  });
+
   it("增量读到的字节数等于新增部分，而不是整份文件", async () => {
     const journal = path.join(dir, "responses-1.jsonl");
     fs.writeFileSync(journal, Array.from({ length: 500 }, (_, i) => row(`r${i}`, "m")).join("\n") + "\n");

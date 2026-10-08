@@ -54,6 +54,19 @@ describe("采集日志增量读取", () => {
     expect(records.at(-1)).toMatchObject({ id: "new", status: "mismatch" });
   });
 
+  it("读取边界切在多字节字符中间（中文 / emoji）时不会把该行解码坏", async () => {
+    const line = Buffer.from(rec("z", { requestedModel: "通义千问-😀", responseModel: "通义千问-😀" }) + "\n", "utf8");
+    for (const [needle, inside] of [["😀", 3], ["千", 2]] as const) {
+      fs.rmSync(journal, { force: true });
+      const cut = line.lastIndexOf(Buffer.from(needle, "utf8")) + inside;
+      fs.writeFileSync(journal, Buffer.concat([Buffer.from(rec("a") + "\n"), line.subarray(0, cut)]));
+      expect((await readClaudeCaptures(dataRoot)).map((r) => r.id)).toEqual(["a"]);
+      fs.appendFileSync(journal, line.subarray(cut));
+      const z = (await readClaudeCaptures(dataRoot)).find((r) => r.id === "z");
+      expect(z).toMatchObject({ requestedModel: "通义千问-😀", responseModel: "通义千问-😀", status: "match" });
+    }
+  });
+
   it("同一 id 的后续行覆盖前一行（与整份重读语义一致），半行等补全", async () => {
     fs.writeFileSync(journal, rec("x", { responseModel: undefined }) + "\n" + rec("x").slice(0, 10));
     let records = await readClaudeCaptures(dataRoot);

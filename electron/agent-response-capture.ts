@@ -320,8 +320,10 @@ type CaptureRecord = ModelMonitorRecord & { assistantId?: string };
 /**
  * 采集日志增量读取状态：记住读到的字节偏移，日志只追加时只读新增部分。
  * 文件变短、换了 inode（被重写/替换）或 mtime 回退时整份重读。
+ * offset 只推进到最后一个换行之后；末尾半行（可能截断在多字节 UTF-8 字符中间）下次按字节重读，
+ * size 是上次读到的文件长度，用于判断有没有新内容。
  */
-const cache = new Map<string, { ino: number; mtimeMs: number; offset: number; partial: string; byId: Map<string, CaptureRecord>; records: CaptureRecord[] }>();
+const cache = new Map<string, { ino: number; mtimeMs: number; offset: number; size: number; byId: Map<string, CaptureRecord>; records: CaptureRecord[] }>();
 export async function readOpenCodeCaptures(dataRoot: string): Promise<(ModelMonitorRecord & { assistantId?: string })[]> {
   return readCaptures(openCodeCapturePaths(dataRoot).journal, true);
 }
@@ -351,11 +353,11 @@ async function readCapturesOnce(journal: string, requireSession: boolean): Promi
   let stat: fs.Stats;
   try { stat = await fs.promises.stat(journal); } catch { cache.delete(journal); return []; }
   let hit = cache.get(journal);
-  if (hit && hit.ino === stat.ino && hit.offset === stat.size && hit.mtimeMs === stat.mtimeMs) return hit.records;
+  if (hit && hit.ino === stat.ino && hit.size === stat.size && hit.mtimeMs === stat.mtimeMs) return hit.records;
   if (!hit || hit.ino !== stat.ino || stat.size < hit.offset || stat.mtimeMs < hit.mtimeMs) {
-    hit = { ino: stat.ino, mtimeMs: 0, offset: 0, partial: "", byId: new Map(), records: [] };
+    hit = { ino: stat.ino, mtimeMs: 0, offset: 0, size: 0, byId: new Map(), records: [] };
   }
-  let chunk: string;
+  let bytes: Buffer;
   try {
     const handle = await fs.promises.open(journal, "r");
     try {
@@ -366,18 +368,22 @@ async function readCapturesOnce(journal: string, requireSession: boolean): Promi
         if (bytesRead === 0) break;
         read += bytesRead;
       }
-      chunk = hit.partial + buf.subarray(0, read).toString("utf8");
-      hit.offset += read;
+      bytes = buf.subarray(0, read);
     } finally { await handle.close(); }
   } catch { return hit.records; }
-  const lines = chunk.split("\n");
-  hit.partial = lines.pop() ?? "";
+  // 按字节找最后一个换行：之前是完整行，整体解码不会切坏多字节字符
+  const end = bytes.lastIndexOf(0x0a) + 1;
+  const lines = bytes.subarray(0, end).toString("utf8").split("\n");
+  lines.pop();
+  const partial = bytes.subarray(end).toString("utf8");
+  hit.size = hit.offset + bytes.length;
+  hit.offset += end;
   for (const raw of lines) {
     const record = parseCaptureLine(raw.replace(/\r$/, ""), requireSession);
     if (record) hit.byId.set(record.id, record);
   }
   // 末尾半行若已是完整记录（写入方漏了换行）也先收下；补全后会被同 id 覆盖
-  const tail = parseCaptureLine(hit.partial.replace(/\r$/, ""), requireSession);
+  const tail = parseCaptureLine(partial.replace(/\r$/, ""), requireSession);
   const byId = tail ? new Map(hit.byId).set(tail.id, tail) : hit.byId;
   hit.mtimeMs = stat.mtimeMs;
   hit.records = [...byId.values()];
