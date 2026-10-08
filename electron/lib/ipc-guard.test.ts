@@ -162,3 +162,32 @@ describe("registerWindowRole", () => {
     expect(windowRoleOf(42)).toBeUndefined();
   });
 });
+
+describe("highRiskBusy（已有确认框开着）", () => {
+  const INDEX = "/app/ui/dist/index.html";
+  const base: GuardConfig = { indexHtmlPath: INDEX, platform: "linux", roleOf: (id) => (id === 1 ? "main" : id === 2 ? "pet" : undefined), isFocused: () => false };
+  const ev = (id: number, route: string) => ({ sender: { id }, senderFrame: { url: `file://${INDEX}#${route}`, parent: null } });
+  const busy = { status: "confirm-pending" };
+
+  it("通过角色 / URL / 路由校验后，在前台校验之前返回忙碌结果", () => {
+    expect(checkSender(ev(1, "/model-monitor"), MODEL_MONITOR_HIGH_RISK, { ...base, highRiskBusy: () => busy })).toEqual({ ok: true, role: "main", busyResult: busy });
+    expect(checkSender(ev(1, "/model-monitor"), MODEL_MONITOR_HIGH_RISK, { ...base, highRiskBusy: () => undefined })).toMatchObject({ ok: false, reason: "窗口不在前台" });
+  });
+
+  it("未授权的发送方不会因为忙碌而被放过", () => {
+    const cfg = { ...base, highRiskBusy: () => busy };
+    expect(checkSender(ev(1, "/overview"), MODEL_MONITOR_HIGH_RISK, cfg)).toMatchObject({ ok: false });
+    expect(checkSender(ev(2, "/model-monitor"), MODEL_MONITOR_HIGH_RISK, cfg)).toMatchObject({ ok: false });
+    expect(checkSender(ev(3, "/model-monitor"), MODEL_MONITOR_HIGH_RISK, cfg)).toMatchObject({ ok: false });
+  });
+
+  it("普通通道不受影响；guard 直接把忙碌结果交给调用方，不调用处理函数", async () => {
+    expect(checkSender(ev(1, "/overview"), MAIN_ONLY, { ...base, highRiskBusy: () => busy })).toEqual({ ok: true, role: "main" });
+    const handlers = new Map<string, (...a: unknown[]) => unknown>();
+    const guard = createGuardedIpc({ handle: (c, l) => void handlers.set(c, l), on: () => undefined }, () => ({ ...base, highRiskBusy: () => busy }));
+    const listener = vi.fn(() => "ran");
+    guard.handle("x", MODEL_MONITOR_HIGH_RISK, listener);
+    expect(handlers.get("x")!(ev(1, "/model-monitor"))).toBe(busy);
+    expect(listener).not.toHaveBeenCalled();
+  });
+});

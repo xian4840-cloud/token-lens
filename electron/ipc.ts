@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, webContents } from "electron";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import {
   listServices,
@@ -78,18 +79,43 @@ import { clearUsageScanCache } from "./local-usage/clear-cache";
 import type { AppBootstrap } from "./types";
 import { registerPetIpc } from "./pet/ipc";
 import { getAgentModelMonitorState } from "./agent-model-monitor";
-import { launchCapturedCodex } from "./codex-capture";
+import { codexRoot, launchCapturedCodex } from "./codex-capture";
 import {
   disableClaudeCapture,
   disableOpenCodeCapture,
   enableClaudeCapture,
   enableOpenCodeCapture,
+  openCodeCapturePaths,
 } from "./agent-response-capture";
+import { CONFIRM_PENDING, createHighRiskConfirm, type HighRiskConfirm, type HighRiskContext } from "./lib/high-risk-confirm";
 import { singleFlight } from "./lib/inflight";
 import { applyBackupImport } from "./backup-import";
 import { createServiceFromInput, updateServiceFromInput } from "./service-update";
 
 const captureLaunch = { current: null as ReturnType<typeof launchCapturedCodex> | null };
+
+/** 高危确认框文案用到的路径：全部取自主进程（用户目录、userData、主进程环境变量），与 enable / launch 实际使用的路径同源 */
+function highRiskContextFromMain(): HighRiskContext {
+  const home = os.homedir();
+  const dataRoot = app.getPath("userData");
+  return {
+    home,
+    dataRoot,
+    openCodeConfigRoot: path.dirname(path.dirname(openCodeCapturePaths(dataRoot).plugin)),
+    codexHome: codexRoot(),
+    localAppData: process.env.LOCALAPPDATA || path.join(home, "AppData", "Local"),
+    platform: process.platform,
+  };
+}
+
+function defaultHighRiskConfirm(): HighRiskConfirm {
+  return createHighRiskConfirm({
+    dialog: { showMessageBox: (win, options) => dialog.showMessageBox(win as BrowserWindow, options) },
+    // 只用 event.sender 定位所在窗口（guard 已保证是主窗口），不读取渲染进程提供的任何内容
+    getParent: (event) => BrowserWindow.fromWebContents((event as { sender: Electron.WebContents }).sender) ?? undefined,
+    getContext: highRiskContextFromMain,
+  });
+}
 
 
 
@@ -120,25 +146,39 @@ function ipcGuardConfig(): GuardConfig {
  * 注册全部 IPC 通道。每个通道都经 lib/ipc-guard 校验发送方：
  * 默认只对主窗口开放；桌宠窗口只能调 pet/ipc 里声明的几个通道；
  * 改注册表、往用户目录装脚本、启动外部程序的通道另加前台与路由限制。
- * `target` 仅供测试注入假的 ipcMain。
+ * `target` / `getConfig` / `confirm` 仅供测试注入假的 ipcMain、发送方配置和确认框。
  */
 export function registerIpc(
   target: IpcMainLike = ipcMain,
   getConfig: () => GuardConfig = ipcGuardConfig,
+  confirm: HighRiskConfirm = defaultHighRiskConfirm(),
 ): GuardedIpc {
-  const guard = createGuardedIpc(target, getConfig, (channel, reason) =>
+  // 已有确认框开着时，高危通道（过了角色 / 页面校验后）直接返回 confirm-pending
+  const guardConfigWithConfirm = (): GuardConfig => ({
+    ...getConfig(),
+    highRiskBusy: () => (confirm.pending ? CONFIRM_PENDING : undefined),
+  });
+  const guard = createGuardedIpc(target, guardConfigWithConfirm, (channel, reason) =>
     logWarn("ipc", `已拒绝 ${channel}：${reason}`),
   );
   const handle = (channel: string, listener: (event: any, ...args: any[]) => unknown) =>
     guard.handle(channel, MAIN_ONLY, listener);
   handle("model-monitor:state", (_e, date?: unknown, source?: unknown) => getAgentModelMonitorState(date, source, app.getPath("userData")));
   // 以下五个会写用户目录 / 用户环境变量（HKCU\Environment）或启动外部程序：
-  // 只接受主窗口、前台、且当前就在「模型监测」页发起的请求
-  guard.handle("model-monitor:enable-opencode", MODEL_MONITOR_HIGH_RISK, () => enableOpenCodeCapture(path.join(app.getAppPath(), "electron", "agent-capture", "opencode.mjs"), app.getPath("userData")));
-  guard.handle("model-monitor:enable-claude", MODEL_MONITOR_HIGH_RISK, () => enableClaudeCapture(path.join(app.getAppPath(), "electron", "agent-capture"), app.getPath("userData")));
-  guard.handle("model-monitor:disable-opencode", MODEL_MONITOR_HIGH_RISK, () => disableOpenCodeCapture(app.getPath("userData")));
-  guard.handle("model-monitor:disable-claude", MODEL_MONITOR_HIGH_RISK, () => disableClaudeCapture(app.getPath("userData")));
-  guard.handle("model-monitor:launch-codex", MODEL_MONITOR_HIGH_RISK, () => singleFlight(captureLaunch, () => launchCapturedCodex(path.join(app.getAppPath(), "electron", "codex-capture", "CodexCapture.cs"), app.getPath("userData"))));
+  // 1. guard：只接受主窗口、前台、且当前就在「模型监测」页发起的请求；
+  // 2. 主进程弹系统确认框（文案只由主进程状态拼出），用户点「继续」才执行；
+  //    取消返回 { status: "cancelled" }，已有确认框开着时立即返回 { status: "confirm-pending" }。
+  // 处理函数故意不接收任何渲染进程参数。
+  guard.handle("model-monitor:enable-opencode", MODEL_MONITOR_HIGH_RISK, (e) =>
+    confirm.run("enable-opencode", e, () => enableOpenCodeCapture(path.join(app.getAppPath(), "electron", "agent-capture", "opencode.mjs"), app.getPath("userData"))));
+  guard.handle("model-monitor:enable-claude", MODEL_MONITOR_HIGH_RISK, (e) =>
+    confirm.run("enable-claude", e, () => enableClaudeCapture(path.join(app.getAppPath(), "electron", "agent-capture"), app.getPath("userData"))));
+  guard.handle("model-monitor:disable-opencode", MODEL_MONITOR_HIGH_RISK, (e) =>
+    confirm.run("disable-opencode", e, () => disableOpenCodeCapture(app.getPath("userData"))));
+  guard.handle("model-monitor:disable-claude", MODEL_MONITOR_HIGH_RISK, (e) =>
+    confirm.run("disable-claude", e, () => disableClaudeCapture(app.getPath("userData"))));
+  guard.handle("model-monitor:launch-codex", MODEL_MONITOR_HIGH_RISK, (e) =>
+    confirm.run("launch-codex", e, () => singleFlight(captureLaunch, () => launchCapturedCodex(path.join(app.getAppPath(), "electron", "codex-capture", "CodexCapture.cs"), app.getPath("userData")))));
   handle("app:ping", () => "pong");
   handle("encryption:available", () => isEncryptionAvailable());
 

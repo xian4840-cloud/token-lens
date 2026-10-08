@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { HighRiskResult } from "./lib/high-risk-confirm";
 import type {
   AppBootstrap,
   BalanceResult,
@@ -24,11 +25,11 @@ import type { CaptureRemovalResult } from "./agent-response-capture";
  */
 const api = {
   getModelMonitorState: (date?: string, source?: ModelMonitorSource) => ipcRenderer.invoke("model-monitor:state", date, source) as Promise<ModelMonitorState>,
-  launchCapturedCodex: () => ipcRenderer.invoke("model-monitor:launch-codex") as Promise<ModelMonitorState["capture"]>,
-  enableOpenCodeCapture: () => ipcRenderer.invoke("model-monitor:enable-opencode") as Promise<void>,
-  enableClaudeCapture: () => ipcRenderer.invoke("model-monitor:enable-claude") as Promise<void>,
-  disableOpenCodeCapture: () => ipcRenderer.invoke("model-monitor:disable-opencode") as Promise<CaptureRemovalResult>,
-  disableClaudeCapture: () => ipcRenderer.invoke("model-monitor:disable-claude") as Promise<CaptureRemovalResult>,
+  launchCapturedCodex: () => ipcRenderer.invoke("model-monitor:launch-codex") as Promise<HighRiskResult<ModelMonitorState["capture"]>>,
+  enableOpenCodeCapture: () => ipcRenderer.invoke("model-monitor:enable-opencode") as Promise<HighRiskResult<void>>,
+  enableClaudeCapture: () => ipcRenderer.invoke("model-monitor:enable-claude") as Promise<HighRiskResult<void>>,
+  disableOpenCodeCapture: () => ipcRenderer.invoke("model-monitor:disable-opencode") as Promise<HighRiskResult<CaptureRemovalResult>>,
+  disableClaudeCapture: () => ipcRenderer.invoke("model-monitor:disable-claude") as Promise<HighRiskResult<CaptureRemovalResult>>,
   ping: () => ipcRenderer.invoke("app:ping") as Promise<string>,
   isEncryptionAvailable: () =>
     ipcRenderer.invoke("encryption:available") as Promise<boolean>,

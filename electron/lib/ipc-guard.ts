@@ -51,9 +51,17 @@ export interface GuardConfig {
   /** 该 webContents 所在窗口是否在前台（高危通道用） */
   isFocused: (webContentsId: number) => boolean;
   platform?: NodeJS.Platform;
+  /**
+   * 高危通道「忙碌」时直接交给调用方的结果（例如已有系统确认框开着时返回 { status: "confirm-pending" }），
+   * 不忙时返回 undefined。在角色 / URL / 路由校验通过之后、前台校验之前判断：
+   * 系统确认框是模态的，打开时主窗口会失焦，若先做前台校验，第二个请求只会得到笼统的拒绝。
+   */
+  highRiskBusy?: () => unknown;
 }
 
-export type SenderCheck = { ok: true; role: WindowRole } | { ok: false; reason: string };
+export type SenderCheck =
+  | { ok: true; role: WindowRole; busyResult?: unknown }
+  | { ok: false; reason: string };
 
 /** 页面 URL 是否是本应用自己的页面 */
 export function isTrustedAppUrl(
@@ -111,12 +119,14 @@ export function checkSender(
   if (frame.parent != null) return { ok: false, reason: "只接受顶层 frame" };
   if (!isTrustedAppUrl(frame.url, cfg)) return { ok: false, reason: "发送页面不是本应用页面" };
   if (policy.highRisk) {
-    if (!cfg.isFocused(event.sender.id)) return { ok: false, reason: "窗口不在前台" };
     const route = hashRoute(frame.url);
     const want = policy.highRisk.route;
     if (route !== want && !route.startsWith(`${want}/`)) {
       return { ok: false, reason: `只能从 ${want} 页面发起` };
     }
+    const busyResult = cfg.highRiskBusy?.();
+    if (busyResult !== undefined) return { ok: true, role, busyResult };
+    if (!cfg.isFocused(event.sender.id)) return { ok: false, reason: "窗口不在前台" };
   }
   return { ok: true, role };
 }
@@ -159,6 +169,7 @@ export function createGuardedIpc(
           onReject?.(channel, r.reason);
           throw new Error(REJECT_MESSAGE);
         }
+        if (r.busyResult !== undefined) return r.busyResult;
         return listener(event, ...args);
       });
     },
@@ -166,9 +177,9 @@ export function createGuardedIpc(
       register(channel, policy);
       ipc.on(channel, (event: SenderEventLike, ...args: unknown[]) => {
         const r = checkSender(event, policy, getConfig());
-        if (!r.ok) {
+        if (!r.ok || r.busyResult !== undefined) {
           // send 类通道没有返回值，静默丢弃并记日志
-          onReject?.(channel, r.reason);
+          if (!r.ok) onReject?.(channel, r.reason);
           return;
         }
         listener(event, ...args);
