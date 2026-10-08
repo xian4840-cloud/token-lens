@@ -3,9 +3,12 @@
 ; 卸载时清理「模型监测 → 响应核验」写到应用目录之外的东西，与应用内「关闭采集」
 ; （electron/agent-response-capture.ts 的 disableClaudeCapture / disableOpenCodeCapture）
 ; 逐项对应：
-;   1. HKCU\Environment\BUN_OPTIONS 里我们追加的 --preload=<用户目录>/.claude/token-lens-monitor/claude.cjs
-;      只去掉这一段；去掉后为空才删除该值，否则写回剩余部分（用户自己的选项原样保留）
-;   2. %USERPROFILE%\.claude\token-lens-monitor\ 下的 claude.cjs、_token-lens-fetch-models.cjs、claude-journal.json
+;   1. HKCU\Environment\BUN_OPTIONS 里我们追加的 --preload=…/.claude/token-lens-monitor/claude.cjs
+;      只去掉这些段（不区分大小写、正反斜杠都认、空格/制表符/换行都算分隔符）；一段不剩才删除该值，
+;      否则写回剩余部分（用户自己的选项原样保留）
+;   2. 复查：剩余值仍引用 token-lens-monitor/claude.cjs，或注册表写入失败，则第 3 步整套跳过
+;      （Bun 找不到 --preload 指向的文件会直接退出，删了脚本 Claude Code 就起不来）
+;   3. %USERPROFILE%\.claude\token-lens-monitor\ 下的 claude.cjs、_token-lens-fetch-models.cjs、claude-journal.json
 ;      逐个核对首行标记 / 内容，是我们写的才删；目录空了才删（RMDir 不带 /r）
 ;   3. OpenCode 插件目录（%OPENCODE_CONFIG_DIR% 或 %USERPROFILE%\.config\opencode）\plugins\ 下的
 ;      token-lens-response-monitor.js 与 _token-lens-fetch-models.cjs，同样核对首行标记；插件目录本身不删
@@ -18,6 +21,9 @@
 !define TL_OPENCODE_MARKER "// Token Lens response monitor"
 !define TL_HELPER_MARKER "// Shared in-process observer: metadata only, bounded frames, unchanged response bytes."
 !define TL_HELPER_NAME "_token-lens-fetch-models.cjs"
+; 与 PRELOAD_PATH_SUFFIX / PRELOAD_REFERENCE 一致（小写、正斜杠）
+!define TL_PRELOAD_SUFFIX "/.claude/token-lens-monitor/claude.cjs"
+!define TL_PRELOAD_REFERENCE "token-lens-monitor/claude.cjs"
 
 !ifdef BUILD_UNINSTALLER
 !include "WordFunc.nsh"
@@ -103,49 +109,166 @@ tl_rjp_done:
   Pop $R0
 FunctionEnd
 
-; 从 HKCU\Environment\BUN_OPTIONS 去掉我们那一段。算法与 stripBunPreloadFlag 相同：
-; 两边补空格 -> 反复把 " <flag> " 换成 " " -> 去掉补上的空格；结果为空删除该值，否则写回。
-Function un.TLStripBunOptions
-  Push $R0
-  Push $R1
-  Push $R2
-  Push $R3
+; ---- BUN_OPTIONS 处理：逐字符实现 stripTokenLensPreload（agent-response-capture.ts），两边由测试对齐 ----
+Var TLValue      ; 原值
+Var TLOut        ; 结果
+Var TLSep        ; 当前段之前的空白
+Var TLTok        ; 当前段
+Var TLCarry      ; 第一段被去掉时，留给下一个保留段用的行首空白
+Var TLHasCarry
+Var TLAnyKept
+Var TLMatch
+Var TLRemovedList
+Var TLStillRef   ; 1 = 仍有东西引用 claude.cjs（或注册表写入失败），不能删脚本
+
+; $TLTok 是否是我们的段：--preload= 开头（不区分大小写），路径统一成正斜杠后以
+; ${TL_PRELOAD_SUFFIX} 结尾（StrCmp 不区分大小写）。结果写入 $TLMatch。
+Function un.TLIsOurPreload
+  Push $0
+  Push $1
+  Push $2
+  StrCpy $TLMatch 0
+  StrCpy $0 $TLTok 10
+  StrCmp $0 "--preload=" 0 tl_iop_done
+  StrCpy $0 $TLTok "" 10
+  ${WordReplaceS} "$0" "\" "/" "+" $0
+  StrLen $1 "${TL_PRELOAD_SUFFIX}"
+  StrLen $2 $0
+  IntCmp $2 $1 0 tl_iop_done 0
+  IntOp $1 0 - $1
+  StrCpy $2 $0 "" $1
+  StrCmp $2 "${TL_PRELOAD_SUFFIX}" 0 tl_iop_done
+  StrCpy $TLMatch 1
+tl_iop_done:
+  Pop $2
+  Pop $1
+  Pop $0
+FunctionEnd
+
+; 处理一对 ($TLSep, $TLTok)
+Function un.TLProcessPair
+  Call un.TLIsOurPreload
+  StrCmp $TLMatch 1 0 tl_pp_keep
+  StrCpy $TLRemovedList "$TLRemovedList $TLTok"
+  StrCmp $TLAnyKept 1 tl_pp_done
+  StrCmp $TLHasCarry 1 tl_pp_done
+  StrCpy $TLCarry $TLSep
+  StrCpy $TLHasCarry 1
+  Goto tl_pp_done
+tl_pp_keep:
+  StrCmp $TLAnyKept 1 tl_pp_usesep
+  StrCmp $TLHasCarry 1 0 tl_pp_usesep
+  StrCpy $TLOut "$TLOut$TLCarry$TLTok"
+  Goto tl_pp_kept
+tl_pp_usesep:
+  StrCpy $TLOut "$TLOut$TLSep$TLTok"
+tl_pp_kept:
+  StrCpy $TLAnyKept 1
+  StrCpy $TLHasCarry 0
+tl_pp_done:
+FunctionEnd
+
+; $TLValue -> $TLOut（一段不剩时为空）
+Function un.TLStripValue
+  Push $0
+  Push $1
+  Push $2
+  StrCpy $TLOut ""
+  StrCpy $TLSep ""
+  StrCpy $TLTok ""
+  StrCpy $TLCarry ""
+  StrCpy $TLHasCarry 0
+  StrCpy $TLAnyKept 0
+  StrCpy $TLRemovedList ""
+  StrCpy $0 0
+  StrLen $1 $TLValue
+tl_sv_loop:
+  IntCmp $0 $1 tl_sv_end 0 tl_sv_end
+  StrCpy $2 $TLValue 1 $0
+  IntOp $0 $0 + 1
+  StrCmp $2 " " tl_sv_ws
+  StrCmp $2 "$\t" tl_sv_ws
+  StrCmp $2 "$\r" tl_sv_ws
+  StrCmp $2 "$\n" tl_sv_ws
+  StrCpy $TLTok "$TLTok$2"
+  Goto tl_sv_loop
+tl_sv_ws:
+  StrCmp $TLTok "" 0 tl_sv_flush
+  StrCpy $TLSep "$TLSep$2"
+  Goto tl_sv_loop
+tl_sv_flush:
+  Call un.TLProcessPair
+  StrCpy $TLSep $2
+  StrCpy $TLTok ""
+  Goto tl_sv_loop
+tl_sv_end:
+  StrCmp $TLTok "" tl_sv_trailing
+  Call un.TLProcessPair
+  StrCpy $TLSep ""
+tl_sv_trailing:
+  ; 此时 $TLSep 是末尾空白
+  StrCmp $TLAnyKept 1 0 tl_sv_empty
+  StrCpy $TLOut "$TLOut$TLSep"
+  Goto tl_sv_done
+tl_sv_empty:
+  StrCpy $TLOut ""
+tl_sv_done:
+  Pop $2
+  Pop $1
+  Pop $0
+FunctionEnd
+
+; $TLOut 里是否仍引用 ${TL_PRELOAD_REFERENCE}（不区分大小写、正反斜杠），是则 $TLStillRef = 1
+Function un.TLCheckStillReferenced
+  Push $0
+  StrCmp $TLOut "" tl_csr_done
+  ${WordReplaceS} "$TLOut" "\" "/" "+" $0
   ClearErrors
-  ReadRegStr $R0 HKCU "Environment" "BUN_OPTIONS"
+  ; 前面补一个字符，保证不会以分隔串开头；WordFind 不区分大小写
+  ${WordFind} "x$0" "${TL_PRELOAD_REFERENCE}" "E+1{" $0
+  IfErrors tl_csr_done
+  StrCpy $TLStillRef 1
+  DetailPrint "Token Lens: HKCU\Environment\BUN_OPTIONS still references ${TL_PRELOAD_REFERENCE}; keeping the Claude monitor files"
+tl_csr_done:
+  Pop $0
+FunctionEnd
+
+; 从 HKCU\Environment\BUN_OPTIONS 去掉我们的段；结果为空删除该值，否则写回；
+; 写入失败或剩余值仍引用 claude.cjs 时置 $TLStillRef = 1。
+Function un.TLStripBunOptions
+  StrCpy $TLStillRef 0
+  ClearErrors
+  ReadRegStr $TLValue HKCU "Environment" "BUN_OPTIONS"
   IfErrors tl_sbo_done
-  StrCmp $R0 "" tl_sbo_done
-  ${WordReplaceS} "$PROFILE" "\" "/" "+" $R1
-  StrCpy $R1 "--preload=$R1/.claude/token-lens-monitor/claude.cjs"
-  StrCpy $R2 " $R0 "
-tl_sbo_loop:
-  ${WordReplaceS} "$R2" " $R1 " " " "+" $R3
-  StrCmpS $R3 $R2 tl_sbo_trim
-  StrCpy $R2 $R3
-  Goto tl_sbo_loop
-tl_sbo_trim:
-  StrCpy $R2 $R2 "" 1
-  StrCpy $R2 $R2 -1
-  StrCmpS $R2 $R0 tl_sbo_done
-  StrCmp $R2 "" 0 tl_sbo_write
+  StrCmp $TLValue "" tl_sbo_done
+  Call un.TLStripValue
+  StrCmpS $TLOut $TLValue tl_sbo_check
+  ClearErrors
+  StrCmp $TLOut "" 0 tl_sbo_write
   DeleteRegValue HKCU "Environment" "BUN_OPTIONS"
+  IfErrors tl_sbo_failed
   DetailPrint "Token Lens: removed HKCU\Environment\BUN_OPTIONS"
   Goto tl_sbo_notify
 tl_sbo_write:
-  WriteRegStr HKCU "Environment" "BUN_OPTIONS" "$R2"
-  DetailPrint "Token Lens: removed $R1 from HKCU\Environment\BUN_OPTIONS"
+  WriteRegStr HKCU "Environment" "BUN_OPTIONS" "$TLOut"
+  IfErrors tl_sbo_failed
+  DetailPrint "Token Lens: removed$TLRemovedList from HKCU\Environment\BUN_OPTIONS"
 tl_sbo_notify:
   SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Environment" /TIMEOUT=1000
+tl_sbo_check:
+  Call un.TLCheckStillReferenced
+  Goto tl_sbo_done
+tl_sbo_failed:
+  StrCpy $TLStillRef 1
+  DetailPrint "Token Lens: failed to update HKCU\Environment\BUN_OPTIONS; keeping the Claude monitor files"
 tl_sbo_done:
-  Pop $R3
-  Pop $R2
-  Pop $R1
-  Pop $R0
 FunctionEnd
 
 Function un.TLCleanupAgentCapture
   Push $R0
   ; Claude Code
   Call un.TLStripBunOptions
+  StrCmp $TLStillRef 1 tl_cac_opencode
   Push "$PROFILE\.claude\token-lens-monitor\claude.cjs"
   Push "${TL_CLAUDE_MARKER}"
   Call un.TLRemoveIfMarked
@@ -156,6 +279,7 @@ Function un.TLCleanupAgentCapture
   Call un.TLRemoveJournalPointer
   ; 不带 /r：目录里还有别的文件就保留
   RMDir "$PROFILE\.claude\token-lens-monitor"
+tl_cac_opencode:
   ; OpenCode
   ReadEnvStr $R0 OPENCODE_CONFIG_DIR
   StrCmp $R0 "" 0 +2

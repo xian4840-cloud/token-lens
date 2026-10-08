@@ -16,8 +16,12 @@ import {
   isOpenCodeCaptureInstalled,
   OPENCODE_PLUGIN_MARKER,
   openCodeCapturePaths,
+  isTokenLensPreloadToken,
+  PRELOAD_PATH_SUFFIX,
+  PRELOAD_REFERENCE,
+  referencesTokenLensPreload,
   resetBunOptionsCacheForTest,
-  stripBunPreloadFlag,
+  stripTokenLensPreload,
   windowsBunOptionsStore,
   type UserEnvStore,
 } from "./agent-response-capture";
@@ -72,26 +76,69 @@ function seedClaudeFiles() {
   return p;
 }
 
-describe("stripBunPreloadFlag", () => {
+describe("stripTokenLensPreload", () => {
   it("只有我们那一段：去掉后为空", () => {
-    expect(stripBunPreloadFlag(FLAG, FLAG)).toBe("");
+    expect(stripTokenLensPreload(FLAG)).toBe("");
   });
   it("用户自己的选项原样保留（包括空白格式）", () => {
-    expect(stripBunPreloadFlag(`--smol ${FLAG}`, FLAG)).toBe("--smol");
-    expect(stripBunPreloadFlag(`${FLAG} --smol`, FLAG)).toBe("--smol");
-    expect(stripBunPreloadFlag(`--a  --b ${FLAG} --c`, FLAG)).toBe("--a  --b --c");
+    expect(stripTokenLensPreload(`--smol ${FLAG}`)).toBe("--smol");
+    expect(stripTokenLensPreload(`${FLAG} --smol`)).toBe("--smol");
+    expect(stripTokenLensPreload(`--a  --b ${FLAG} --c`)).toBe("--a  --b --c");
+    expect(stripTokenLensPreload(`  ${FLAG} --x  `)).toBe("  --x  ");
   });
   it("重复出现的也都去掉", () => {
-    expect(stripBunPreloadFlag(`${FLAG} ${FLAG} --x ${FLAG}`, FLAG)).toBe("--x");
+    expect(stripTokenLensPreload(`${FLAG} ${FLAG} --x ${FLAG}`)).toBe("--x");
   });
   it("相似但不同的值不动", () => {
-    for (const v of [`${FLAG}.bak`, `x${FLAG}`, "--preload=C:/other.cjs", ""]) {
-      expect(stripBunPreloadFlag(v, FLAG)).toBe(v);
+    for (const v of [
+      `${FLAG}.bak`,
+      `x${FLAG}`,
+      "--preload=C:/other.cjs",
+      "--preload=C:/Users/me/token-lens-monitor/claude.cjs",
+      "--preload=C:/Users/me/.claude/my-token-lens-monitor/claude.cjs",
+      `--preload="C:/Users/me/.claude/token-lens-monitor/claude.cjs"`,
+      "",
+    ]) {
+      expect(stripTokenLensPreload(v)).toBe(v);
     }
   });
-  it("flag 由用户目录推出，与 NSIS 里的拼法一致（反斜杠换成正斜杠）", () => {
+  it("用户目录大小写 / 写法与 enable 时不同也能去掉（NSIS 的 $PROFILE vs os.homedir()）", () => {
+    for (const seg of [
+      "--preload=c:/users/ME/.claude/token-lens-monitor/claude.cjs",
+      "--preload=C:/USERS/ME/.CLAUDE/Token-Lens-Monitor/CLAUDE.CJS",
+      "--PRELOAD=C:/Users/me/.claude/token-lens-monitor/claude.cjs",
+      "--preload=C:/Users/MYLONG~1/.claude/token-lens-monitor/claude.cjs",
+    ]) {
+      expect(isTokenLensPreloadToken(seg)).toBe(true);
+      expect(stripTokenLensPreload(`--smol ${seg}`)).toBe("--smol");
+    }
+  });
+  it("反斜杠、正反斜杠混用都认", () => {
+    for (const seg of [
+      "--preload=C:\\Users\\me\\.claude\\token-lens-monitor\\claude.cjs",
+      "--preload=C:\\Users\\me/.claude\\token-lens-monitor/claude.cjs",
+    ]) {
+      expect(stripTokenLensPreload(`${seg} --smol`)).toBe("--smol");
+    }
+  });
+  it("制表符、换行也算分隔符", () => {
+    expect(stripTokenLensPreload(`--smol\t${FLAG}`)).toBe("--smol");
+    expect(stripTokenLensPreload(`${FLAG}\t--smol`)).toBe("--smol");
+    expect(stripTokenLensPreload(`--a\t${FLAG}\t--b`)).toBe("--a\t--b");
+    expect(stripTokenLensPreload(`\t${FLAG}\r\n--x`)).toBe("\t--x");
+    expect(stripTokenLensPreload(` \t${FLAG}\t `)).toBe("");
+  });
+  it("复查：剩余值里是否仍引用我们的脚本（不区分大小写、正反斜杠）", () => {
+    expect(referencesTokenLensPreload(`--preload="C:/Users/me/.claude/token-lens-monitor/claude.cjs"`)).toBe(true);
+    expect(referencesTokenLensPreload("--preload C:\\Users\\me\\.claude\\TOKEN-LENS-MONITOR\\Claude.cjs")).toBe(true);
+    expect(referencesTokenLensPreload("--smol --preload=C:/other.cjs")).toBe(false);
+    expect(referencesTokenLensPreload("")).toBe(false);
+    expect(PRELOAD_PATH_SUFFIX.endsWith(PRELOAD_REFERENCE)).toBe(true);
+  });
+  it("enable 写入的 flag 由用户目录推出（反斜杠换成正斜杠），能被识别", () => {
     const preload = path.win32.join("C:\\Users\\me", ".claude", "token-lens-monitor", "claude.cjs");
     expect(claudePreloadFlag(preload)).toBe(FLAG);
+    expect(isTokenLensPreloadToken(claudePreloadFlag(preload))).toBe(true);
   });
 });
 
@@ -170,6 +217,75 @@ describe("disableClaudeCapture", () => {
     process.env.BUN_OPTIONS = claudePreloadFlag(p.preload);
     disableClaudeCapture(dataRoot, { home, envStore: memoryStore(undefined).store });
     expect(process.env.BUN_OPTIONS).toBeUndefined();
+  });
+
+  it("BUN_OPTIONS 里的用户目录大小写与当前不同：照样去掉，文件照样删", () => {
+    const p = seedClaudeFiles();
+    const seg = `--preload=${p.preload.toUpperCase()}`;
+    const { state, store } = memoryStore(`--smol ${seg}`);
+    const r = disableClaudeCapture(dataRoot, { home, envStore: store });
+    expect(state.value).toBe("--smol");
+    expect(r.removed[0]).toBe(`HKCU\\Environment\\BUN_OPTIONS: ${seg}`);
+    expect(fs.existsSync(p.directory)).toBe(false);
+    expect(r.kept).toEqual([]);
+  });
+
+  it("用户用制表符分隔：照样去掉，文件照样删", () => {
+    const p = seedClaudeFiles();
+    const { state, store } = memoryStore(`--smol\t${claudePreloadFlag(p.preload)}\t--hot`);
+    disableClaudeCapture(dataRoot, { home, envStore: store });
+    expect(state.value).toBe("--smol\t--hot");
+    expect(fs.existsSync(p.preload)).toBe(false);
+  });
+
+  it("去不掉（剩余值仍引用 claude.cjs）时：三个文件和目录都保留，并说明原因", () => {
+    for (const value of [
+      `--smol --preload="${p0()}"`,
+      `--preload ${p0().replaceAll("/", "\\").toUpperCase()}`,
+    ]) {
+      const p = seedClaudeFiles();
+      const { state, store } = memoryStore(value);
+      const r = disableClaudeCapture(dataRoot, { home, envStore: store });
+      expect(state.sets).toEqual([]);
+      expect(state.removes).toBe(0);
+      for (const f of [p.preload, p.helper, p.journalPointer]) expect(fs.existsSync(f)).toBe(true);
+      expect(r.removed).toEqual([]);
+      expect(r.kept[0]).toMatch(/BUN_OPTIONS.*仍引用 token-lens-monitor\/claude\.cjs/);
+      expect(r.kept.slice(1).map((k) => k.split("（")[0])).toEqual([p.preload, p.helper, p.journalPointer, p.directory]);
+      expect(r.kept.slice(1).every((k) => k.includes("Claude Code 无法启动"))).toBe(true);
+    }
+  });
+
+  it("去掉了我们那段、但还有另一处引用：写回剩余值，文件仍保留", () => {
+    const p = seedClaudeFiles();
+    const { state, store } = memoryStore(`${claudePreloadFlag(p.preload)} --preload "${p.preload}"`);
+    const r = disableClaudeCapture(dataRoot, { home, envStore: store });
+    expect(state.value).toBe(`--preload "${p.preload}"`);
+    expect(fs.existsSync(p.preload)).toBe(true);
+    expect(r.removed).toHaveLength(1);
+    expect(r.kept.length).toBeGreaterThan(1);
+  });
+
+  it("注册表写入失败：不抛错，文件保留并说明原因", () => {
+    const p = seedClaudeFiles();
+    const store: UserEnvStore = {
+      get: () => `--smol ${claudePreloadFlag(p.preload)}`,
+      set: () => { throw new Error("access denied"); },
+      remove: () => { throw new Error("access denied"); },
+    };
+    const r = disableClaudeCapture(dataRoot, { home, envStore: store });
+    expect(fs.existsSync(p.preload)).toBe(true);
+    expect(fs.existsSync(p.helper)).toBe(true);
+    expect(r.removed).toEqual([]);
+    expect(r.kept[0]).toContain("access denied");
+  });
+
+  it("没有注册表的平台：以本进程 BUN_OPTIONS 为准做同样的复查", () => {
+    const p = seedClaudeFiles();
+    process.env.BUN_OPTIONS = `--preload="${p.preload}"`;
+    const r = disableClaudeCapture(dataRoot, { home, envStore: null });
+    expect(fs.existsSync(p.preload)).toBe(true);
+    expect(r.kept.length).toBeGreaterThan(0);
   });
 
   it("enable -> disable 往返：文件与 BUN_OPTIONS 都回到 enable 之前", () => {
@@ -258,9 +374,22 @@ describe("与 NSIS 卸载脚本（build/installer.nsh）一致", () => {
     expect(nsh).toContain('"$R0\\plugins\\${TL_HELPER_NAME}"');
     expect(nsh).toContain('StrCpy $R0 "$PROFILE\\.config\\opencode"');
     expect(nsh).toContain("ReadEnvStr $R0 OPENCODE_CONFIG_DIR");
-    // BUN_OPTIONS：同一个值名、同一种 flag 拼法
-    expect(nsh).toContain('ReadRegStr $R0 HKCU "Environment" "BUN_OPTIONS"');
-    expect(nsh).toContain('StrCpy $R1 "--preload=$R1/.claude/token-lens-monitor/claude.cjs"');
+    // BUN_OPTIONS：同一个值名、同样的识别规则
+    expect(nsh).toContain('ReadRegStr $TLValue HKCU "Environment" "BUN_OPTIONS"');
+    expect(define("TL_PRELOAD_SUFFIX")).toBe(PRELOAD_PATH_SUFFIX);
+    expect(define("TL_PRELOAD_REFERENCE")).toBe(PRELOAD_REFERENCE);
+    expect(nsh).toContain('StrCmp $0 "--preload=" 0 tl_iop_done');
+    for (const ws of [" ", "$\\t", "$\\r", "$\\n"]) expect(nsh).toContain(`StrCmp $2 "${ws}" tl_sv_ws`);
+  });
+
+  it("剩余值仍引用 claude.cjs 或写注册表失败时，跳过 Claude 文件的删除（与 TS 的复查一致）", () => {
+    expect(nsh).toMatch(/Call un\.TLStripBunOptions\s+StrCmp \$TLStillRef 1 tl_cac_opencode/);
+    const skipped = nsh.slice(nsh.indexOf("StrCmp $TLStillRef 1 tl_cac_opencode"), nsh.indexOf("tl_cac_opencode:"));
+    expect(skipped).toContain("token-lens-monitor\\claude.cjs");
+    expect(skipped).toContain("${TL_HELPER_NAME}");
+    expect(skipped).toContain("claude-journal.json");
+    expect(skipped).toContain('RMDir "$PROFILE\\.claude\\token-lens-monitor"');
+    expect(nsh).toMatch(/tl_sbo_failed:\s+StrCpy \$TLStillRef 1/);
   });
 
   it("保守：不递归删除、不用通配符删除，升级安装时不清理", () => {
@@ -269,6 +398,11 @@ describe("与 NSIS 卸载脚本（build/installer.nsh）一致", () => {
     expect(nsh).toMatch(/\$\{ifNot\} \$\{isUpdated\}\s+Call un\.TLCleanupAgentCapture/);
   });
 });
+
+/** 测试里用的「我们的 claude.cjs」路径（与 seedClaudeFiles 一致） */
+function p0(): string {
+  return claudeCapturePaths(dataRoot, home).preload;
+}
 
 function listTree(root: string): string[] {
   return (fs.readdirSync(root, { recursive: true }) as string[]).sort();
