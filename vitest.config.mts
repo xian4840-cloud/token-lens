@@ -31,5 +31,19 @@ export default defineConfig({
       "shared/**/*.{test,spec}.ts",
       "scripts/**/*.{test,spec}.{ts,mts}",
     ],
+    // 覆盖率只在 `npm run test:coverage`（CI 也跑这个）时收集，平时 `npm test` 不受影响
+    coverage: {
+      provider: "v8",
+      reportsDirectory: "coverage",
+      reporter: ["text", "text-summary", "json-summary", "html"],
+      // 列出全部源文件（包括没有任何测试引用的），覆盖率才不会因为「没被 import」而虚高
+      include: ["electron/**/*.ts", "ui/src/**/*.{ts,tsx}", "shared/**/*.ts"],
+      exclude: [
+        "**/*.{test,spec}.{ts,tsx}",
+        "**/*.d.ts",
+        // shadcn/ui 生成的基础组件，不是本项目逻辑
+        "ui/src/components/ui/**",
+      ],
+    },
   },
 });

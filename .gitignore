@@ -2,6 +2,7 @@ node_modules/
 dist-electron/
 electron-dist/
 ui/dist/
+coverage/
 *.log
 .DS_Store
 .vscode/

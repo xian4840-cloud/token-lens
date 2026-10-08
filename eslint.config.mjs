@@ -14,6 +14,7 @@ export default tseslint.config(
       "electron-dist/",
       "dist-electron/",
       "ui/dist/",
+      "coverage/",
       // 注入到第三方程序的采集脚本，按原样分发
       "electron/agent-capture/",
       "electron/codex-capture/",
