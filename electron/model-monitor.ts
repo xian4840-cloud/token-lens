@@ -57,7 +57,7 @@ export interface ModelMonitorState {
   callCount: number;
   records: ModelMonitorRecord[];
   sessionDays?: ModelMonitorSessionDay[];
-  agentCapture?: { enabled: boolean; requestCount: number; responseCount: number };
+  agentCapture?: { enabled: boolean; /** 本机还留有任何一项我们写下的采集文件 / 环境变量（可「关闭采集」） */ installed?: boolean; requestCount: number; responseCount: number };
   capture: CodexCaptureState;
   unavailable?: string;
 }

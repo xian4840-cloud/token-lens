@@ -5,6 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { formatCaptureRemoval } from "@/lib/capture-removal";
 import { ipc } from "@/lib/ipc";
 import type { ModelMonitorState, ModelMonitorSource, ModelMonitorRecord, ModelMonitorSessionDay } from "@/types";
 
@@ -24,6 +26,7 @@ export function ModelMonitor() {
   const [differencesOnly, setDifferencesOnly] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [captureMessage, setCaptureMessage] = useState("");
+  const [confirmDisable, setConfirmDisable] = useState(false);
 
   async function enableAgentCapture() {
     setLaunching(true); setCaptureMessage("");
@@ -33,6 +36,17 @@ export function ModelMonitor() {
     }
     catch (e) { setCaptureMessage(e instanceof Error ? e.message : "安装失败"); }
     finally { setLaunching(false); setRefresh(v => v + 1); }
+  }
+
+  async function disableAgentCapture() {
+    if (source !== "claude-code" && source !== "opencode") return;
+    setLaunching(true); setCaptureMessage("");
+    try {
+      const result = source === "claude-code" ? await ipc.disableClaudeCapture() : await ipc.disableOpenCodeCapture();
+      setCaptureMessage(formatCaptureRemoval(source, result));
+    }
+    catch (e) { setCaptureMessage(e instanceof Error ? e.message : "关闭失败"); }
+    finally { setLaunching(false); setConfirmDisable(false); setRefresh(v => v + 1); }
   }
 
   async function launchCodex() {
@@ -112,7 +126,10 @@ export function ModelMonitor() {
             {(source === "opencode" || source === "claude-code") && <div className="mb-4 rounded-lg border bg-muted/30 p-4" data-opencode-capture={source === "opencode" ? true : undefined} data-claude-capture={source === "claude-code" ? true : undefined}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div><p className="text-sm font-medium">响应模型核验</p><p className="mt-1 text-xs text-muted-foreground">{state?.agentCapture?.requestCount ? `已采集 ${state.agentCapture.requestCount} 次请求，读到 ${state.agentCapture.responseCount} 次响应模型。` : state?.agentCapture?.enabled ? source === "claude-code" ? "在新终端中启动 Claude Code，正常聊天即可。" : "重新打开 OpenCode，正常聊天即可。" : "启用一次，在 Agent 自身进程内记录请求与响应模型，无额外后台进程。"}</p></div>
-                <Button size="sm" disabled={launching || state?.agentCapture?.enabled} onClick={() => void enableAgentCapture()}>{launching ? "正在安装…" : state?.agentCapture?.enabled ? "已启用" : "启用响应核验"}</Button>
+                <div className="flex gap-2">
+                  {(state?.agentCapture?.enabled || state?.agentCapture?.installed) && <Button size="sm" variant="outline" data-disable-capture disabled={launching} onClick={() => setConfirmDisable(true)}>关闭采集</Button>}
+                  <Button size="sm" disabled={launching || state?.agentCapture?.enabled} onClick={() => void enableAgentCapture()}>{launching ? "正在处理…" : state?.agentCapture?.enabled ? "已启用" : "启用响应核验"}</Button>
+                </div>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">仅记录模型、标识、时间和用量，不保存聊天正文或密钥。</p>
               {captureMessage && <p className="mt-2 text-sm" role="status">{captureMessage}</p>}
@@ -220,6 +237,17 @@ export function ModelMonitor() {
           </div>
         </details>
       </div>
+      <ConfirmDialog
+        open={confirmDisable}
+        onOpenChange={setConfirmDisable}
+        title={`关闭 ${source === "claude-code" ? "Claude Code" : "OpenCode"} 响应核验？`}
+        description={source === "claude-code"
+          ? "会从用户环境变量 BUN_OPTIONS 中去掉 Token Lens 追加的预加载项（其余选项原样保留），并删除 ~/.claude/token-lens-monitor 里由 Token Lens 写入的文件。已采集的记录保留。"
+          : "会删除 OpenCode 插件目录里由 Token Lens 写入的插件文件，其他插件不受影响。已采集的记录保留。"}
+        confirmLabel="关闭采集"
+        busy={launching}
+        onConfirm={disableAgentCapture}
+      />
     </>
   );
 }

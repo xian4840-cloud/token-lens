@@ -27,6 +27,8 @@ declare global {
       launchCapturedCodex: () => Promise<ModelMonitorState["capture"]>;
       enableOpenCodeCapture: () => Promise<void>;
       enableClaudeCapture: () => Promise<void>;
+      disableOpenCodeCapture: () => Promise<import("@/lib/capture-removal").CaptureRemovalResult>;
+      disableClaudeCapture: () => Promise<import("@/lib/capture-removal").CaptureRemovalResult>;
       ping: () => Promise<string>;
       isEncryptionAvailable: () => Promise<boolean>;
       bootstrap: () => Promise<AppBootstrap>;

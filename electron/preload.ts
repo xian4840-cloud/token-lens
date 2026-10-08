@@ -16,6 +16,7 @@ import type { ScanLocalUsageResult } from "./local-usage/types";
 import type { ProxyConfigOverride } from "./lib/http";
 import type { LogEntry } from "./lib/logger";
 import type { ModelMonitorState, ModelMonitorSource } from "./model-monitor";
+import type { CaptureRemovalResult } from "./agent-response-capture";
 
 
 /**
@@ -26,6 +27,8 @@ const api = {
   launchCapturedCodex: () => ipcRenderer.invoke("model-monitor:launch-codex") as Promise<ModelMonitorState["capture"]>,
   enableOpenCodeCapture: () => ipcRenderer.invoke("model-monitor:enable-opencode") as Promise<void>,
   enableClaudeCapture: () => ipcRenderer.invoke("model-monitor:enable-claude") as Promise<void>,
+  disableOpenCodeCapture: () => ipcRenderer.invoke("model-monitor:disable-opencode") as Promise<CaptureRemovalResult>,
+  disableClaudeCapture: () => ipcRenderer.invoke("model-monitor:disable-claude") as Promise<CaptureRemovalResult>,
   ping: () => ipcRenderer.invoke("app:ping") as Promise<string>,
   isEncryptionAvailable: () =>
     ipcRenderer.invoke("encryption:available") as Promise<boolean>,

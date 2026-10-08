@@ -4,7 +4,7 @@ import readline from "node:readline";
 import { createHash } from "node:crypto";
 import { CLAUDE_CODE_DIR, GROK_SESSIONS_DIR, ANTIGRAVITY_CONVERSATIONS_DIR, findOpenCodeDb } from "./local-usage/paths";
 import { readAntigravityModelSession } from "./antigravity-model-monitor";
-import { isOpenCodeCaptureEnabled, readOpenCodeCaptures, isClaudeCaptureEnabled, readClaudeCaptures } from "./agent-response-capture";
+import { isOpenCodeCaptureEnabled, isOpenCodeCaptureInstalled, readOpenCodeCaptures, isClaudeCaptureEnabled, isClaudeCaptureInstalled, readClaudeCaptures } from "./agent-response-capture";
 import { listJsonlFilesWithStat } from "./local-usage/files";
 import { mapPool } from "./lib/concurrency";
 import { msToIso, secToIso } from "./lib/time";
@@ -231,12 +231,13 @@ export async function getAgentModelMonitorState(date?: unknown, source: unknown 
   const state: ModelMonitorState = { source, description: descriptions[source], root, scannedAt: new Date().toISOString(), sessions: [], days: [], selectedDate: date, callCount: 0, records: [], capture: { supported: false, ready: false, active: false, responseCount: 0 } };
   let groups: Group[] = [];
   if (source === "opencode") {
-    if (!root) return { ...state, unavailable: "未找到本地 OpenCode 数据库" };
+    // 找不到数据库（例如已卸载 OpenCode）时也要带上采集安装状态，好让用户还能「关闭采集」清理插件
+    if (!root) return { ...state, unavailable: "未找到本地 OpenCode 数据库", ...(dataRoot ? { agentCapture: { enabled: false, installed: isOpenCodeCaptureInstalled(dataRoot), requestCount: 0, responseCount: 0 } } : {}) };
     // ponytail: query metadata per refresh; incremental SQL if very large histories become slow.
     try { groups = readOpenCode(root); } catch { return { ...state, unavailable: "OpenCode 数据库暂时无法读取或版本结构不兼容" }; }
     if (dataRoot) {
       const captures = await readOpenCodeCaptures(dataRoot);
-      state.agentCapture = { enabled: isOpenCodeCaptureEnabled(dataRoot), requestCount: captures.length, responseCount: captures.filter(c => c.responseModel).length };
+      state.agentCapture = { enabled: isOpenCodeCaptureEnabled(dataRoot), installed: isOpenCodeCaptureInstalled(dataRoot), requestCount: captures.length, responseCount: captures.filter(c => c.responseModel).length };
       for (const group of groups) {
         const byAssistant = new Map<string, typeof captures>();
         for (const c of captures) if (c.sessionId === group.session.id && c.assistantId) {
@@ -292,7 +293,7 @@ export async function getAgentModelMonitorState(date?: unknown, source: unknown 
   }
   if (source === "claude-code" && dataRoot) {
     const captures = await readClaudeCaptures(dataRoot);
-    state.agentCapture = { enabled: isClaudeCaptureEnabled(dataRoot), requestCount: captures.length, responseCount: captures.filter(c => c.responseModel).length };
+    state.agentCapture = { enabled: isClaudeCaptureEnabled(dataRoot), installed: isClaudeCaptureInstalled(dataRoot), requestCount: captures.length, responseCount: captures.filter(c => c.responseModel).length };
     const byResponse = new Map<string, ModelMonitorRecord[]>();
     for (const c of captures) if (c.responseId) {
       const rows = byResponse.get(c.responseId) ?? []; rows.push(c); byResponse.set(c.responseId, rows);

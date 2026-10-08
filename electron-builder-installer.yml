@@ -33,3 +33,5 @@ nsis:
   uninstallDisplayName: Token Lens
   deleteAppDataOnUninstall: false
   runAfterFinish: true
+  # 卸载时清理「响应核验」写到应用目录之外的文件与 BUN_OPTIONS（见脚本内说明）
+  include: build/installer.nsh

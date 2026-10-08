@@ -79,7 +79,12 @@ import type { AppBootstrap } from "./types";
 import { registerPetIpc } from "./pet/ipc";
 import { getAgentModelMonitorState } from "./agent-model-monitor";
 import { launchCapturedCodex } from "./codex-capture";
-import { enableOpenCodeCapture, enableClaudeCapture } from "./agent-response-capture";
+import {
+  disableClaudeCapture,
+  disableOpenCodeCapture,
+  enableClaudeCapture,
+  enableOpenCodeCapture,
+} from "./agent-response-capture";
 import { singleFlight } from "./lib/inflight";
 import { applyBackupImport } from "./backup-import";
 import { createServiceFromInput, updateServiceFromInput } from "./service-update";
@@ -127,10 +132,12 @@ export function registerIpc(
   const handle = (channel: string, listener: (event: any, ...args: any[]) => unknown) =>
     guard.handle(channel, MAIN_ONLY, listener);
   handle("model-monitor:state", (_e, date?: unknown, source?: unknown) => getAgentModelMonitorState(date, source, app.getPath("userData")));
-  // 以下三个会写用户目录 / 用户环境变量（HKCU\Environment）或启动外部程序：
+  // 以下五个会写用户目录 / 用户环境变量（HKCU\Environment）或启动外部程序：
   // 只接受主窗口、前台、且当前就在「模型监测」页发起的请求
   guard.handle("model-monitor:enable-opencode", MODEL_MONITOR_HIGH_RISK, () => enableOpenCodeCapture(path.join(app.getAppPath(), "electron", "agent-capture", "opencode.mjs"), app.getPath("userData")));
   guard.handle("model-monitor:enable-claude", MODEL_MONITOR_HIGH_RISK, () => enableClaudeCapture(path.join(app.getAppPath(), "electron", "agent-capture"), app.getPath("userData")));
+  guard.handle("model-monitor:disable-opencode", MODEL_MONITOR_HIGH_RISK, () => disableOpenCodeCapture(app.getPath("userData")));
+  guard.handle("model-monitor:disable-claude", MODEL_MONITOR_HIGH_RISK, () => disableClaudeCapture(app.getPath("userData")));
   guard.handle("model-monitor:launch-codex", MODEL_MONITOR_HIGH_RISK, () => singleFlight(captureLaunch, () => launchCapturedCodex(path.join(app.getAppPath(), "electron", "codex-capture", "CodexCapture.cs"), app.getPath("userData"))));
   handle("app:ping", () => "pong");
   handle("encryption:available", () => isEncryptionAvailable());

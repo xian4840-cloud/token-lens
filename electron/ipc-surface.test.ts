@@ -92,6 +92,8 @@ describe("IPC 暴露面", () => {
     for (const c of [
       "model-monitor:enable-claude",
       "model-monitor:enable-opencode",
+      "model-monitor:disable-claude",
+      "model-monitor:disable-opencode",
       "model-monitor:launch-codex",
     ]) {
       expect(policies.get(c), c).toEqual({ roles: ["main"], highRisk: { route: "/model-monitor" } });
