@@ -4,7 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import {
   listServices,
-  getService,
   deleteServiceRow,
   listBalanceSnapshots,
   listUsageRecords,
@@ -22,7 +21,7 @@ import { getPricingTable, parseOverrides, pruneDefaultOverrides } from "./adapte
 import { scanAndPersistLocalUsage } from "./local-usage";
 import { openVolcengineLogin } from "./auth/volcengine-login";
 import { openScnetLogin } from "./auth/scnet-login";
-import { refreshServiceInternal } from "./refresh";
+import { refreshService } from "./refresh";
 import { refreshUsageInternal } from "./usage";
 import { restart as restartScheduler } from "./scheduler";
 import {
@@ -273,13 +272,14 @@ export function registerIpc(
   // 手动刷新失败要留痕：用户点了刷新看到报错，日志里得有对应记录，
   // 否则用户描述「刷新报错」时我们对不上任何上下文。
   // 抛出的错误照旧交给前端展示，只是顺带记一笔。
+  //
+  // 走统一调度（refresh.ts）：与定时刷新共享并发上限，同一服务正在刷新时直接复用
+  // 那次结果，不会对同一家厂商叠两次请求。失败日志由调度层记一次。
   handle("services:refresh", async (_e, rawId: unknown) => {
     const id = requireId(rawId);
     try {
-      return await refreshServiceInternal(id);
+      return await refreshService(id);
     } catch (e) {
-      const record = getService(id);
-      logError(`refresh:${record?.provider ?? "unknown"}`, e);
       throw new Error(mapErrorToUserMessage(e));
     }
   });

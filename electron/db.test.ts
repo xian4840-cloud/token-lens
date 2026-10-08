@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearAllLocalDailyUsage,
   flushDb,
@@ -24,6 +24,8 @@ import {
   getLastBalances,
   importUsageRecords,
   dataStats,
+  markLocalScanned,
+  setNeedsCredentials,
 } from "./db";
 import { getRecentLogs } from "./lib/logger";
 import type { BalanceResult, LocalDailyUsageRecord, ServiceRecord } from "./types";
@@ -137,7 +139,9 @@ describe("数据文件损坏时的处理", () => {
     initDbAt(file);
 
     expect(listServices()).toEqual([]);
-    expect(fs.existsSync(file)).toBe(true); // 已写出新的空存储
+    // 新的空存储走防抖落盘（不挡窗口创建），flush 后即写出
+    flushDb();
+    expect(fs.existsSync(file)).toBe(true);
     const backups = fs.readdirSync(dir).filter((f) => f.includes(".corrupt-"));
     expect(backups).toHaveLength(1);
     // 留档的是原始内容，用户还能拿它去抢救密钥
@@ -402,6 +406,7 @@ describe("设置与落盘", () => {
   });
 
   it("防抖未到点时文件尚未更新，flushDb 立即落盘", () => {
+    flushDb(); // 首次启动的空存储先落盘，作为对比基线
     insertService(service("a"));
     const raw = JSON.parse(fs.readFileSync(file, "utf8")) as { services: unknown[] };
     expect(raw.services).toHaveLength(0); // 仍在防抖窗口内
@@ -615,5 +620,108 @@ describe("导入与统计", () => {
     const s = dataStats();
     expect(s.services).toBe(1);
     expect(s.bytes).toBeGreaterThan(0);
+  });
+});
+
+describe("只在数据真的变化时落盘", () => {
+  /** 统计写数据文件的次数（flushDb 写 .tmp 再 rename） */
+  function countWrites(): { count: () => number } {
+    const spy = vi.spyOn(fs, "writeFileSync");
+    return { count: () => spy.mock.calls.filter((c) => String(c[0]).startsWith(file)).length };
+  }
+  afterEach(() => vi.restoreAllMocks());
+
+  it("启动时没有可迁移 / 可压缩的内容就不重写数据文件（回归：此前每次启动都整份重写）", () => {
+    writeStore({
+      services: [service("a")],
+      lastBalances: {},
+      balanceSnapshots: [{ id: 1, serviceId: "a", balance: 1, currency: "USD", recordedAt: daysAgo(0) }],
+    });
+    const writes = countWrites();
+    expect(initDbAt(file).rewritten).toBe(false);
+    flushDb();
+    expect(writes.count()).toBe(0);
+    expect(listServices()).toHaveLength(1);
+  });
+
+  it("旧版 pretty-print 文件启动后转成紧凑格式", () => {
+    writeRaw(JSON.stringify({ services: [], secrets: {}, balanceSnapshots: [], usageRecords: [], localDailyUsage: [], lastBalances: {}, settings: {}, counters: { balanceSnapshot: 0, usageRecord: 0, localDailyUsage: 0 } }, null, 2));
+    expect(initDbAt(file).rewritten).toBe(true);
+    flushDb();
+    expect(fs.readFileSync(file, "utf8")).not.toContain("\n");
+  });
+
+  it("缺字段的旧文件、需要压缩的历史照旧在启动时落盘", () => {
+    writeRaw(JSON.stringify({ services: [] }));
+    expect(initDbAt(file).rewritten).toBe(true);
+    flushDb();
+    writeStore({
+      lastBalances: {},
+      balanceSnapshots: [
+        { id: 1, serviceId: "a", balance: 1, currency: "USD", recordedAt: daysAgo(30) },
+        { id: 2, serviceId: "a", balance: 2, currency: "USD", recordedAt: new Date(Date.parse(daysAgo(30)) + 1000).toISOString() },
+      ],
+    });
+    expect(initDbAt(file).rewritten).toBe(true);
+  });
+
+  it("启动落盘不阻塞：走防抖 persist，而不是在 initDb 里同步写", () => {
+    writeRaw(JSON.stringify({ services: [] }));
+    const writes = countWrites();
+    initDbAt(file);
+    expect(writes.count()).toBe(0);
+    flushDb();
+    expect(writes.count()).toBe(1);
+  });
+
+  it("本地用量扫描结果没变时不落盘，界面的扫描时间照样更新", () => {
+    initDbAt(file);
+    replaceLocalDailyUsageBySource("codex", [row("codex", "m1", "2026-09-01")]);
+    flushDb();
+    const firstScannedAt = listLocalDailyUsage()[0].scannedAt;
+
+    const writes = countWrites();
+    expect(replaceLocalDailyUsageBySource("codex", [row("codex", "m1", "2026-09-01")])).toBe(false);
+    expect(upsertLocalDailyUsage([row("codex", "m1", "2026-09-01")])).toBe(false);
+    flushDb();
+    expect(writes.count()).toBe(0);
+    expect(listLocalDailyUsage()[0].scannedAt).toBe(firstScannedAt);
+
+    const later = new Date(Date.now() + 60_000).toISOString();
+    markLocalScanned("codex", later);
+    expect(listLocalDailyUsage()[0].scannedAt).toBe(later);
+  });
+
+  it("用量变了、或有旧日期要删时照旧落盘", () => {
+    initDbAt(file);
+    replaceLocalDailyUsageBySource("codex", [row("codex", "m1", "2026-09-01"), row("codex", "m1", "2026-09-02")]);
+    flushDb();
+    const writes = countWrites();
+    expect(replaceLocalDailyUsageBySource("codex", [row("codex", "m1", "2026-09-02")])).toBe(true);
+    flushDb();
+    expect(writes.count()).toBe(1);
+    expect(upsertLocalDailyUsage([row("codex", "m1", "2026-09-02", 5)])).toBe(true);
+    flushDb();
+    expect(writes.count()).toBe(2);
+    expect(listLocalDailyUsage().map((r) => [r.date, r.inputTokens])).toEqual([["2026-09-02", 5]]);
+  });
+
+  it("设置值、needsCredentials、lastBalance 没变时不落盘", () => {
+    initDbAt(file);
+    insertService(service("a"));
+    setSetting("refreshInterval", "5");
+    const bal = { remaining: 1, currency: "USD", fetchedAt: daysAgo(0) } as unknown as BalanceResult;
+    saveLastBalance("a", bal);
+    flushDb();
+    const writes = countWrites();
+    setSetting("refreshInterval", "5");
+    setNeedsCredentials("a", false);
+    saveLastBalance("a", { ...bal });
+    flushDb();
+    expect(writes.count()).toBe(0);
+
+    setSetting("refreshInterval", "10");
+    flushDb();
+    expect(writes.count()).toBe(1);
   });
 });

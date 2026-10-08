@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../db", () => ({
+  markLocalScanned: () => {},
   getSetting: () => undefined,
   replaceLocalDailyUsageBySource: (source: LocalSource, rows: LocalUsageRow[]) => {
     mocks.replace.push({ source, rows });

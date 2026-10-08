@@ -102,8 +102,13 @@ export function flushDb(): void {
  * - 用量记录：仅保留最近 USAGE_RECORD_DAYS 天
  * - 本地 agent 每日用量：仅保留最近 LOCAL_DAILY_DAYS 天
  */
-function compactData(): void {
+function compactData(): boolean {
   const now = Date.now();
+  const before = {
+    snapshots: data.balanceSnapshots,
+    usage: data.usageRecords.length,
+    local: data.localDailyUsage.length,
+  };
   const snapCutoff = new Date(
     now - SNAPSHOT_FULL_DAYS * 86_400_000,
   ).toISOString();
@@ -136,6 +141,16 @@ function compactData(): void {
       (r) => r.date >= localCutoffKey,
     );
   }
+
+  // 降采样后的快照逐个比对引用：长度相同且顺序一致就说明什么都没删、也没重排
+  const snapshotsChanged =
+    before.snapshots.length !== data.balanceSnapshots.length ||
+    data.balanceSnapshots.some((s, i) => s !== before.snapshots[i]);
+  return (
+    snapshotsChanged ||
+    before.usage !== data.usageRecords.length ||
+    before.local !== data.localDailyUsage.length
+  );
 }
 
 /**
@@ -148,16 +163,17 @@ function compactData(): void {
  * 结构不全也算不可用：services 是所有读写的前提，缺了它应用会在第一次
  * listServices 就抛异常，表现成窗口打开即报错。
  */
-function loadDataFile(): StoreData {
-  if (!fs.existsSync(filePath)) return defaultData();
+function loadDataFile(): { data: StoreData; needsWrite: boolean } {
+  if (!fs.existsSync(filePath)) return { data: defaultData(), needsWrite: true };
 
   let reason = "";
   try {
-    const parsed = JSON.parse(
-      fs.readFileSync(filePath, "utf8"),
-    ) as Partial<StoreData>;
+    const raw = fs.readFileSync(filePath, "utf8");
+    const parsed = JSON.parse(raw) as Partial<StoreData>;
     if (parsed && typeof parsed === "object" && Array.isArray(parsed.services)) {
-      return parsed as StoreData;
+      // 紧凑 JSON 不含裸换行（字符串里的换行会被转义成 \n）；有换行说明是旧版
+      // pretty-print 或手工编辑过的文件，重写一次转成紧凑格式
+      return { data: parsed as StoreData, needsWrite: raw.includes("\n") };
     }
     reason = "结构不符（services 不是数组）";
   } catch (e) {
@@ -174,7 +190,7 @@ function loadDataFile(): StoreData {
     // 留档失败也必须能启动：一个坏文件不该把应用卡在启动阶段
     logWarn("db", `数据文件不可用（${reason}）且留档失败，以空数据启动: ${String(e)}`);
   }
-  return defaultData();
+  return { data: defaultData(), needsWrite: true };
 }
 
 /**
@@ -184,9 +200,17 @@ function loadDataFile(): StoreData {
  * 要先满足 Electron 的 app.getPath 才能跑，而它恰恰是最不该没有测试的模块：
  * 用户的全部服务配置、密钥密文和历史数据都在它手上。
  */
-export function initDbAt(dbFilePath: string): void {
+export function initDbAt(dbFilePath: string): { rewritten: boolean } {
   filePath = dbFilePath;
-  data = loadDataFile();
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+  dirty = false;
+  localScanAt.clear();
+  const loaded = loadDataFile();
+  data = loaded.data;
+  let changed = loaded.needsWrite;
 
   // 兼容旧数据文件：逐个补齐缺失的集合字段。
   //
@@ -198,37 +222,48 @@ export function initDbAt(dbFilePath: string): void {
   //
   // 这条路是可达的：旧版本写下的文件本就可能少字段，README 还专门教用户
   // 手工去编辑这个文件来抢救数据。
-  if (!Array.isArray(data.services)) data.services = [];
-  if (!data.secrets || typeof data.secrets !== "object") data.secrets = {};
-  if (!Array.isArray(data.balanceSnapshots)) data.balanceSnapshots = [];
-  if (!Array.isArray(data.usageRecords)) data.usageRecords = [];
-  if (!Array.isArray(data.localDailyUsage)) data.localDailyUsage = [];
+  const fix = (broken: boolean, apply: () => void) => {
+    if (!broken) return;
+    apply();
+    changed = true;
+  };
+  fix(!Array.isArray(data.services), () => (data.services = []));
+  fix(!data.secrets || typeof data.secrets !== "object", () => (data.secrets = {}));
+  fix(!Array.isArray(data.balanceSnapshots), () => (data.balanceSnapshots = []));
+  fix(!Array.isArray(data.usageRecords), () => (data.usageRecords = []));
+  fix(!Array.isArray(data.localDailyUsage), () => (data.localDailyUsage = []));
   if (
     !data.lastBalances ||
     typeof data.lastBalances !== "object" ||
     Array.isArray(data.lastBalances)
   ) {
     data.lastBalances = {};
+    changed = true;
   } else {
     // 旧数据若误把 raw 写进去了，读的时候剥掉，下次落盘即自愈
     for (const [id, bal] of Object.entries(data.lastBalances)) {
       if (bal && typeof bal === "object" && "raw" in bal) {
         data.lastBalances[id] = stripRaw(bal);
+        changed = true;
       }
     }
   }
-  if (!data.settings || typeof data.settings !== "object") data.settings = {};
-  if (!data.counters || typeof data.counters !== "object") {
+  fix(!data.settings || typeof data.settings !== "object", () => (data.settings = {}));
+  fix(!data.counters || typeof data.counters !== "object", () => {
     data.counters = { balanceSnapshot: 0, usageRecord: 0, localDailyUsage: 0 };
-  }
-  if (data.counters.balanceSnapshot == null) data.counters.balanceSnapshot = 0;
-  if (data.counters.usageRecord == null) data.counters.usageRecord = 0;
-  if (data.counters.localDailyUsage == null) data.counters.localDailyUsage = 0;
+  });
+  fix(data.counters.balanceSnapshot == null, () => (data.counters.balanceSnapshot = 0));
+  fix(data.counters.usageRecord == null, () => (data.counters.usageRecord = 0));
+  fix(data.counters.localDailyUsage == null, () => (data.counters.localDailyUsage = 0));
 
-  // 启动时压缩一次旧数据并落盘（同时把旧版 pretty-print 格式转成紧凑格式）
-  compactData();
-  persist();
-  flushDb();
+  // 启动时压缩一次旧数据。只有真的有改动（迁移补字段、压缩删了数据、
+  // 旧版 pretty-print 格式要转紧凑）才落盘：此前每次启动都把整份 JSON
+  // 同步重写一遍，数据文件十几 MB 时白白在窗口出现之前多卡上百毫秒。
+  // 落盘走防抖 persist 而不是立即 flush，不挡窗口创建；正常退出时
+  // before-quit 的 flushDb 兜底，中途崩溃也只是下次启动再压缩一遍。
+  if (compactData()) changed = true;
+  if (changed) persist();
+  return { rewritten: changed };
 }
 
 /** 应用启动时调用 */
@@ -284,7 +319,11 @@ export function saveLastBalance(serviceId: string, balance: BalanceResult): void
   if (!data.lastBalances || typeof data.lastBalances !== "object") {
     data.lastBalances = {};
   }
-  data.lastBalances[serviceId] = stripRaw(balance);
+  const next = stripRaw(balance);
+  const prev = data.lastBalances[serviceId];
+  data.lastBalances[serviceId] = next;
+  // 内容完全相同（含时间戳）才跳过；时间戳变了照旧落盘，重启后卡片的「更新于」才准
+  if (prev && JSON.stringify(prev) === JSON.stringify(next)) return;
   persist();
 }
 
@@ -460,35 +499,83 @@ export function listUsageRecords(
  * 今日桶每次扫描覆盖（用量随使用增长），历史桶幂等（那天的用量已定）。
  * cost/currency 为 undefined 时存 null（OpenCode 自带 cost，其它经 computeCost）。
  */
-export function upsertLocalDailyUsage(rows: LocalUsageRow[]): void {
+/** 比较两条每日桶的用量内容（不含 id / scannedAt） */
+function sameLocalContent(a: LocalDailyUsageRecord, b: LocalDailyUsageRecord): boolean {
+  return (
+    a.source === b.source &&
+    a.model === b.model &&
+    a.date === b.date &&
+    a.sessions === b.sessions &&
+    a.inputTokens === b.inputTokens &&
+    a.outputTokens === b.outputTokens &&
+    a.cacheCreationTokens === b.cacheCreationTokens &&
+    a.cacheReadTokens === b.cacheReadTokens &&
+    a.reasoningTokens === b.reasoningTokens &&
+    a.cost === b.cost &&
+    a.currency === b.currency &&
+    a.firstAt === b.firstAt &&
+    a.lastAt === b.lastAt
+  );
+}
+
+function toLocalRecord(r: LocalUsageRow, scannedAt: string): LocalDailyUsageRecord {
+  return {
+    id: 0,
+    source: r.source,
+    model: r.model,
+    date: r.date,
+    sessions: r.sessions,
+    inputTokens: r.inputTokens,
+    outputTokens: r.outputTokens,
+    cacheCreationTokens: r.cacheCreationTokens,
+    cacheReadTokens: r.cacheReadTokens,
+    reasoningTokens: r.reasoningTokens,
+    cost: r.cost ?? null,
+    currency: r.currency ?? null,
+    firstAt: r.firstAt ?? null,
+    lastAt: r.lastAt ?? null,
+    scannedAt,
+  };
+}
+
+/**
+ * 每个来源最近一次扫描完成的时间（只在内存里）。
+ *
+ * 扫描结果和上次一样时不再改写每日桶，桶上的 scannedAt 也就停在上次真正变化的时刻；
+ * 界面的「扫描于 X 前」读的是 scannedAt 的最大值，所以查询时用这里的时间补上。
+ */
+const localScanAt = new Map<LocalSource, string>();
+
+/** 记录某来源刚完成一次扫描（不落盘）。 */
+export function markLocalScanned(source: LocalSource, at = new Date().toISOString()): void {
+  localScanAt.set(source, at);
+}
+
+/**
+ * 写入本地 agent 每日用量快照。按 source+model+date 去重 upsert：
+ * 今日桶每次扫描覆盖（用量随使用增长），历史桶幂等（那天的用量已定）。
+ * cost/currency 为 undefined 时存 null（OpenCode 自带 cost，其它经 computeCost）。
+ *
+ * 内容没变的桶原样保留（不刷新 scannedAt），一条都没变就不落盘：
+ * 定时扫描每 5 分钟一次，此前哪怕什么都没用也要把整份数据文件重写一遍。
+ * 返回是否有改动。
+ */
+export function upsertLocalDailyUsage(rows: LocalUsageRow[]): boolean {
   const now = new Date().toISOString();
   const index = new Map<string, number>();
   for (let i = 0; i < data.localDailyUsage.length; i++) {
     const r = data.localDailyUsage[i];
     index.set(`${r.source}|${r.model}|${r.date}`, i);
   }
+  let changed = false;
   for (const r of rows) {
     const key = `${r.source}|${r.model}|${r.date}`;
-    const rec: LocalDailyUsageRecord = {
-      id: 0,
-      source: r.source,
-      model: r.model,
-      date: r.date,
-      sessions: r.sessions,
-      inputTokens: r.inputTokens,
-      outputTokens: r.outputTokens,
-      cacheCreationTokens: r.cacheCreationTokens,
-      cacheReadTokens: r.cacheReadTokens,
-      reasoningTokens: r.reasoningTokens,
-      cost: r.cost ?? null,
-      currency: r.currency ?? null,
-      firstAt: r.firstAt ?? null,
-      lastAt: r.lastAt ?? null,
-      scannedAt: now,
-    };
+    const rec = toLocalRecord(r, now);
     const idx = index.get(key);
     if (idx !== undefined) {
-      rec.id = data.localDailyUsage[idx].id;
+      const prev = data.localDailyUsage[idx];
+      if (sameLocalContent(prev, rec)) continue;
+      rec.id = prev.id;
       data.localDailyUsage[idx] = rec;
     } else {
       data.counters.localDailyUsage += 1;
@@ -496,21 +583,39 @@ export function upsertLocalDailyUsage(rows: LocalUsageRow[]): void {
       data.localDailyUsage.push(rec);
       index.set(key, data.localDailyUsage.length - 1);
     }
+    changed = true;
   }
-  persist();
+  if (changed) persist();
+  return changed;
 }
 
 /**
  * 用一次全量扫描结果替换某来源的全部每日桶。
  * 只 upsert 会留下「新口径下不再出现的日期」，虚高历史清不掉。
+ * 新结果与库里该来源的桶完全一致时什么都不做（不落盘）。返回是否有改动。
  */
 export function replaceLocalDailyUsageBySource(
   source: LocalSource,
   rows: LocalUsageRow[],
-): void {
+): boolean {
   if (!data) data = defaultData();
+  const existing = new Map<string, LocalDailyUsageRecord>();
+  for (const r of data.localDailyUsage) {
+    if (r.source === source) existing.set(`${r.model}|${r.date}`, r);
+  }
+  const incoming = rows.filter((r) => r.source === source);
+  const unchanged =
+    rows.length === incoming.length &&
+    existing.size === incoming.length &&
+    incoming.every((r) => {
+      const prev = existing.get(`${r.model}|${r.date}`);
+      return prev !== undefined && sameLocalContent(prev, toLocalRecord(r, ""));
+    });
+  if (unchanged) return false;
   data.localDailyUsage = data.localDailyUsage.filter((r) => r.source !== source);
   upsertLocalDailyUsage(rows);
+  persist();
+  return true;
 }
 
 /**
@@ -550,10 +655,15 @@ export function listLocalDailyUsage(
   // r.date 是本地日期键，故范围也要转成本地日期键，避免边界多一天
   const sinceKey = toRangeKey(since);
   const untilKey = toRangeKey(until);
-  return data.localDailyUsage.filter((r) => {
+  const rows = data.localDailyUsage.filter((r) => {
     if (sinceKey && r.date < sinceKey) return false;
     if (untilKey && r.date > untilKey) return false;
     return true;
+  });
+  if (localScanAt.size === 0) return rows;
+  return rows.map((r) => {
+    const scanned = localScanAt.get(r.source);
+    return scanned && scanned > r.scannedAt ? { ...r, scannedAt: scanned } : r;
   });
 }
 
@@ -565,6 +675,8 @@ export function getSetting(key: string): string | undefined {
 
 export function setSetting(key: string, value: string): void {
   if (!data) data = defaultData();
+  // 值没变不落盘（窗口位置、开关之类会被反复写同一个值）
+  if (data.settings[key] === value) return;
   data.settings[key] = value;
   persist();
 }
@@ -599,6 +711,7 @@ export function dataStats(): {
 export function setNeedsCredentials(id: string, value: boolean): void {
   const s = data.services.find((x) => x.id === id);
   if (!s) return;
+  if (!!s.needsCredentials === value) return;
   if (value) s.needsCredentials = true;
   else delete s.needsCredentials;
   persist();

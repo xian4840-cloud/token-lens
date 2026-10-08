@@ -1,4 +1,6 @@
 import { getService, getSecrets, saveBalanceSnapshot, saveLastBalance } from "./db";
+import { logError } from "./lib/logger";
+import { createRefreshCoordinator } from "./lib/refresh-coordinator";
 import { getAdapter } from "./adapters";
 import { NEEDS_CREDENTIALS_MESSAGE } from "./lib/backup";
 import type { BalanceResult } from "./types";
@@ -21,4 +23,32 @@ export async function refreshServiceInternal(
   const { raw: _raw, ...safe } = balance;
   saveLastBalance(id, safe);
   return safe;
+}
+
+/** 手动与定时刷新共享的并发上限 */
+export const REFRESH_CONCURRENCY = 3;
+
+/**
+ * 主进程唯一的刷新入口：IPC「刷新」与调度器都走这里，共享同一把锁和并发上限
+ * （见 lib/refresh-coordinator）。失败在这里记一次日志：手动刷新撞上正在跑的
+ * 定时刷新时两边拿到的是同一个 Promise，不会各记一笔。
+ */
+const coordinator = createRefreshCoordinator(async (id: string) => {
+  try {
+    return await refreshServiceInternal(id);
+  } catch (e) {
+    const record = getService(id);
+    logError(`refresh:${record?.provider ?? "unknown"}`, e);
+    throw e;
+  }
+}, REFRESH_CONCURRENCY);
+
+export function refreshService(id: string): Promise<BalanceResult> {
+  return coordinator.refresh(id);
+}
+
+export function refreshServices(
+  ids: readonly string[],
+): Promise<PromiseSettledResult<BalanceResult>[]> {
+  return coordinator.refreshMany(ids);
 }

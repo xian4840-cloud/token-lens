@@ -7,6 +7,7 @@ import { persistScanCache } from "./cache";
 import { computeCost, parseOverrides, type TokenUsage } from "../adapters/pricing";
 import {
   getSetting,
+  markLocalScanned,
   replaceLocalDailyUsageBySource,
   upsertLocalDailyUsage,
 } from "../db";
@@ -187,11 +188,14 @@ async function persistScannedUsage(
   }
   const unavailable = new Set(result.unavailable.map((u) => u.source));
   const fullScan = since === undefined;
+  const scannedAt = new Date().toISOString();
   for (const source of ALL_LOCAL_SOURCES) {
     if (unavailable.has(source)) continue;
     const rows = grouped.get(source) ?? [];
+    // 内容没变时 db 层不会改写也不会落盘；扫描时间单独记在内存里供界面显示
     if (fullScan) replaceLocalDailyUsageBySource(source, rows);
     else upsertLocalDailyUsage(rows);
+    markLocalScanned(source, scannedAt);
   }
   notifyRenderer("local-usage:updated");
   return result;
