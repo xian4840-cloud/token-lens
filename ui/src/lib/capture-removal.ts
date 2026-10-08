@@ -10,6 +10,16 @@ export function formatCaptureRemoval(
   result: CaptureRemovalResult,
 ): string {
   const parts: string[] = [];
+  // 主进程在 BUN_OPTIONS 仍引用采集脚本（或注册表改不了）时，会把整套脚本保留，
+  // 并在 kept 第一项（以 HKCU\Environment\BUN_OPTIONS 或 BUN_OPTIONS 开头）说明原因
+  const envIssue = result.kept.find((k) => /^(HKCU\\Environment\\)?BUN_OPTIONS/.test(k));
+  if (envIssue) {
+    parts.push(
+      `采集脚本已保留：${envIssue}。为避免 Claude Code 因找不到预加载脚本而无法启动，没有删除任何采集文件；` +
+        "手动清理 BUN_OPTIONS 后再点一次「关闭采集」即可。",
+    );
+    return parts.join(" ");
+  }
   if (result.removed.length === 0) {
     parts.push("没有找到需要清理的采集文件。");
   } else {
