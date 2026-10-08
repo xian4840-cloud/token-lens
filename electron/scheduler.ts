@@ -34,7 +34,8 @@ function notify(
 /** 刷新所有服务：有限并发，单个失败不影响其他；本地扫描与余额拆开。 */
 async function refreshAll(): Promise<void> {
   const started = refreshLock.tryRun(async () => {
-    const services = listServices();
+    // 备份恢复、尚未补密钥的服务不进后台轮询：每轮必然失败，只会刷日志
+    const services = listServices().filter((s) => !s.needsCredentials);
     await mapPool(services, REFRESH_CONCURRENCY, async (s) => {
       try {
         const balance = await refreshServiceInternal(s.id);

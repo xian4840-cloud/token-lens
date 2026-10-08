@@ -130,6 +130,9 @@ export function Services() {
                         {def?.label ?? s.provider}
                       </Badge>
                       {def && !def.official && <Badge variant="warning">非官方</Badge>}
+                      {s.needsCredentials && (
+                        <Badge variant="warning">需重新填写密钥</Badge>
+                      )}
                       {hiddenIds.includes(s.id) && (
                         <Badge variant="outline">总览已隐藏</Badge>
                       )}

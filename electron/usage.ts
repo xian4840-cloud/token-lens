@@ -1,5 +1,6 @@
 import { getService, getSecrets, saveUsageRecords } from "./db";
 import { getAdapter } from "./adapters";
+import { NEEDS_CREDENTIALS_MESSAGE } from "./lib/backup";
 import type { UsageResult } from "./types";
 
 /**
@@ -12,6 +13,7 @@ export async function refreshUsageInternal(
 ): Promise<UsageResult> {
   const record = getService(id);
   if (!record) throw new Error("服务不存在");
+  if (record.needsCredentials) throw new Error(NEEDS_CREDENTIALS_MESSAGE);
   const adapter = getAdapter(record.provider);
   if (!adapter) throw new Error(`未注册适配器: ${record.provider}`);
   if (!adapter.fetchUsage) {

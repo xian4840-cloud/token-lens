@@ -101,6 +101,11 @@ export interface ServiceRecord {
   config: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+  /**
+   * 从备份恢复、尚未重新填写密钥。备份按设计不含密钥与 config，
+   * 恢复出来的服务只有名称与类型，必须到管理页编辑补全后才能刷新。
+   */
+  needsCredentials?: boolean;
 }
 
 export interface BreakdownItem {

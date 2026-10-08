@@ -17,7 +17,8 @@ import {
   setSetting,
   getLastBalances,
   upsertLocalDailyUsage,
-  appendImportedUsageRecords,
+  setNeedsCredentials,
+  getSecrets,
   dataStats,
 } from "./db";
 import { isEncryptionAvailable } from "./secrets";
@@ -68,6 +69,7 @@ import { getAgentModelMonitorState } from "./agent-model-monitor";
 import { launchCapturedCodex } from "./codex-capture";
 import { enableOpenCodeCapture, enableClaudeCapture } from "./agent-response-capture";
 import { singleFlight } from "./lib/inflight";
+import { applyBackupImport } from "./backup-import";
 
 const captureLaunch = { current: null as ReturnType<typeof launchCapturedCodex> | null };
 
@@ -167,6 +169,15 @@ export function registerIpc(): void {
       // 密码字段非空才更新；留空表示保留旧值（便于编辑其他字段时不重填密码）
       for (const [k, v] of Object.entries(secrets)) {
         if (v) setSecret(id, k, v);
+      }
+      // 备份恢复的服务：必填的密钥字段都补上了才算可用，清掉「需重新填写」标记
+      if (existing.needsCredentials) {
+        const def = getDefinition(existing.provider);
+        const stored = getSecrets(id);
+        const missing = (def?.configSchema ?? []).some(
+          (f) => f.required && (f.type === "password" || f.secret) && !stored[f.key],
+        );
+        if (!missing) setNeedsCredentials(id, false);
       }
       return getService(id);
     },
@@ -319,32 +330,12 @@ export function registerIpc(): void {
     const payload = parseBackupOrThrow(raw);
     return backupPreviewStats(payload);
   });
-  ipcMain.handle("app:import-backup", (_e, raw: unknown) => {
-    const payload = parseBackupOrThrow(raw);
-    const localRows = toLocalUsageRows(payload.localDailyUsage);
-    upsertLocalDailyUsage(localRows);
-    const usageN = appendImportedUsageRecords(
-      payload.usageRecords as Parameters<
-        typeof appendImportedUsageRecords
-      >[0],
-    );
-    const s = payload.settings;
-    if (s.monthlyBudgetUsd)
-      setSetting("monthlyBudgetUsd", s.monthlyBudgetUsd);
-    if (s.pricingOverrides)
-      setSetting("pricingOverrides", s.pricingOverrides);
-    if (s.pinnedServiceIds)
-      setSetting(
-        "pinnedServiceIds",
-        JSON.stringify(parseIdList(s.pinnedServiceIds)),
-      );
-    if (s.hiddenServiceIds)
-      setSetting(
-        "hiddenServiceIds",
-        JSON.stringify(parseIdList(s.hiddenServiceIds)),
-      );
-    return { local: localRows.length, usage: usageN };
-  });
+  ipcMain.handle("app:import-backup", (_e, raw: unknown) =>
+    applyBackupImport(
+      parseBackupOrThrow(raw),
+      (provider) => getDefinition(provider)?.kind,
+    ),
+  );
   ipcMain.handle("app:stats", () => dataStats());
   ipcMain.handle("local-usage:import-rows", (_e, rows: unknown) => {
     if (!Array.isArray(rows)) throw new Error("无效的导入数据");

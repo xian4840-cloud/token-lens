@@ -561,54 +561,221 @@ export function dataStats(): {
   };
 }
 
-/** 导入备份用：追加用量记录，不覆盖现有、不复用旧 id。 */
-export function appendImportedUsageRecords(
-  rows: Array<{
-    serviceId?: unknown;
-    model?: unknown;
-    normalizedModel?: unknown;
-    cost?: unknown;
-    promptTokens?: unknown;
-    completionTokens?: unknown;
-    totalTokens?: unknown;
-    period?: unknown;
-    currency?: unknown;
-    recordedAt?: unknown;
-  }>,
-): number {
+/** 标记 / 清除「需重新填写密钥」（备份恢复的服务补全密钥后清除）。 */
+export function setNeedsCredentials(id: string, value: boolean): void {
+  const s = data.services.find((x) => x.id === id);
+  if (!s) return;
+  if (value) s.needsCredentials = true;
+  else delete s.needsCredentials;
+  persist();
+}
+
+/** 备份里的一条服务清单（只有清单字段，不含 config 与密钥） */
+export interface BackupServiceRow {
+  id: string;
+  name: string;
+  provider: string;
+  kind?: unknown;
+  createdAt?: unknown;
+}
+
+export interface ImportServicesResult {
+  /** 备份里的服务 id -> 本机服务 id */
+  idMap: Map<string, string>;
+  /** 新建（需重新填写密钥）的服务数 */
+  restored: number;
+  /** 与本机已有服务对上的数（同 id，或同类型同名） */
+  matched: number;
+  /** 服务类型本版本不认识、未恢复的数 */
+  skipped: number;
+}
+
+/**
+ * 导入备份里的服务清单。
+ *
+ * 对应规则（按顺序）：
+ * 1. 本机已有同 id 的服务：视为同一个（同一台机器导回自己的备份），不改动；
+ * 2. 本机已有同类型、同名的服务：视为用户已手工重建过，对到它上面，不再新建；
+ * 3. 否则按备份里的 id 新建，config 为空、不带密钥，标记 needsCredentials。
+ *    沿用原 id 是为了让用量记录、置顶/隐藏列表不用改写就能对上，
+ *    也让重复导入天然幂等（第二次全部落到规则 1）。
+ * 服务类型不认识（resolveKind 返回 undefined）的跳过，其用量记录随之跳过。
+ */
+export function importBackupServices(
+  rows: BackupServiceRow[],
+  resolveKind: (provider: string) => ServiceRecord["kind"] | undefined,
+): ImportServicesResult {
   if (!data) data = defaultData();
-  let n = 0;
+  const idMap = new Map<string, string>();
+  const byId = new Map(data.services.map((s) => [s.id, s]));
+  const byKey = new Map<string, ServiceRecord>();
+  for (const s of listServices()) {
+    const key = `${s.provider}|${s.name}`;
+    if (!byKey.has(key)) byKey.set(key, s);
+  }
+  let restored = 0;
+  let matched = 0;
+  let skipped = 0;
   const now = new Date().toISOString();
-  for (const it of rows) {
-    if (typeof it.serviceId !== "string" || !it.serviceId) continue;
-    data.counters.usageRecord += 1;
-    data.usageRecords.push({
-      id: data.counters.usageRecord,
-      serviceId: it.serviceId,
+
+  for (const row of rows) {
+    if (!row || typeof row.id !== "string" || !row.id || row.id.length > 200) {
+      skipped += 1;
+      continue;
+    }
+    if (typeof row.provider !== "string" || typeof row.name !== "string") {
+      skipped += 1;
+      continue;
+    }
+    const kind = resolveKind(row.provider);
+    if (!kind) {
+      skipped += 1;
+      continue;
+    }
+    const sameId = byId.get(row.id);
+    if (sameId) {
+      idMap.set(row.id, sameId.id);
+      matched += 1;
+      continue;
+    }
+    const name = row.name.trim().slice(0, 100) || row.provider;
+    const sameName = byKey.get(`${row.provider}|${name}`);
+    if (sameName) {
+      idMap.set(row.id, sameName.id);
+      matched += 1;
+      continue;
+    }
+    const createdAt =
+      typeof row.createdAt === "string" && Number.isFinite(Date.parse(row.createdAt))
+        ? row.createdAt
+        : now;
+    const record: ServiceRecord = {
+      id: row.id,
+      name,
+      provider: row.provider,
+      kind,
+      config: {},
+      createdAt,
+      updatedAt: now,
+      needsCredentials: true,
+    };
+    data.services.push(record);
+    byId.set(record.id, record);
+    byKey.set(`${record.provider}|${record.name}`, record);
+    idMap.set(row.id, record.id);
+    restored += 1;
+  }
+  if (restored) persist();
+  return { idMap, restored, matched, skipped };
+}
+
+function finiteOrNull(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+function usageContentKey(r: {
+  serviceId: string;
+  model: string | null;
+  normalizedModel: string | null;
+  cost: number | null;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  currency: string | null;
+  recordedAt: string;
+}): string {
+  return JSON.stringify([
+    r.serviceId,
+    r.model,
+    r.normalizedModel,
+    r.cost,
+    r.promptTokens,
+    r.completionTokens,
+    r.totalTokens,
+    r.currency,
+    r.recordedAt,
+  ]);
+}
+
+/**
+ * 导入备份里的 API 用量记录：映射到本机服务，按自然键去重，不复用旧 id。
+ *
+ * 去重单位与 saveUsageRecords 一致：(服务, 周期) 是一整组——刷新时同服务同周期
+ * 先清旧再写新，所以组内可以有多行（按模型拆），而同一组只该有一份。
+ * 本机已有某组时整组跳过（本机数据是在这台机器上刷出来的，以它为准），
+ * 没有时整组写入。这样重复导入同一份备份不会翻倍，也不会和本机已有的
+ * 同周期数据叠加双计。缺 period 的旧行退回按整行内容去重。
+ *
+ * serviceId 先查 idMap（备份服务 -> 本机服务），查不到但本机有同 id 服务的
+ * 原样使用（兼容不带 services 字段的旧备份导回原机器），都没有的跳过。
+ */
+export function importUsageRecords(
+  rows: unknown[],
+  idMap: Map<string, string> = new Map(),
+): { imported: number; skipped: number } {
+  if (!data) data = defaultData();
+  const localIds = new Set(data.services.map((s) => s.id));
+  const existingUnits = new Set<string>();
+  const existingContent = new Set<string>();
+  for (const r of data.usageRecords) {
+    if (r.period != null) existingUnits.add(`${r.serviceId}|${r.period}`);
+    else existingContent.add(usageContentKey(r));
+  }
+
+  const batchContent = new Set<string>();
+  let imported = 0;
+  let skipped = 0;
+  const now = new Date().toISOString();
+  for (const item of rows) {
+    if (!item || typeof item !== "object") {
+      skipped += 1;
+      continue;
+    }
+    const it = item as Record<string, unknown>;
+    const rawId = typeof it.serviceId === "string" ? it.serviceId : "";
+    const serviceId =
+      (rawId && idMap.get(rawId)) || (rawId && localIds.has(rawId) ? rawId : "");
+    if (!serviceId) {
+      skipped += 1;
+      continue;
+    }
+    const period = typeof it.period === "string" && it.period ? it.period : null;
+    const rec = {
+      serviceId,
       model: typeof it.model === "string" ? it.model : null,
       normalizedModel:
         typeof it.normalizedModel === "string" ? it.normalizedModel : null,
-      cost: typeof it.cost === "number" && Number.isFinite(it.cost) ? it.cost : null,
-      promptTokens:
-        typeof it.promptTokens === "number" && Number.isFinite(it.promptTokens)
-          ? it.promptTokens
-          : null,
-      completionTokens:
-        typeof it.completionTokens === "number" &&
-        Number.isFinite(it.completionTokens)
-          ? it.completionTokens
-          : null,
-      totalTokens:
-        typeof it.totalTokens === "number" && Number.isFinite(it.totalTokens)
-          ? it.totalTokens
-          : null,
-      period: typeof it.period === "string" ? it.period : null,
+      cost: finiteOrNull(it.cost),
+      promptTokens: finiteOrNull(it.promptTokens),
+      completionTokens: finiteOrNull(it.completionTokens),
+      totalTokens: finiteOrNull(it.totalTokens),
+      period,
       currency: typeof it.currency === "string" ? it.currency : null,
-      recordedAt: typeof it.recordedAt === "string" ? it.recordedAt : now,
-    });
-    n += 1;
+      recordedAt:
+        typeof it.recordedAt === "string" && Number.isFinite(Date.parse(it.recordedAt))
+          ? it.recordedAt
+          : now,
+    };
+    const key = usageContentKey(rec);
+    if (period != null) {
+      // 只拿导入前的本机状态判断：同一组在本次导入里的多行要一起写进去。
+      // 但完全相同的行只留一份：旧版导入会原样追加，导出的备份里可能已有重复。
+      if (existingUnits.has(`${serviceId}|${period}`) || batchContent.has(key)) {
+        skipped += 1;
+        continue;
+      }
+      batchContent.add(key);
+    } else {
+      if (existingContent.has(key)) {
+        skipped += 1;
+        continue;
+      }
+      existingContent.add(key);
+    }
+    data.counters.usageRecord += 1;
+    data.usageRecords.push({ id: data.counters.usageRecord, ...rec });
+    imported += 1;
   }
-  if (n) persist();
-  return n;
+  if (imported) persist();
+  return { imported, skipped };
 }
-

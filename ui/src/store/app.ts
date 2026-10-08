@@ -71,6 +71,8 @@ interface AppState {
 
   init: () => Promise<void>;
   loadServices: () => Promise<void>;
+  /** 导入备份后重读服务清单、置顶/隐藏与预算（不触发厂商刷新） */
+  reloadAfterBackupImport: () => Promise<void>;
   createService: (input: ServiceInput) => Promise<void>;
   updateService: (id: string, input: ServiceInput) => Promise<void>;
   deleteService: (id: string) => Promise<void>;
@@ -206,6 +208,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   loadServices: async () => {
     const services = await ipc.listServices();
     set({ services });
+  },
+
+  reloadAfterBackupImport: async () => {
+    try {
+      const boot = await ipc.bootstrap();
+      set({
+        services: boot.services,
+        pinnedIds: parseIdList(boot.settings.pinnedServiceIds),
+        hiddenIds: parseIdList(boot.settings.hiddenServiceIds),
+        monthlyBudgetUsd: boot.settings.monthlyBudgetUsd ?? "",
+      });
+    } catch (e) {
+      reportError("reloadAfterBackupImport", e);
+    }
   },
 
   createService: async (input) => {

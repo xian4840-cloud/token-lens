@@ -37,12 +37,17 @@ const api = {
     ipcRenderer.invoke("app:preview-backup", raw) as Promise<{
       local: number;
       usage: number;
+      services: number;
       exportedAt: string;
     }>,
   importBackup: (raw: string) =>
     ipcRenderer.invoke("app:import-backup", raw) as Promise<{
       local: number;
       usage: number;
+      usageSkipped: number;
+      services: number;
+      servicesMatched: number;
+      servicesSkipped: number;
     }>,
   dataStats: () =>
     ipcRenderer.invoke("app:stats") as Promise<{
