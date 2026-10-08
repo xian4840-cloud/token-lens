@@ -6,7 +6,6 @@ import {
   listServices,
   getService,
   insertService,
-  updateServiceMeta,
   deleteServiceRow,
   setSecret,
   listBalanceSnapshots,
@@ -17,8 +16,6 @@ import {
   setSetting,
   getLastBalances,
   upsertLocalDailyUsage,
-  setNeedsCredentials,
-  getSecrets,
   dataStats,
 } from "./db";
 import { isEncryptionAvailable } from "./secrets";
@@ -70,30 +67,11 @@ import { launchCapturedCodex } from "./codex-capture";
 import { enableOpenCodeCapture, enableClaudeCapture } from "./agent-response-capture";
 import { singleFlight } from "./lib/inflight";
 import { applyBackupImport } from "./backup-import";
+import { splitFields, updateServiceFromInput } from "./service-update";
 
 const captureLaunch = { current: null as ReturnType<typeof launchCapturedCodex> | null };
 
 
-/** 按服务定义把表单字段拆分为非敏感 config 与敏感 secrets */
-function splitFields(
-  provider: string,
-  fields: Record<string, string>,
-): { config: Record<string, unknown>; secrets: Record<string, string> } {
-  const def = getDefinition(provider);
-  if (!def) throw new Error(`未知服务类型: ${provider}`);
-  const secretKeys = new Set(
-    def.configSchema
-      .filter((f) => f.type === "password" || f.secret)
-      .map((f) => f.key),
-  );
-  const config: Record<string, unknown> = {};
-  const secrets: Record<string, string> = {};
-  for (const [k, v] of Object.entries(fields)) {
-    if (secretKeys.has(k)) secrets[k] = v;
-    else config[k] = v;
-  }
-  return { config, secrets };
-}
 
 function parseBackupOrThrow(raw: unknown): BackupPayload {
   if (typeof raw !== "string") throw new Error("无效的备份内容");
@@ -158,29 +136,8 @@ export function registerIpc(): void {
     for (const [k, v] of Object.entries(secrets)) setSecret(id, k, v);
     return record;
   });
-  ipcMain.handle(
-    "services:update",
-    (_e, id: string, input: unknown) => {
-      const existing = getService(id);
-      if (!existing) throw new Error("服务不存在");
-      const valid = validateServiceInput(input);
-      const { config, secrets } = splitFields(valid.provider, valid.fields);
-      updateServiceMeta(id, valid.name, config);
-      // 密码字段非空才更新；留空表示保留旧值（便于编辑其他字段时不重填密码）
-      for (const [k, v] of Object.entries(secrets)) {
-        if (v) setSecret(id, k, v);
-      }
-      // 备份恢复的服务：必填的密钥字段都补上了才算可用，清掉「需重新填写」标记
-      if (existing.needsCredentials) {
-        const def = getDefinition(existing.provider);
-        const stored = getSecrets(id);
-        const missing = (def?.configSchema ?? []).some(
-          (f) => f.required && (f.type === "password" || f.secret) && !stored[f.key],
-        );
-        if (!missing) setNeedsCredentials(id, false);
-      }
-      return getService(id);
-    },
+  ipcMain.handle("services:update", (_e, id: string, input: unknown) =>
+    updateServiceFromInput(id, input),
   );
   ipcMain.handle("services:delete", (_e, id: string) => {
     deleteServiceRow(id);
