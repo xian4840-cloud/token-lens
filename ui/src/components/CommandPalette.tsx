@@ -70,9 +70,12 @@ export function CommandPalette({
         run: () => {
           navigate("/usage");
           showToast("已开始扫描本地用量");
-          void useAppStore.getState().scanLocalUsage().then(undefined, (e: unknown) =>
-            showToast(e instanceof Error ? e.message : "扫描失败", "err"),
-          );
+          void useAppStore
+            .getState()
+            .scanLocalUsage()
+            .then(undefined, (e: unknown) =>
+              showToast(e instanceof Error ? e.message : "扫描失败", "err"),
+            );
         },
       },
       {
@@ -135,9 +138,7 @@ export function CommandPalette({
     ],
     [navigate],
   );
-  const visible = items.filter((i) =>
-    i.label.toLowerCase().includes(q.trim().toLowerCase()),
-  );
+  const visible = items.filter((i) => i.label.toLowerCase().includes(q.trim().toLowerCase()));
   const highlight = clampIndex(active, visible.length);
 
   useEffect(() => {
@@ -153,112 +154,99 @@ export function CommandPalette({
 
   return (
     <>
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        if (!v) {
-          setQ("");
-          setActive(0);
-        }
-        onOpenChange(v);
-      }}
-    >
-      <DialogContent className="max-w-md p-4">
-        <DialogHeader>
-          <DialogTitle>命令</DialogTitle>
-          <DialogDescription>
-            Ctrl+K 打开。↑↓ 选择，Enter 执行。
-          </DialogDescription>
-        </DialogHeader>
-        <Input
-          autoFocus
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="跳转、刷新、导出…"
-          aria-label="过滤命令"
-          role="combobox"
-          aria-expanded={open}
-          aria-controls="command-list"
-          aria-activedescendant={
-            visible.length > 0 ? `cmd-item-${highlight}` : undefined
+      <Dialog
+        open={open}
+        onOpenChange={(v) => {
+          if (!v) {
+            setQ("");
+            setActive(0);
           }
-          aria-autocomplete="list"
-          onKeyDown={(e) => {
-            if (e.key === "ArrowDown") {
-              e.preventDefault();
-              setActive(stepIndex(highlight, 1, visible.length));
-            } else if (e.key === "ArrowUp") {
-              e.preventDefault();
-              setActive(stepIndex(highlight, -1, visible.length));
-            } else if (e.key === "Home") {
-              e.preventDefault();
-              setActive(0);
-            } else if (e.key === "End") {
-              e.preventDefault();
-              setActive(Math.max(0, visible.length - 1));
-            } else if (e.key === "Enter") {
-              e.preventDefault();
-              runAt(highlight);
-            }
-          }}
-        />
-        <ul
-          id="command-list"
-          role="listbox"
-          className="mt-2 max-h-64 overflow-auto text-sm"
-        >
-          {visible.length === 0 ? (
-            <li className="px-2 py-3 text-muted-foreground">没有匹配的命令</li>
-          ) : (
-            visible.map((i, idx) => (
-              <li key={i.label} role="presentation">
-                <button
-                  type="button"
-                  id={`cmd-item-${idx}`}
-                  role="option"
-                  aria-selected={idx === highlight}
-                  className={
-                    idx === highlight
-                      ? "w-full rounded-md bg-accent/60 px-2 py-1.5 text-left"
-                      : "w-full rounded-md px-2 py-1.5 text-left hover:bg-accent/60"
-                  }
-                  onMouseEnter={() => setActive(idx)}
-                  onClick={() => runAt(idx)}
-                >
-                  {i.label}
-                </button>
-              </li>
-            ))
-          )}
-        </ul>
-      </DialogContent>
-    </Dialog>
-    <ConfirmDialog
-      open={backupPending != null}
-      onOpenChange={(v) => {
-        if (!v) setBackupPending(null);
-      }}
-      title="导入备份？"
-      description={
-        backupPending
-          ? formatBackupPreviewText(backupPending.preview)
-          : "导入备份"
-      }
-      confirmLabel="导入"
-      onConfirm={() => {
-        const pending = backupPending;
-        setBackupPending(null);
-        if (!pending) return;
-        void ipc.importBackup(pending.raw).then(
-          (r) => {
-            showToast(formatBackupImportResult(r));
-            void useAppStore.getState().reloadAfterBackupImport();
-          },
-          (e: unknown) =>
-            showToast(e instanceof Error ? e.message : "导入失败", "err"),
-        );
-      }}
-    />
+          onOpenChange(v);
+        }}
+      >
+        <DialogContent className="max-w-md p-4">
+          <DialogHeader>
+            <DialogTitle>命令</DialogTitle>
+            <DialogDescription>Ctrl+K 打开。↑↓ 选择，Enter 执行。</DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="跳转、刷新、导出…"
+            aria-label="过滤命令"
+            role="combobox"
+            aria-expanded={open}
+            aria-controls="command-list"
+            aria-activedescendant={visible.length > 0 ? `cmd-item-${highlight}` : undefined}
+            aria-autocomplete="list"
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setActive(stepIndex(highlight, 1, visible.length));
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setActive(stepIndex(highlight, -1, visible.length));
+              } else if (e.key === "Home") {
+                e.preventDefault();
+                setActive(0);
+              } else if (e.key === "End") {
+                e.preventDefault();
+                setActive(Math.max(0, visible.length - 1));
+              } else if (e.key === "Enter") {
+                e.preventDefault();
+                runAt(highlight);
+              }
+            }}
+          />
+          <ul id="command-list" role="listbox" className="mt-2 max-h-64 overflow-auto text-sm">
+            {visible.length === 0 ? (
+              <li className="px-2 py-3 text-muted-foreground">没有匹配的命令</li>
+            ) : (
+              visible.map((i, idx) => (
+                <li key={i.label} role="presentation">
+                  <button
+                    type="button"
+                    id={`cmd-item-${idx}`}
+                    role="option"
+                    aria-selected={idx === highlight}
+                    className={
+                      idx === highlight
+                        ? "w-full rounded-md bg-accent/60 px-2 py-1.5 text-left"
+                        : "w-full rounded-md px-2 py-1.5 text-left hover:bg-accent/60"
+                    }
+                    onMouseEnter={() => setActive(idx)}
+                    onClick={() => runAt(idx)}
+                  >
+                    {i.label}
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        </DialogContent>
+      </Dialog>
+      <ConfirmDialog
+        open={backupPending != null}
+        onOpenChange={(v) => {
+          if (!v) setBackupPending(null);
+        }}
+        title="导入备份？"
+        description={backupPending ? formatBackupPreviewText(backupPending.preview) : "导入备份"}
+        confirmLabel="导入"
+        onConfirm={() => {
+          const pending = backupPending;
+          setBackupPending(null);
+          if (!pending) return;
+          void ipc.importBackup(pending.raw).then(
+            (r) => {
+              showToast(formatBackupImportResult(r));
+              void useAppStore.getState().reloadAfterBackupImport();
+            },
+            (e: unknown) => showToast(e instanceof Error ? e.message : "导入失败", "err"),
+          );
+        }}
+      />
     </>
   );
 }

@@ -186,8 +186,7 @@ function splitSession(
   }
   const costEps = 1e-6 * Math.max(1, total.cost);
   const tokenKeys = ["input", "output", "reasoning", "cacheRead", "cacheWrite"] as const;
-  const consistent =
-    tokenKeys.every((k) => sum[k] <= total[k]) && sum.cost <= total.cost + costEps;
+  const consistent = tokenKeys.every((k) => sum[k] <= total[k]) && sum.cost <= total.cost + costEps;
   if (!consistent) {
     return { buckets: sessionLevel(s, since), settled: false, lastMs };
   }

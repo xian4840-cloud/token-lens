@@ -25,10 +25,7 @@ export function parseIdList(raw: string | undefined | null): string[] {
 }
 
 /** 置顶的排前面，未置顶保持原顺序。 */
-export function sortPinnedFirst<T extends { id: string }>(
-  items: T[],
-  pinned: string[],
-): T[] {
+export function sortPinnedFirst<T extends { id: string }>(items: T[], pinned: string[]): T[] {
   if (pinned.length === 0) return items;
   const rank = new Map(pinned.map((id, i) => [id, i]));
   return [...items].sort((a, b) => {

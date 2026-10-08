@@ -1,12 +1,7 @@
 /** 本地 agent 用量（Claude Code / Codex / OpenCode / Antigravity / Grok Build） */
 
 /** 数据来源。新增成员时记得同步 electron/local-usage/types.ts 的 SOURCE_TABLE（有编译期检查） */
-export type LocalSource =
-  | "claude-code"
-  | "codex"
-  | "opencode"
-  | "antigravity"
-  | "grok-build";
+export type LocalSource = "claude-code" | "codex" | "opencode" | "antigravity" | "grok-build";
 
 /** 单行聚合：某来源某模型的用量汇总 */
 export interface LocalUsageRow {

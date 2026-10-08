@@ -118,18 +118,12 @@ export function ServiceFormDialog({ open, onOpenChange, editing }: Props) {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{editing ? "编辑服务" : "添加服务"}</DialogTitle>
-          <DialogDescription>
-            {def?.description ?? "选择服务类型并填写凭证"}
-          </DialogDescription>
+          <DialogDescription>{def?.description ?? "选择服务类型并填写凭证"}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="service-provider">服务类型</Label>
-            <Select
-              value={provider}
-              onValueChange={handleProviderChange}
-              disabled={!!editing}
-            >
+            <Select value={provider} onValueChange={handleProviderChange} disabled={!!editing}>
               <SelectTrigger id="service-provider" aria-label="服务类型">
                 <SelectValue placeholder="请选择服务类型" />
               </SelectTrigger>

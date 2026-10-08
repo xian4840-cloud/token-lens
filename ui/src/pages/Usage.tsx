@@ -72,10 +72,7 @@ function formatTokens(n: number | null | undefined): string {
 }
 
 /** 当日区间：同日显示 HH:mm~HH:mm */
-function formatDayRange(
-  firstAt?: string | null,
-  lastAt?: string | null,
-): string {
+function formatDayRange(firstAt?: string | null, lastAt?: string | null): string {
   const hhmm = (iso: string) => {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
@@ -147,23 +144,15 @@ export function Usage() {
     };
   }, [tab, range, loadLocalDaily]);
 
-  const nameOf = (id: string) =>
-    services.find((s) => s.id === id)?.name ?? id.slice(0, 8);
+  const nameOf = (id: string) => services.find((s) => s.id === id)?.name ?? id.slice(0, 8);
 
   const supportedProviders = useMemo(
-    () =>
-      new Set(
-        definitions.filter((d) => d.supportsUsage).map((d) => d.provider),
-      ),
+    () => new Set(definitions.filter((d) => d.supportsUsage).map((d) => d.provider)),
     [definitions],
   );
 
-  const unsupportedServices = services.filter(
-    (s) => !supportedProviders.has(s.provider),
-  );
-  const supportedServices = services.filter((s) =>
-    supportedProviders.has(s.provider),
-  );
+  const unsupportedServices = services.filter((s) => !supportedProviders.has(s.provider));
+  const supportedServices = services.filter((s) => supportedProviders.has(s.provider));
 
   const refreshErrors = supportedServices
     .map((s) => ({ name: s.name, msg: errors[s.id] }))
@@ -230,10 +219,7 @@ export function Usage() {
   };
 
   const records = useMemo(
-    () =>
-      [...usageRecords].sort((a, b) =>
-        b.recordedAt.localeCompare(a.recordedAt),
-      ),
+    () => [...usageRecords].sort((a, b) => b.recordedAt.localeCompare(a.recordedAt)),
     [usageRecords],
   );
 
@@ -302,10 +288,7 @@ export function Usage() {
       />
 
       <div className="px-8">
-        <Tabs
-          value={tab}
-          onValueChange={(v) => setTab(v as "api" | "local")}
-        >
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "api" | "local")}>
           <div className="flex items-center justify-between py-4">
             <TabsList>
               <TabsTrigger value="api">API 用量</TabsTrigger>
@@ -335,11 +318,7 @@ export function Usage() {
                   </Button>
                   <Button
                     onClick={handleRefresh}
-                    disabled={
-                      range === "all" ||
-                      usageRefreshing ||
-                      supportedServices.length === 0
-                    }
+                    disabled={range === "all" || usageRefreshing || supportedServices.length === 0}
                   >
                     {usageRefreshing ? "刷新中…" : "刷新用量"}
                   </Button>
@@ -390,18 +369,11 @@ export function Usage() {
                             parsed.unknownSources.length
                               ? `未知来源 ${parsed.unknownSources.length}`
                               : "",
-                            parsed.invalid.length
-                              ? `非法 ${parsed.invalid.length} 行`
-                              : "",
+                            parsed.invalid.length ? `非法 ${parsed.invalid.length} 行` : "",
                           ]
                             .filter(Boolean)
                             .join("，");
-                          showToast(
-                            notes
-                              ? `没有可导入的行（${notes}）`
-                              : "没有可导入的行",
-                            "err",
-                          );
+                          showToast(notes ? `没有可导入的行（${notes}）` : "没有可导入的行", "err");
                           return;
                         }
                         setCsvPending({
@@ -416,13 +388,8 @@ export function Usage() {
                   </Button>
                   <Button
                     onClick={() => {
-                      void scanLocalUsage(rangeToSince(range)).then(
-                        undefined,
-                        (e: unknown) =>
-                          showToast(
-                            e instanceof Error ? e.message : "扫描失败",
-                            "err",
-                          ),
+                      void scanLocalUsage(rangeToSince(range)).then(undefined, (e: unknown) =>
+                        showToast(e instanceof Error ? e.message : "扫描失败", "err"),
                       );
                     }}
                     disabled={localUsageScanning}
@@ -433,13 +400,10 @@ export function Usage() {
               )}
             </div>
           </div>
-          {exportError ? (
-            <p className="pb-3 text-xs text-destructive">{exportError}</p>
-          ) : null}
+          {exportError ? <p className="pb-3 text-xs text-destructive">{exportError}</p> : null}
 
           {/* ---- API 用量 ---- */}
           <TabsContent value="api">
-
             <div className="space-y-4">
               {unsupportedServices.length > 0 && (
                 <Card>
@@ -467,10 +431,7 @@ export function Usage() {
                     <ul className="space-y-1 text-sm text-muted-foreground">
                       {refreshErrors.map((e) => (
                         <li key={e.name}>
-                          <span className="font-medium text-foreground">
-                            {e.name}
-                          </span>
-                          ：
+                          <span className="font-medium text-foreground">{e.name}</span>：
                           <button
                             type="button"
                             className="hover:underline"
@@ -514,31 +475,24 @@ export function Usage() {
                           <tr className="border-b text-left text-xs tracking-wide text-muted-foreground">
                             <th className="px-4 py-3 font-medium">服务</th>
                             <th className="px-4 py-3 font-medium">模型</th>
-                            <th className="px-4 py-3 text-right font-medium">
-                              Tokens
-                            </th>
-                            <th className="px-4 py-3 text-right font-medium">
-                              费用
-                            </th>
-                            <th className="px-4 py-3 text-right font-medium">
-                              记录时间
-                            </th>
+                            <th className="px-4 py-3 text-right font-medium">Tokens</th>
+                            <th className="px-4 py-3 text-right font-medium">费用</th>
+                            <th className="px-4 py-3 text-right font-medium">记录时间</th>
                           </tr>
                         </thead>
                         <tbody>
                           {records.map((r) => (
-                            <tr key={r.id} className="border-b border-border/60 transition-colors last:border-0 hover:bg-white/30">
+                            <tr
+                              key={r.id}
+                              className="border-b border-border/60 transition-colors last:border-0 hover:bg-white/30"
+                            >
                               <td className="px-4 py-3">{nameOf(r.serviceId)}</td>
-                              <td className="px-4 py-3 font-mono text-xs">
-                                {r.model ?? "-"}
-                              </td>
+                              <td className="px-4 py-3 font-mono text-xs">{r.model ?? "-"}</td>
                               <td className="px-4 py-3 text-right tabular-nums">
                                 {formatTokens(
                                   r.totalTokens ??
-                                    (r.promptTokens != null ||
-                                    r.completionTokens != null
-                                      ? (r.promptTokens ?? 0) +
-                                        (r.completionTokens ?? 0)
+                                    (r.promptTokens != null || r.completionTokens != null
+                                      ? (r.promptTokens ?? 0) + (r.completionTokens ?? 0)
                                       : null),
                                 )}
                               </td>
@@ -615,41 +569,32 @@ export function Usage() {
                   <Card>
                     <CardContent className="p-0">
                       {groupedByDate.size > 1 ? (
-                      <div className="flex items-center justify-end px-4 pt-3">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-xs"
-                          onClick={() => {
-                            const dates = [...groupedByDate.keys()];
-                            const allOn =
-                              dates.length > 0 &&
-                              dates.every((d) => expandedDates.has(d));
-                            setExpandedDates(allOn ? new Set() : new Set(dates));
-                          }}
-                        >
-                          {[...groupedByDate.keys()].every((d) =>
-                            expandedDates.has(d),
-                          )
-                            ? "全部收起"
-                            : "全部展开"}
-                        </Button>
-                      </div>
+                        <div className="flex items-center justify-end px-4 pt-3">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs"
+                            onClick={() => {
+                              const dates = [...groupedByDate.keys()];
+                              const allOn =
+                                dates.length > 0 && dates.every((d) => expandedDates.has(d));
+                              setExpandedDates(allOn ? new Set() : new Set(dates));
+                            }}
+                          >
+                            {[...groupedByDate.keys()].every((d) => expandedDates.has(d))
+                              ? "全部收起"
+                              : "全部展开"}
+                          </Button>
+                        </div>
                       ) : null}
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b text-left text-xs tracking-wide text-muted-foreground">
                               <th className="px-4 py-3 font-medium">日期</th>
-                              <th className="px-4 py-3 text-right font-medium">
-                                总 Tokens
-                              </th>
-                              <th className="px-4 py-3 text-right font-medium">
-                                总费用
-                              </th>
-                              <th className="px-4 py-3 text-right font-medium">
-                                明细
-                              </th>
+                              <th className="px-4 py-3 text-right font-medium">总 Tokens</th>
+                              <th className="px-4 py-3 text-right font-medium">总费用</th>
+                              <th className="px-4 py-3 text-right font-medium">明细</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -727,7 +672,8 @@ export function Usage() {
                                             {formatCost(r.cost, r.currency)}
                                           </td>
                                           <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">
-                                            {r.sessions} 会话 · {formatDayRange(r.firstAt, r.lastAt)}
+                                            {r.sessions} 会话 ·{" "}
+                                            {formatDayRange(r.firstAt, r.lastAt)}
                                           </td>
                                         </tr>
                                       );

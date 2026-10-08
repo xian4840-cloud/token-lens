@@ -151,10 +151,7 @@ export const anthropicAdapter: Adapter = {
     const end = fmtDate(now);
     const json = await fetchReport(config, secrets, start, end);
     // 与用量明细共用同一套聚合（含缓存读写），避免同一份数据在两个页面两个数
-    const used = groupByModel(json.data).reduce(
-      (sum, it) => sum + (it.totalTokens ?? 0),
-      0,
-    );
+    const used = groupByModel(json.data).reduce((sum, it) => sum + (it.totalTokens ?? 0), 0);
     return {
       used,
       currency: "tokens",

@@ -117,8 +117,7 @@ export function pruneDefaultOverrides(
       (o.inputPerM ?? row.inputPerM) === row.inputPerM &&
       (o.outputPerM ?? row.outputPerM) === row.outputPerM &&
       (o.cacheReadPerM ?? row.cacheReadPerM ?? 0) === (row.cacheReadPerM ?? 0) &&
-      (o.cacheWritePerM ?? row.cacheWritePerM ?? 0) ===
-        (row.cacheWritePerM ?? 0) &&
+      (o.cacheWritePerM ?? row.cacheWritePerM ?? 0) === (row.cacheWritePerM ?? 0) &&
       (o.currency ?? row.currency ?? USD) === (row.currency ?? USD);
     if (!same) out[key] = o;
   }
@@ -131,16 +130,12 @@ export function pruneDefaultOverrides(
  * 这是唯一把存储字符串变成对象的入口（设置页展示与用量换算都经过它），
  * 所以冗余项的剔除放在这里做：存量数据也能在下次读取时自愈。
  */
-export function parseOverrides(
-  raw: string | undefined,
-): Record<string, Partial<ModelPricing>> {
+export function parseOverrides(raw: string | undefined): Record<string, Partial<ModelPricing>> {
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object") {
-      return pruneDefaultOverrides(
-        parsed as Record<string, Partial<ModelPricing>>,
-      );
+      return pruneDefaultOverrides(parsed as Record<string, Partial<ModelPricing>>);
     }
   } catch (e) {
     logWarn(

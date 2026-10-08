@@ -18,10 +18,7 @@ interface DefinitionLike {
  * 自动填入的，不是用户的心意。反之像「工作号」这类自定义名必须保住，
  * 用户给账号起的区分名比服务类型名重要得多。
  */
-export function isAutoFilledName(
-  name: string,
-  definitions: readonly DefinitionLike[],
-): boolean {
+export function isAutoFilledName(name: string, definitions: readonly DefinitionLike[]): boolean {
   const trimmed = name.trim();
   if (!trimmed) return true;
   return definitions.some((d) => d.label === trimmed);

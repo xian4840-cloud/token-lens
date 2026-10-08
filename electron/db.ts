@@ -109,9 +109,7 @@ function compactData(): boolean {
     usage: data.usageRecords.length,
     local: data.localDailyUsage.length,
   };
-  const snapCutoff = new Date(
-    now - SNAPSHOT_FULL_DAYS * 86_400_000,
-  ).toISOString();
+  const snapCutoff = new Date(now - SNAPSHOT_FULL_DAYS * 86_400_000).toISOString();
 
   const recent: BalanceSnapshot[] = [];
   const dailyLast = new Map<string, BalanceSnapshot>();
@@ -128,18 +126,12 @@ function compactData(): boolean {
     a.recordedAt.localeCompare(b.recordedAt),
   );
 
-  const usageCutoff = new Date(
-    now - USAGE_RECORD_DAYS * 86_400_000,
-  ).toISOString();
-  data.usageRecords = data.usageRecords.filter(
-    (r) => r.recordedAt >= usageCutoff,
-  );
+  const usageCutoff = new Date(now - USAGE_RECORD_DAYS * 86_400_000).toISOString();
+  data.usageRecords = data.usageRecords.filter((r) => r.recordedAt >= usageCutoff);
 
   const localCutoffKey = toDateKey(now - LOCAL_DAILY_DAYS * 86_400_000);
   if (localCutoffKey) {
-    data.localDailyUsage = data.localDailyUsage.filter(
-      (r) => r.date >= localCutoffKey,
-    );
+    data.localDailyUsage = data.localDailyUsage.filter((r) => r.date >= localCutoffKey);
   }
 
   // 降采样后的快照逐个比对引用：长度相同且顺序一致就说明什么都没删、也没重排
@@ -180,9 +172,7 @@ function loadDataFile(): { data: StoreData; needsWrite: boolean } {
     reason = e instanceof Error ? e.message : String(e);
   }
 
-  const backup = `${filePath}.corrupt-${new Date()
-    .toISOString()
-    .replace(/[:.]/g, "-")}`;
+  const backup = `${filePath}.corrupt-${new Date().toISOString().replace(/[:.]/g, "-")}`;
   try {
     fs.renameSync(filePath, backup);
     logWarn("db", `数据文件不可用（${reason}），已留档到 ${backup}，以空数据启动`);
@@ -309,11 +299,7 @@ export function insertService(record: ServiceRecord): void {
   emitServiceChanged(record.id);
 }
 
-export function updateServiceMeta(
-  id: string,
-  name: string,
-  config: Record<string, unknown>,
-): void {
+export function updateServiceMeta(id: string, name: string, config: Record<string, unknown>): void {
   const s = data.services.find((x) => x.id === id);
   if (s) {
     s.name = name;
@@ -414,10 +400,7 @@ export function getSecrets(serviceId: string): Record<string, string> {
       // 不留痕的话，用户看到的是适配器抛出的「缺少 API Key」——他明明填过，
       // 却没有任何线索说明密钥为什么不见了，只会以为是应用出了问题或自己没保存。
       // 日志里写清是哪个服务的哪个字段，也只写这些：密文与明文都不落盘。
-      logWarn(
-        "db",
-        `服务 ${serviceId} 的密钥字段 ${k} 解密失败，已跳过：${String(e)}`,
-      );
+      logWarn("db", `服务 ${serviceId} 的密钥字段 ${k} 解密失败，已跳过：${String(e)}`);
     }
   }
   return result;
@@ -464,10 +447,7 @@ export function saveBalanceSnapshot(
   persist();
 }
 
-export function listBalanceSnapshots(
-  serviceId?: string,
-  since?: string,
-): BalanceSnapshot[] {
+export function listBalanceSnapshots(serviceId?: string, since?: string): BalanceSnapshot[] {
   return data.balanceSnapshots.filter((s) => {
     if (serviceId && s.serviceId !== serviceId) return false;
     if (since && s.recordedAt < since) return false;
@@ -510,10 +490,7 @@ export function saveUsageRecords(
   persist();
 }
 
-export function listUsageRecords(
-  serviceId?: string,
-  since?: string,
-): UsageRecord[] {
+export function listUsageRecords(serviceId?: string, since?: string): UsageRecord[] {
   return data.usageRecords.filter((r) => {
     if (serviceId && r.serviceId !== serviceId) return false;
     if (since && r.recordedAt < since) return false;
@@ -677,10 +654,7 @@ function toRangeKey(value: string | undefined): string | undefined {
 }
 
 /** 查询本地 agent 每日用量（按 date 范围；since/until 支持 ISO 或 dateKey） */
-export function listLocalDailyUsage(
-  since?: string,
-  until?: string,
-): LocalDailyUsageRecord[] {
+export function listLocalDailyUsage(since?: string, until?: string): LocalDailyUsageRecord[] {
   // r.date 是本地日期键，故范围也要转成本地日期键，避免边界多一天
   const sinceKey = toRangeKey(since);
   const untilKey = toRangeKey(until);
@@ -721,10 +695,7 @@ export function dataStats(): {
   try {
     if (filePath && fs.existsSync(filePath)) bytes = fs.statSync(filePath).size;
   } catch (e) {
-    logWarn(
-      "db",
-      `读取数据文件大小失败：${e instanceof Error ? e.message : String(e)}`,
-    );
+    logWarn("db", `读取数据文件大小失败：${e instanceof Error ? e.message : String(e)}`);
     bytes = 0;
   }
   return {
@@ -847,9 +818,7 @@ export function importBackupServices(
     }
     const name = row.name.trim().slice(0, 100) || row.provider;
     // 规则 2：导入前就有、且还没被别的备份服务对上的同类型同名服务
-    const candidate = byKey
-      .get(`${row.provider}|${name}`)
-      ?.find((s) => !claimed.has(s.id));
+    const candidate = byKey.get(`${row.provider}|${name}`)?.find((s) => !claimed.has(s.id));
     if (candidate) {
       idMap.set(row.id, candidate.id);
       claimed.add(candidate.id);
@@ -947,8 +916,7 @@ export function importUsageRecords(
     }
     const it = item as Record<string, unknown>;
     const rawId = typeof it.serviceId === "string" ? it.serviceId : "";
-    const serviceId =
-      (rawId && idMap.get(rawId)) || (rawId && localIds.has(rawId) ? rawId : "");
+    const serviceId = (rawId && idMap.get(rawId)) || (rawId && localIds.has(rawId) ? rawId : "");
     if (!serviceId) {
       skipped += 1;
       continue;
@@ -957,8 +925,7 @@ export function importUsageRecords(
     const rec = {
       serviceId,
       model: typeof it.model === "string" ? it.model : null,
-      normalizedModel:
-        typeof it.normalizedModel === "string" ? it.normalizedModel : null,
+      normalizedModel: typeof it.normalizedModel === "string" ? it.normalizedModel : null,
       cost: finiteOrNull(it.cost),
       promptTokens: finiteOrNull(it.promptTokens),
       completionTokens: finiteOrNull(it.completionTokens),

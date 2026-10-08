@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  extractCodexIncrements,
-  splitCodexUsage,
-  type CodexUsage,
-} from "./codex";
+import { extractCodexIncrements, splitCodexUsage, type CodexUsage } from "./codex";
 
 function usage(partial: Partial<CodexUsage> & { total?: number }): {
   input_tokens?: number;

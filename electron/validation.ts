@@ -26,7 +26,6 @@ const ALLOWED_SETTING_KEYS = new Set<string>([
   "disabledLocalSources",
 ]);
 
-
 /** ModelPricing 中的数值字段 */
 const PRICING_NUMBER_FIELDS = new Set<string>([
   "inputPerM",
@@ -111,9 +110,7 @@ export function validatePeriod(period: unknown): {
 }
 
 /** 校验价格覆盖：须为对象，值清洗为 Partial<ModelPricing>（仅保留已知字段且类型正确） */
-export function validatePricingOverrides(
-  value: unknown,
-): Record<string, Partial<ModelPricing>> {
+export function validatePricingOverrides(value: unknown): Record<string, Partial<ModelPricing>> {
   if (!value || typeof value !== "object") {
     throw new Error("无效的价格覆盖");
   }

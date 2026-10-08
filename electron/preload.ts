@@ -16,11 +16,17 @@ import type {
  * 注意：preload 运行在沙箱里，只能 require("electron")，这里只允许 import type。
  * 桌宠窗口的 API（今日花费、活动、拖动）在 pet-preload.ts，主窗口不需要。
  */
-function invoke<C extends InvokeChannel>(channel: C, ...args: InvokeArgs<C>): Promise<InvokeResult<C>> {
+function invoke<C extends InvokeChannel>(
+  channel: C,
+  ...args: InvokeArgs<C>
+): Promise<InvokeResult<C>> {
   return ipcRenderer.invoke(channel, ...args);
 }
 
-function subscribe<C extends EventChannel>(channel: C, cb: (payload: EventPayload<C>) => void): () => void {
+function subscribe<C extends EventChannel>(
+  channel: C,
+  cb: (payload: EventPayload<C>) => void,
+): () => void {
   const handler = (_e: unknown, payload: EventPayload<C>) => cb(payload);
   ipcRenderer.on(channel, handler);
   return () => ipcRenderer.removeListener(channel, handler);

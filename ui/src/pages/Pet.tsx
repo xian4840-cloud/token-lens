@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type PointerEvent,
-} from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import idleSprite from "@/assets/pet/idle.png";
 import blinkSprite from "@/assets/pet/blink.png";
 import workingSprite from "@/assets/pet/working.png";
@@ -96,12 +90,15 @@ export function PetPage() {
     const rest = () => {
       if (cancelled) return;
       setPose("idle");
-      wait = window.setTimeout(() => {
-        if (cancelled) return;
-        const next = nextIdlePose();
-        setPose(next);
-        hold = window.setTimeout(rest, POSE_MS[next]);
-      }, 1800 + Math.random() * 2800);
+      wait = window.setTimeout(
+        () => {
+          if (cancelled) return;
+          const next = nextIdlePose();
+          setPose(next);
+          hold = window.setTimeout(rest, POSE_MS[next]);
+        },
+        1800 + Math.random() * 2800,
+      );
     };
     rest();
     return () => {
@@ -171,9 +168,7 @@ export function PetPage() {
         : pose === "wave"
           ? "pet-act-wave"
           : "pet-bob-idle";
-  const sourceLabel = activity.source
-    ? LOCAL_SOURCE_LABEL[activity.source]
-    : undefined;
+  const sourceLabel = activity.source ? LOCAL_SOURCE_LABEL[activity.source] : undefined;
 
   return (
     <div

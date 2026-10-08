@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  clampWindowBounds,
-  DEFAULT_WINDOW,
-  parseWindowBounds,
-} from "./window-bounds";
+import { clampWindowBounds, DEFAULT_WINDOW, parseWindowBounds } from "./window-bounds";
 
 const primary = { x: 0, y: 0, width: 1920, height: 1040 };
 

@@ -1,7 +1,4 @@
-import {
-  openLoginWindow,
-  type ExtractedCredentials,
-} from "./login-window";
+import { openLoginWindow, type ExtractedCredentials } from "./login-window";
 import { validateScnetCredentials } from "../adapters/scnet_token_plan";
 import { BROWSER_UA } from "../lib/user-agent";
 
@@ -30,18 +27,14 @@ export function openScnetLogin(): Promise<ScnetCredentials | null> {
     title: "登录超算互联网 - 登录成功后自动获取凭证",
     allowedDomains: ["scnet.cn"],
     extractHeaders: ["cookie"],
-    isValid: (h) =>
-      !!h.cookie &&
-      h.cookie.split(";").some((c) => c.trim().startsWith("Token=")),
+    isValid: (h) => !!h.cookie && h.cookie.split(";").some((c) => c.trim().startsWith("Token=")),
     // 候选凭证须通过真实接口验证，避免残留过期 cookie 被秒返回
     validate: (h) => validateScnetCredentials(h.cookie ?? ""),
     userAgent: BROWSER_UA,
   }).then(toScnetCredentials);
 }
 
-function toScnetCredentials(
-  cred: ExtractedCredentials | null,
-): ScnetCredentials | null {
+function toScnetCredentials(cred: ExtractedCredentials | null): ScnetCredentials | null {
   if (!cred) return null;
   return { cookie: cred.cookie ?? "" };
 }

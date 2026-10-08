@@ -79,19 +79,13 @@ describe("summarizeLocalSpend", () => {
       ],
       "2026-09-04",
     );
-    expect(summary.bySource.map((s) => s.source)).toEqual([
-      "claude-code",
-      "codex",
-      "grok-build",
-    ]);
+    expect(summary.bySource.map((s) => s.source)).toEqual(["claude-code", "codex", "grok-build"]);
     expect(summary.cost).toBe(3.5);
   });
 
   it("未知价格不把费用当成 0", () => {
     const summary = summarizeLocalSpend(
-      [
-        row({ source: "codex", date: "2026-09-04", cost: null, inputTokens: 100 }),
-      ],
+      [row({ source: "codex", date: "2026-09-04", cost: null, inputTokens: 100 })],
       "2026-09-04",
     );
     expect(summary.cost).toBeNull();

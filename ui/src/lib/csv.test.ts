@@ -4,7 +4,13 @@ import type { PricingRowDisplay } from "@/types";
 
 describe("toCsv", () => {
   it("空值写成空单元格，含 BOM", () => {
-    const out = toCsv(["a", "b"], [[1, null], [undefined, "x"]]);
+    const out = toCsv(
+      ["a", "b"],
+      [
+        [1, null],
+        [undefined, "x"],
+      ],
+    );
     expect(out.startsWith("\uFEFF")).toBe(true);
     expect(out.slice(1)).toBe("a,b\r\n1,\r\n,x");
   });
@@ -46,7 +52,9 @@ describe("parseCsv", () => {
 
 function row(
   key: string,
-  prices: Partial<Pick<PricingRowDisplay, "inputPerM" | "outputPerM" | "cacheReadPerM" | "cacheWritePerM">> = {},
+  prices: Partial<
+    Pick<PricingRowDisplay, "inputPerM" | "outputPerM" | "cacheReadPerM" | "cacheWritePerM">
+  > = {},
 ): PricingRowDisplay {
   const inputPerM = prices.inputPerM ?? 1;
   const outputPerM = prices.outputPerM ?? 2;
@@ -119,9 +127,7 @@ describe("applyPricingCsv", () => {
   });
 
   it("缺 key 列或没有数据行直接失败", () => {
-    expect(applyPricingCsv([row("gpt-5")], toCsv(["label"], [["x"]])).ok).toBe(
-      false,
-    );
+    expect(applyPricingCsv([row("gpt-5")], toCsv(["label"], [["x"]])).ok).toBe(false);
     expect(applyPricingCsv([row("gpt-5")], "key,inputPerM\n").ok).toBe(false);
   });
 });

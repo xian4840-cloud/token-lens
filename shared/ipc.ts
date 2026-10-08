@@ -214,7 +214,9 @@ export type InvokeResult<C extends InvokeChannel> = ReturnType<InvokeApi[InvokeM
 export type EventPayload<C extends EventChannel> = EventPayloads[EventNameOf<C>];
 
 /** 渲染进程看到的 invoke 方法：同签名，返回 Promise */
-type Invoker<M extends InvokeMethod> = (...args: Parameters<InvokeApi[M]>) => Promise<ReturnType<InvokeApi[M]>>;
+type Invoker<M extends InvokeMethod> = (
+  ...args: Parameters<InvokeApi[M]>
+) => Promise<ReturnType<InvokeApi[M]>>;
 type Invokers<M extends InvokeMethod> = { [K in M]: Invoker<K> };
 /** 订阅事件，返回取消订阅函数 */
 type Subscriber<E extends EventName> = (

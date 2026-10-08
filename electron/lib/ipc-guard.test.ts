@@ -17,8 +17,10 @@ import {
 
 const POSIX_INDEX = "/opt/Token Lens/resources/app.asar/ui/dist/index.html";
 const POSIX_URL = "file:///opt/Token%20Lens/resources/app.asar/ui/dist/index.html";
-const WIN_INDEX = "C:\\Users\\me\\AppData\\Local\\Programs\\Token Lens\\resources\\app.asar\\ui\\dist\\index.html";
-const WIN_URL = "file:///C:/Users/me/AppData/Local/Programs/Token%20Lens/resources/app.asar/ui/dist/index.html";
+const WIN_INDEX =
+  "C:\\Users\\me\\AppData\\Local\\Programs\\Token Lens\\resources\\app.asar\\ui\\dist\\index.html";
+const WIN_URL =
+  "file:///C:/Users/me/AppData/Local/Programs/Token%20Lens/resources/app.asar/ui/dist/index.html";
 
 describe("isTrustedAppUrl", () => {
   const posix = { indexHtmlPath: POSIX_INDEX, platform: "linux" as const };
@@ -41,7 +43,9 @@ describe("isTrustedAppUrl", () => {
 
   it("路径穿越写法规范化后仍须等于入口文件", () => {
     expect(isTrustedAppUrl(POSIX_URL.replace("/ui/dist/", "/ui/dist/../dist/"), posix)).toBe(true);
-    expect(isTrustedAppUrl(POSIX_URL.replace("/ui/dist/index.html", "/ui/index.html"), posix)).toBe(false);
+    expect(isTrustedAppUrl(POSIX_URL.replace("/ui/dist/index.html", "/ui/index.html"), posix)).toBe(
+      false,
+    );
   });
 
   it("Windows：盘符与大小写不敏感", () => {
@@ -90,26 +94,52 @@ describe("checkSender", () => {
 
   it("桌宠窗口只能调桌宠通道", () => {
     expect(checkSender(ev(2, `${POSIX_URL}#/pet`), MAIN_ONLY, cfg)).toMatchObject({ ok: false });
-    expect(checkSender(ev(2, `${POSIX_URL}#/pet`), PET_ONLY, cfg)).toEqual({ ok: true, role: "pet" });
-    expect(checkSender(ev(2, `${POSIX_URL}#/pet`), MAIN_AND_PET, cfg)).toEqual({ ok: true, role: "pet" });
+    expect(checkSender(ev(2, `${POSIX_URL}#/pet`), PET_ONLY, cfg)).toEqual({
+      ok: true,
+      role: "pet",
+    });
+    expect(checkSender(ev(2, `${POSIX_URL}#/pet`), MAIN_AND_PET, cfg)).toEqual({
+      ok: true,
+      role: "pet",
+    });
     expect(checkSender(ev(1), PET_ONLY, cfg)).toMatchObject({ ok: false });
   });
 
   it("子 frame、frame 已销毁、页面被导航到外部 URL 都拒绝", () => {
-    expect(checkSender(ev(1, POSIX_URL, {}), MAIN_ONLY, cfg)).toMatchObject({ ok: false, reason: "只接受顶层 frame" });
-    expect(checkSender({ sender: { id: 1 }, senderFrame: null }, MAIN_ONLY, cfg)).toMatchObject({ ok: false });
-    expect(checkSender(ev(1, "https://evil.example/"), MAIN_ONLY, cfg)).toMatchObject({ ok: false, reason: "发送页面不是本应用页面" });
+    expect(checkSender(ev(1, POSIX_URL, {}), MAIN_ONLY, cfg)).toMatchObject({
+      ok: false,
+      reason: "只接受顶层 frame",
+    });
+    expect(checkSender({ sender: { id: 1 }, senderFrame: null }, MAIN_ONLY, cfg)).toMatchObject({
+      ok: false,
+    });
+    expect(checkSender(ev(1, "https://evil.example/"), MAIN_ONLY, cfg)).toMatchObject({
+      ok: false,
+      reason: "发送页面不是本应用页面",
+    });
   });
 
   it("高危通道：必须主窗口、在前台、且从模型监测页发起", () => {
     const at = (route: string) => ev(1, `${POSIX_URL}#${route}`);
-    expect(checkSender(at("/model-monitor"), MODEL_MONITOR_HIGH_RISK, cfg)).toEqual({ ok: true, role: "main" });
-    expect(checkSender(at("/model-monitor/x"), MODEL_MONITOR_HIGH_RISK, cfg)).toMatchObject({ ok: true });
+    expect(checkSender(at("/model-monitor"), MODEL_MONITOR_HIGH_RISK, cfg)).toEqual({
+      ok: true,
+      role: "main",
+    });
+    expect(checkSender(at("/model-monitor/x"), MODEL_MONITOR_HIGH_RISK, cfg)).toMatchObject({
+      ok: true,
+    });
     expect(checkSender(at("/settings"), MODEL_MONITOR_HIGH_RISK, cfg)).toMatchObject({ ok: false });
-    expect(checkSender(at("/model-monitorX"), MODEL_MONITOR_HIGH_RISK, cfg)).toMatchObject({ ok: false });
-    expect(checkSender(ev(2, `${POSIX_URL}#/model-monitor`), MODEL_MONITOR_HIGH_RISK, cfg)).toMatchObject({ ok: false });
+    expect(checkSender(at("/model-monitorX"), MODEL_MONITOR_HIGH_RISK, cfg)).toMatchObject({
+      ok: false,
+    });
+    expect(
+      checkSender(ev(2, `${POSIX_URL}#/model-monitor`), MODEL_MONITOR_HIGH_RISK, cfg),
+    ).toMatchObject({ ok: false });
     const unfocused = makeConfig({ 1: "main" }, false);
-    expect(checkSender(at("/model-monitor"), MODEL_MONITOR_HIGH_RISK, unfocused)).toMatchObject({ ok: false, reason: "窗口不在前台" });
+    expect(checkSender(at("/model-monitor"), MODEL_MONITOR_HIGH_RISK, unfocused)).toMatchObject({
+      ok: false,
+      reason: "窗口不在前台",
+    });
   });
 });
 
@@ -156,7 +186,15 @@ describe("createGuardedIpc", () => {
 describe("registerWindowRole", () => {
   it("窗口销毁后自动注销", () => {
     let destroyed: (() => void) | undefined;
-    registerWindowRole({ id: 42, once: (_e, cb) => { destroyed = cb; } }, "pet");
+    registerWindowRole(
+      {
+        id: 42,
+        once: (_e, cb) => {
+          destroyed = cb;
+        },
+      },
+      "pet",
+    );
     expect(windowRoleOf(42)).toBe("pet");
     destroyed?.();
     expect(windowRoleOf(42)).toBeUndefined();
@@ -165,26 +203,55 @@ describe("registerWindowRole", () => {
 
 describe("highRiskBusy（已有确认框开着）", () => {
   const INDEX = "/app/ui/dist/index.html";
-  const base: GuardConfig = { indexHtmlPath: INDEX, platform: "linux", roleOf: (id) => (id === 1 ? "main" : id === 2 ? "pet" : undefined), isFocused: () => false };
-  const ev = (id: number, route: string) => ({ sender: { id }, senderFrame: { url: `file://${INDEX}#${route}`, parent: null } });
+  const base: GuardConfig = {
+    indexHtmlPath: INDEX,
+    platform: "linux",
+    roleOf: (id) => (id === 1 ? "main" : id === 2 ? "pet" : undefined),
+    isFocused: () => false,
+  };
+  const ev = (id: number, route: string) => ({
+    sender: { id },
+    senderFrame: { url: `file://${INDEX}#${route}`, parent: null },
+  });
   const busy = { status: "confirm-pending" };
 
   it("通过角色 / URL / 路由校验后，在前台校验之前返回忙碌结果", () => {
-    expect(checkSender(ev(1, "/model-monitor"), MODEL_MONITOR_HIGH_RISK, { ...base, highRiskBusy: () => busy })).toEqual({ ok: true, role: "main", busyResult: busy });
-    expect(checkSender(ev(1, "/model-monitor"), MODEL_MONITOR_HIGH_RISK, { ...base, highRiskBusy: () => undefined })).toMatchObject({ ok: false, reason: "窗口不在前台" });
+    expect(
+      checkSender(ev(1, "/model-monitor"), MODEL_MONITOR_HIGH_RISK, {
+        ...base,
+        highRiskBusy: () => busy,
+      }),
+    ).toEqual({ ok: true, role: "main", busyResult: busy });
+    expect(
+      checkSender(ev(1, "/model-monitor"), MODEL_MONITOR_HIGH_RISK, {
+        ...base,
+        highRiskBusy: () => undefined,
+      }),
+    ).toMatchObject({ ok: false, reason: "窗口不在前台" });
   });
 
   it("未授权的发送方不会因为忙碌而被放过", () => {
     const cfg = { ...base, highRiskBusy: () => busy };
-    expect(checkSender(ev(1, "/overview"), MODEL_MONITOR_HIGH_RISK, cfg)).toMatchObject({ ok: false });
-    expect(checkSender(ev(2, "/model-monitor"), MODEL_MONITOR_HIGH_RISK, cfg)).toMatchObject({ ok: false });
-    expect(checkSender(ev(3, "/model-monitor"), MODEL_MONITOR_HIGH_RISK, cfg)).toMatchObject({ ok: false });
+    expect(checkSender(ev(1, "/overview"), MODEL_MONITOR_HIGH_RISK, cfg)).toMatchObject({
+      ok: false,
+    });
+    expect(checkSender(ev(2, "/model-monitor"), MODEL_MONITOR_HIGH_RISK, cfg)).toMatchObject({
+      ok: false,
+    });
+    expect(checkSender(ev(3, "/model-monitor"), MODEL_MONITOR_HIGH_RISK, cfg)).toMatchObject({
+      ok: false,
+    });
   });
 
   it("普通通道不受影响；guard 直接把忙碌结果交给调用方，不调用处理函数", async () => {
-    expect(checkSender(ev(1, "/overview"), MAIN_ONLY, { ...base, highRiskBusy: () => busy })).toEqual({ ok: true, role: "main" });
+    expect(
+      checkSender(ev(1, "/overview"), MAIN_ONLY, { ...base, highRiskBusy: () => busy }),
+    ).toEqual({ ok: true, role: "main" });
     const handlers = new Map<string, (...a: unknown[]) => unknown>();
-    const guard = createGuardedIpc({ handle: (c, l) => void handlers.set(c, l), on: () => undefined }, () => ({ ...base, highRiskBusy: () => busy }));
+    const guard = createGuardedIpc(
+      { handle: (c, l) => void handlers.set(c, l), on: () => undefined },
+      () => ({ ...base, highRiskBusy: () => busy }),
+    );
     const listener = vi.fn(() => "ran");
     guard.handle("x", MODEL_MONITOR_HIGH_RISK, listener);
     expect(handlers.get("x")!(ev(1, "/model-monitor"))).toBe(busy);

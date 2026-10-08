@@ -7,11 +7,7 @@ import { registerWindowRole } from "../lib/ipc-guard";
 import type { EventPayload } from "../../shared/ipc";
 import { scanAndPersistLocalUsage } from "../local-usage";
 import { toDateKey } from "../local-usage/date";
-import {
-  getLastActivity,
-  startActivityWatch,
-  stopActivityWatch,
-} from "./activity";
+import { getLastActivity, startActivityWatch, stopActivityWatch } from "./activity";
 import { summarizeLocalSpend } from "./spend";
 import type { PetActivity, PetSpendSummary } from "./types";
 

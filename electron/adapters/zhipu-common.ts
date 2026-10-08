@@ -22,7 +22,9 @@ export type ZhipuRegion = "cn" | "global";
  * 在两边都存在，鉴权失败时 HTTP 仍可能是 200，业务码在 JSON 的 code 字段。
  */
 export function resolveZhipuBase(config: Record<string, unknown>): string {
-  const raw = String(config.region ?? "cn").trim().toLowerCase();
+  const raw = String(config.region ?? "cn")
+    .trim()
+    .toLowerCase();
   if (raw === "global" || raw === "intl" || raw === "zai" || raw === "z.ai") {
     return "https://api.z.ai";
   }
@@ -86,10 +88,7 @@ async function requestJson(
  * 社区实现两种写法都有，官方控制台与 CodexBar 用 Bearer，
  * 部分 Coding Plan 查询脚本用不带前缀的 Authorization。
  */
-export async function fetchZhipuJson(
-  url: string,
-  apiKey: string,
-): Promise<ZhipuEnvelope> {
+export async function fetchZhipuJson(url: string, apiKey: string): Promise<ZhipuEnvelope> {
   let result = await requestJson(url, apiKey, true);
   if (!isEnvelopeOk(result.ok, result.json) && isAuthFailure(result.status, result.json)) {
     const retry = await requestJson(url, apiKey, false);

@@ -81,10 +81,7 @@ function watchTargets(): { dir: string; source: LocalSource }[] {
   ];
   const oc = findOpenCodeDb();
   if (oc) targets.push({ dir: path.dirname(oc), source: "opencode" });
-  return filterDisabledWatchTargets(
-    targets,
-    parseIdList(getSetting("disabledLocalSources")),
-  );
+  return filterDisabledWatchTargets(targets, parseIdList(getSetting("disabledLocalSources")));
 }
 
 /** 设置里关掉的来源，宠物也不盯，避免关了采集还在跳「工作中」。 */

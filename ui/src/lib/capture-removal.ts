@@ -29,7 +29,9 @@ export function formatCaptureRemoval(
     );
   }
   if (result.kept.length) {
-    parts.push(`以下内容不是 Token Lens 创建的（或目录里还有其他文件），已保留：${result.kept.join("；")}`);
+    parts.push(
+      `以下内容不是 Token Lens 创建的（或目录里还有其他文件），已保留：${result.kept.join("；")}`,
+    );
   }
   return parts.join(" ");
 }

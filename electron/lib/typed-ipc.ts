@@ -16,8 +16,16 @@ export type InvokeHandler<C extends InvokeChannel> = (
 ) => InvokeResult<C> | Promise<InvokeResult<C>>;
 
 export interface TypedIpc {
-  handle<C extends InvokeChannel>(channel: C, policy: ChannelPolicy, listener: InvokeHandler<C>): void;
-  on(channel: SendChannel, policy: ChannelPolicy, listener: (event: IpcEvent, ...args: unknown[]) => void): void;
+  handle<C extends InvokeChannel>(
+    channel: C,
+    policy: ChannelPolicy,
+    listener: InvokeHandler<C>,
+  ): void;
+  on(
+    channel: SendChannel,
+    policy: ChannelPolicy,
+    listener: (event: IpcEvent, ...args: unknown[]) => void,
+  ): void;
 }
 
 export function typedIpc(guard: GuardedIpc): TypedIpc {

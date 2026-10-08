@@ -13,31 +13,66 @@ import type { CaptureRemovalResult } from "../shared/types";
 export const OPENCODE_PLUGIN_MARKER = "// Token Lens response monitor\n";
 export const CLAUDE_PRELOAD_MARKER = "// Token Lens Claude monitor\n";
 /** agent-capture/_token-lens-fetch-models.cjs 原样复制，它的首行就是标记 */
-export const FETCH_HELPER_MARKER = "// Shared in-process observer: metadata only, bounded frames, unchanged response bytes.\n";
+export const FETCH_HELPER_MARKER =
+  "// Shared in-process observer: metadata only, bounded frames, unchanged response bytes.\n";
 export const FETCH_HELPER_NAME = "_token-lens-fetch-models.cjs";
 export const BUN_OPTIONS = "BUN_OPTIONS";
 
-export function openCodeCapturePaths(dataRoot: string, configRoot = process.env.OPENCODE_CONFIG_DIR ?? path.join(os.homedir(), ".config", "opencode")) {
+export function openCodeCapturePaths(
+  dataRoot: string,
+  configRoot = process.env.OPENCODE_CONFIG_DIR ?? path.join(os.homedir(), ".config", "opencode"),
+) {
   const plugins = path.join(configRoot, "plugins");
-  return { plugin: path.join(plugins, "token-lens-response-monitor.js"), helper: path.join(plugins, FETCH_HELPER_NAME), journal: path.join(dataRoot, "model-responses", "opencode.jsonl") };
+  return {
+    plugin: path.join(plugins, "token-lens-response-monitor.js"),
+    helper: path.join(plugins, FETCH_HELPER_NAME),
+    journal: path.join(dataRoot, "model-responses", "opencode.jsonl"),
+  };
 }
 export function enableOpenCodeCapture(asset: string, dataRoot: string, configRoot?: string): void {
   const paths = openCodeCapturePaths(dataRoot, configRoot);
-  if (fs.existsSync(paths.plugin) && !fs.readFileSync(paths.plugin, "utf8").startsWith(OPENCODE_PLUGIN_MARKER)) throw new Error("同名插件不是 Token Lens 创建的，无法覆盖");
+  if (
+    fs.existsSync(paths.plugin) &&
+    !fs.readFileSync(paths.plugin, "utf8").startsWith(OPENCODE_PLUGIN_MARKER)
+  )
+    throw new Error("同名插件不是 Token Lens 创建的，无法覆盖");
   const source = fs.readFileSync(asset, "utf8");
   fs.mkdirSync(path.dirname(paths.plugin), { recursive: true });
   fs.copyFileSync(path.join(path.dirname(asset), FETCH_HELPER_NAME), paths.helper);
-  fs.writeFileSync(paths.plugin, OPENCODE_PLUGIN_MARKER + `const TOKEN_LENS_JOURNAL = ${JSON.stringify(paths.journal)};\n// Capture version 2\n` + source, { mode: 0o600 });
+  fs.writeFileSync(
+    paths.plugin,
+    OPENCODE_PLUGIN_MARKER +
+      `const TOKEN_LENS_JOURNAL = ${JSON.stringify(paths.journal)};\n// Capture version 2\n` +
+      source,
+    { mode: 0o600 },
+  );
 }
 
 export function isOpenCodeCaptureEnabled(dataRoot: string): boolean {
   const paths = openCodeCapturePaths(dataRoot);
-  try { return fs.existsSync(paths.helper) && fs.readFileSync(paths.plugin, "utf8").startsWith(`${OPENCODE_PLUGIN_MARKER}const TOKEN_LENS_JOURNAL = ${JSON.stringify(paths.journal)};\n// Capture version 2\n`); } catch { return false; }
+  try {
+    return (
+      fs.existsSync(paths.helper) &&
+      fs
+        .readFileSync(paths.plugin, "utf8")
+        .startsWith(
+          `${OPENCODE_PLUGIN_MARKER}const TOKEN_LENS_JOURNAL = ${JSON.stringify(paths.journal)};\n// Capture version 2\n`,
+        )
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function claudeCapturePaths(dataRoot: string, home = os.homedir()) {
   const directory = path.join(home, ".claude", "token-lens-monitor");
-  return { directory, preload: path.join(directory, "claude.cjs"), helper: path.join(directory, FETCH_HELPER_NAME), journalPointer: path.join(directory, "claude-journal.json"), journal: path.join(dataRoot, "model-responses", "claude-code.jsonl") };
+  return {
+    directory,
+    preload: path.join(directory, "claude.cjs"),
+    helper: path.join(directory, FETCH_HELPER_NAME),
+    journalPointer: path.join(directory, "claude-journal.json"),
+    journal: path.join(dataRoot, "model-responses", "claude-code.jsonl"),
+  };
 }
 /** 写进 BUN_OPTIONS 的那一段：`--preload=C:/Users/me/.claude/token-lens-monitor/claude.cjs` */
 export function claudePreloadFlag(preloadPath: string): string {
@@ -46,8 +81,22 @@ export function claudePreloadFlag(preloadPath: string): string {
 
 function powershell(script: string): string {
   try {
-    return execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from('$ProgressPreference="SilentlyContinue"\n$ErrorActionPreference="Stop"\n' + script, "utf16le").toString("base64")], { windowsHide: true, encoding: "utf8", timeout: 10_000 }).trim();
-  } catch { throw new Error("无法读取或保存 Claude 核验的用户启动设置"); }
+    return execFileSync(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-EncodedCommand",
+        Buffer.from(
+          '$ProgressPreference="SilentlyContinue"\n$ErrorActionPreference="Stop"\n' + script,
+          "utf16le",
+        ).toString("base64"),
+      ],
+      { windowsHide: true, encoding: "utf8", timeout: 10_000 },
+    ).trim();
+  } catch {
+    throw new Error("无法读取或保存 Claude 核验的用户启动设置");
+  }
 }
 
 /** 用户级环境变量 BUN_OPTIONS 的读写（HKCU\Environment）。抽成接口便于测试注入。 */
@@ -77,7 +126,9 @@ ${BROADCAST_ENV_CHANGE}`);
 
 let bunOptions: string | undefined;
 function userBunOptions(): string {
-  if (bunOptions === undefined) bunOptions = process.platform === "win32" ? windowsBunOptionsStore.get() : process.env.BUN_OPTIONS ?? "";
+  if (bunOptions === undefined)
+    bunOptions =
+      process.platform === "win32" ? windowsBunOptionsStore.get() : (process.env.BUN_OPTIONS ?? "");
   return bunOptions;
 }
 
@@ -143,11 +194,20 @@ export function enableClaudeCapture(assetDirectory: string, dataRoot: string): v
   if (process.platform !== "win32") throw new Error("当前 Claude 进程内核验支持 Windows 原生版");
   const paths = claudeCapturePaths(dataRoot);
   // Bun's BUN_OPTIONS parser does not accept quoted whitespace in preload paths.
-  if (/\s/.test(paths.preload)) throw new Error("当前用户目录含空格，暂时无法安装原生 Claude 预加载脚本");
-  if (fs.existsSync(paths.preload) && !fs.readFileSync(paths.preload, "utf8").startsWith(CLAUDE_PRELOAD_MARKER)) throw new Error("同名脚本不是 Token Lens 创建的，无法覆盖");
+  if (/\s/.test(paths.preload))
+    throw new Error("当前用户目录含空格，暂时无法安装原生 Claude 预加载脚本");
+  if (
+    fs.existsSync(paths.preload) &&
+    !fs.readFileSync(paths.preload, "utf8").startsWith(CLAUDE_PRELOAD_MARKER)
+  )
+    throw new Error("同名脚本不是 Token Lens 创建的，无法覆盖");
   fs.mkdirSync(paths.directory, { recursive: true });
   fs.copyFileSync(path.join(assetDirectory, FETCH_HELPER_NAME), paths.helper);
-  fs.writeFileSync(paths.preload, CLAUDE_PRELOAD_MARKER + fs.readFileSync(path.join(assetDirectory, "claude.cjs"), "utf8"), { mode: 0o600 });
+  fs.writeFileSync(
+    paths.preload,
+    CLAUDE_PRELOAD_MARKER + fs.readFileSync(path.join(assetDirectory, "claude.cjs"), "utf8"),
+    { mode: 0o600 },
+  );
   fs.writeFileSync(paths.journalPointer, JSON.stringify(paths.journal), { mode: 0o600 });
   const flag = claudePreloadFlag(paths.preload);
   const previous = userBunOptions();
@@ -159,8 +219,15 @@ export function enableClaudeCapture(assetDirectory: string, dataRoot: string): v
 export function isClaudeCaptureEnabled(dataRoot: string): boolean {
   const paths = claudeCapturePaths(dataRoot);
   try {
-    return fs.existsSync(paths.helper) && fs.readFileSync(paths.preload, "utf8").startsWith(CLAUDE_PRELOAD_MARKER) && JSON.parse(fs.readFileSync(paths.journalPointer, "utf8")) === paths.journal && userBunOptions().split(/\s+/).includes(claudePreloadFlag(paths.preload));
-  } catch { return false; }
+    return (
+      fs.existsSync(paths.helper) &&
+      fs.readFileSync(paths.preload, "utf8").startsWith(CLAUDE_PRELOAD_MARKER) &&
+      JSON.parse(fs.readFileSync(paths.journalPointer, "utf8")) === paths.journal &&
+      userBunOptions().split(/\s+/).includes(claudePreloadFlag(paths.preload))
+    );
+  } catch {
+    return false;
+  }
 }
 
 /* ───────────── 关闭采集：逐项撤销 enable 写下的东西 ───────────── */
@@ -183,13 +250,27 @@ function readHead(file: string, bytes = 4096): string | undefined {
   }
 }
 
-function removeIfOurs(file: string, isOurs: (head: string) => boolean, result: CaptureRemovalResult): void {
+function removeIfOurs(
+  file: string,
+  isOurs: (head: string) => boolean,
+  result: CaptureRemovalResult,
+): void {
   let st: fs.Stats;
-  try { st = fs.lstatSync(file); } catch { return; }
+  try {
+    st = fs.lstatSync(file);
+  } catch {
+    return;
+  }
   // 只处理普通文件：同名的目录 / 符号链接都不是我们创建的
-  if (!st.isFile()) { result.kept.push(file); return; }
+  if (!st.isFile()) {
+    result.kept.push(file);
+    return;
+  }
   const head = readHead(file);
-  if (head === undefined || !isOurs(head)) { result.kept.push(file); return; }
+  if (head === undefined || !isOurs(head)) {
+    result.kept.push(file);
+    return;
+  }
   fs.unlinkSync(file);
   result.removed.push(file);
 }
@@ -202,14 +283,19 @@ const isJournalPointer = (head: string) => {
   try {
     const v: unknown = JSON.parse(head);
     return typeof v === "string" && /[\\/]model-responses[\\/]claude-code\.jsonl$/.test(v);
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 };
 
 /**
  * 关闭 OpenCode 采集：删除 enable 写进 OpenCode 插件目录的两个文件。
  * 插件目录本身不删（里面可能有用户的其他插件）；采集日志在应用数据目录里，保留。
  */
-export function disableOpenCodeCapture(dataRoot: string, configRoot?: string): CaptureRemovalResult {
+export function disableOpenCodeCapture(
+  dataRoot: string,
+  configRoot?: string,
+): CaptureRemovalResult {
   const paths = openCodeCapturePaths(dataRoot, configRoot);
   const result: CaptureRemovalResult = { removed: [], kept: [] };
   removeIfOurs(paths.plugin, isOpenCodePlugin, result);
@@ -219,7 +305,9 @@ export function disableOpenCodeCapture(dataRoot: string, configRoot?: string): C
 
 export function isOpenCodeCaptureInstalled(dataRoot: string, configRoot?: string): boolean {
   const paths = openCodeCapturePaths(dataRoot, configRoot);
-  return isOpenCodePlugin(readHead(paths.plugin) ?? "") || isFetchHelper(readHead(paths.helper) ?? "");
+  return (
+    isOpenCodePlugin(readHead(paths.plugin) ?? "") || isFetchHelper(readHead(paths.helper) ?? "")
+  );
 }
 
 export interface DisableClaudeOptions {
@@ -238,10 +326,18 @@ export interface DisableClaudeOptions {
  *    目录空了才删目录，绝不递归删除。
  * 采集日志在应用数据目录里，保留。
  */
-export function disableClaudeCapture(dataRoot: string, options: DisableClaudeOptions = {}): CaptureRemovalResult {
+export function disableClaudeCapture(
+  dataRoot: string,
+  options: DisableClaudeOptions = {},
+): CaptureRemovalResult {
   const paths = claudeCapturePaths(dataRoot, options.home);
   const result: CaptureRemovalResult = { removed: [], kept: [] };
-  const store = options.envStore !== undefined ? options.envStore : process.platform === "win32" ? windowsBunOptionsStore : null;
+  const store =
+    options.envStore !== undefined
+      ? options.envStore
+      : process.platform === "win32"
+        ? windowsBunOptionsStore
+        : null;
   // 去掉 BUN_OPTIONS 里我们那一段之后，若仍有东西指向 claude.cjs，就绝不能删脚本：
   // Bun 找不到 --preload 指向的文件会直接退出，Claude Code 将无法启动。
   let stillReferenced = false;
@@ -258,12 +354,16 @@ export function disableClaudeCapture(dataRoot: string, options: DisableClaudeOpt
       bunOptions = next;
       if (referencesTokenLensPreload(next)) {
         stillReferenced = true;
-        result.kept.push(`HKCU\\Environment\\${BUN_OPTIONS}：剩余的值仍引用 ${PRELOAD_REFERENCE}（写法无法自动识别），请手动删除该项`);
+        result.kept.push(
+          `HKCU\\Environment\\${BUN_OPTIONS}：剩余的值仍引用 ${PRELOAD_REFERENCE}（写法无法自动识别），请手动删除该项`,
+        );
       }
     } catch (e) {
       stillReferenced = true;
       bunOptions = undefined;
-      result.kept.push(`HKCU\\Environment\\${BUN_OPTIONS}：读取或写入失败（${e instanceof Error ? e.message : String(e)}）`);
+      result.kept.push(
+        `HKCU\\Environment\\${BUN_OPTIONS}：读取或写入失败（${e instanceof Error ? e.message : String(e)}）`,
+      );
     }
   }
   if (process.env.BUN_OPTIONS !== undefined) {
@@ -273,7 +373,9 @@ export function disableClaudeCapture(dataRoot: string, options: DisableClaudeOpt
     // 没有注册表可改的平台（enable 本就只支持 Windows）以本进程环境为准
     if (!store && referencesTokenLensPreload(next)) {
       stillReferenced = true;
-      result.kept.push(`${BUN_OPTIONS}（当前进程环境）：剩余的值仍引用 ${PRELOAD_REFERENCE}，请手动删除该项`);
+      result.kept.push(
+        `${BUN_OPTIONS}（当前进程环境）：剩余的值仍引用 ${PRELOAD_REFERENCE}，请手动删除该项`,
+      );
     }
   }
   if (stillReferenced) {
@@ -296,14 +398,25 @@ export function disableClaudeCapture(dataRoot: string, options: DisableClaudeOpt
         result.kept.push(paths.directory);
       }
     }
-  } catch { /* 目录不存在 */ }
+  } catch {
+    /* 目录不存在 */
+  }
   return result;
 }
 
 export function isClaudeCaptureInstalled(dataRoot: string, home?: string): boolean {
   const paths = claudeCapturePaths(dataRoot, home);
-  if (isClaudePreload(readHead(paths.preload) ?? "") || isFetchHelper(readHead(paths.helper) ?? "") || isJournalPointer(readHead(paths.journalPointer) ?? "")) return true;
-  try { return referencesTokenLensPreload(userBunOptions()); } catch { return false; }
+  if (
+    isClaudePreload(readHead(paths.preload) ?? "") ||
+    isFetchHelper(readHead(paths.helper) ?? "") ||
+    isJournalPointer(readHead(paths.journalPointer) ?? "")
+  )
+    return true;
+  try {
+    return referencesTokenLensPreload(userBunOptions());
+  } catch {
+    return false;
+  }
 }
 
 /** 测试用：清掉 BUN_OPTIONS 缓存 */
@@ -311,8 +424,9 @@ export function resetBunOptionsCacheForTest(): void {
   bunOptions = undefined;
 }
 
-const small = (v: unknown): string | undefined => typeof v === "string" && v.length > 0 && v.length <= 256 ? v : undefined;
-const count = (v: unknown) => typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? v : 0;
+const small = (v: unknown): string | undefined =>
+  typeof v === "string" && v.length > 0 && v.length <= 256 ? v : undefined;
+const count = (v: unknown) => (typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? v : 0);
 type CaptureRecord = ModelMonitorRecord & { assistantId?: string };
 /**
  * 采集日志增量读取状态：记住读到的字节偏移，日志只追加时只读新增部分。
@@ -320,8 +434,20 @@ type CaptureRecord = ModelMonitorRecord & { assistantId?: string };
  * offset 只推进到最后一个换行之后；末尾半行（可能截断在多字节 UTF-8 字符中间）下次按字节重读，
  * size 是上次读到的文件长度，用于判断有没有新内容。
  */
-const cache = new Map<string, { ino: number; mtimeMs: number; offset: number; size: number; byId: Map<string, CaptureRecord>; records: CaptureRecord[] }>();
-export async function readOpenCodeCaptures(dataRoot: string): Promise<(ModelMonitorRecord & { assistantId?: string })[]> {
+const cache = new Map<
+  string,
+  {
+    ino: number;
+    mtimeMs: number;
+    offset: number;
+    size: number;
+    byId: Map<string, CaptureRecord>;
+    records: CaptureRecord[];
+  }
+>();
+export async function readOpenCodeCaptures(
+  dataRoot: string,
+): Promise<(ModelMonitorRecord & { assistantId?: string })[]> {
   return readCaptures(openCodeCapturePaths(dataRoot).journal, true);
 }
 export async function readClaudeCaptures(dataRoot: string): Promise<ModelMonitorRecord[]> {
@@ -330,27 +456,69 @@ export async function readClaudeCaptures(dataRoot: string): Promise<ModelMonitor
 function parseCaptureLine(line: string, requireSession: boolean): CaptureRecord | undefined {
   if (!line || line.length > 8192) return undefined;
   let r: any;
-  try { r = JSON.parse(line); } catch { return undefined; }
+  try {
+    r = JSON.parse(line);
+  } catch {
+    return undefined;
+  }
   if (!r || typeof r !== "object") return undefined;
-  const id = small(r.id), sessionId = small(r.sessionId), requestedModel = small(r.requestedModel);
-  if (!id || (requireSession && !sessionId) || typeof r.startedAt !== "string" || !Number.isFinite(Date.parse(r.startedAt))) return undefined;
+  const id = small(r.id),
+    sessionId = small(r.sessionId),
+    requestedModel = small(r.requestedModel);
+  if (
+    !id ||
+    (requireSession && !sessionId) ||
+    typeof r.startedAt !== "string" ||
+    !Number.isFinite(Date.parse(r.startedAt))
+  )
+    return undefined;
   const responseModel = small(r.responseModel);
-  return { id, sessionId, assistantId: small(r.assistantId), startedAt: new Date(r.startedAt).toISOString(), requestedModel, sentModel: small(r.sentModel), responseModel, responseId: small(r.responseId), evidence: "response", status: requestedModel && responseModel ? requestedModel === responseModel ? "match" : "mismatch" : "unknown", inputTokens: count(r.inputTokens), outputTokens: count(r.outputTokens), totalTokens: count(r.inputTokens) + count(r.outputTokens) };
+  return {
+    id,
+    sessionId,
+    assistantId: small(r.assistantId),
+    startedAt: new Date(r.startedAt).toISOString(),
+    requestedModel,
+    sentModel: small(r.sentModel),
+    responseModel,
+    responseId: small(r.responseId),
+    evidence: "response",
+    status:
+      requestedModel && responseModel
+        ? requestedModel === responseModel
+          ? "match"
+          : "mismatch"
+        : "unknown",
+    inputTokens: count(r.inputTokens),
+    outputTokens: count(r.outputTokens),
+    totalTokens: count(r.inputTokens) + count(r.outputTokens),
+  };
 }
 const pendingCaptureReads = new Map<string, Promise<CaptureRecord[]>>();
 function readCaptures(journal: string, requireSession: boolean): Promise<CaptureRecord[]> {
   // 增量游标不能并发推进：同一日志同一时刻只读一次，后来者复用结果
   const pending = pendingCaptureReads.get(journal);
   if (pending) return pending;
-  const p = readCapturesOnce(journal, requireSession).finally(() => pendingCaptureReads.delete(journal));
+  const p = readCapturesOnce(journal, requireSession).finally(() =>
+    pendingCaptureReads.delete(journal),
+  );
   pendingCaptureReads.set(journal, p);
   return p;
 }
-async function readCapturesOnce(journal: string, requireSession: boolean): Promise<CaptureRecord[]> {
+async function readCapturesOnce(
+  journal: string,
+  requireSession: boolean,
+): Promise<CaptureRecord[]> {
   let stat: fs.Stats;
-  try { stat = await fs.promises.stat(journal); } catch { cache.delete(journal); return []; }
+  try {
+    stat = await fs.promises.stat(journal);
+  } catch {
+    cache.delete(journal);
+    return [];
+  }
   let hit = cache.get(journal);
-  if (hit && hit.ino === stat.ino && hit.size === stat.size && hit.mtimeMs === stat.mtimeMs) return hit.records;
+  if (hit && hit.ino === stat.ino && hit.size === stat.size && hit.mtimeMs === stat.mtimeMs)
+    return hit.records;
   if (!hit || hit.ino !== stat.ino || stat.size < hit.offset || stat.mtimeMs < hit.mtimeMs) {
     hit = { ino: stat.ino, mtimeMs: 0, offset: 0, size: 0, byId: new Map(), records: [] };
   }
@@ -366,8 +534,12 @@ async function readCapturesOnce(journal: string, requireSession: boolean): Promi
         read += bytesRead;
       }
       bytes = buf.subarray(0, read);
-    } finally { await handle.close(); }
-  } catch { return hit.records; }
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return hit.records;
+  }
   // 按字节找最后一个换行：之前是完整行，整体解码不会切坏多字节字符
   const end = bytes.lastIndexOf(0x0a) + 1;
   const lines = bytes.subarray(0, end).toString("utf8").split("\n");

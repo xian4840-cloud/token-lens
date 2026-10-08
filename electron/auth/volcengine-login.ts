@@ -1,7 +1,4 @@
-import {
-  openLoginWindow,
-  type ExtractedCredentials,
-} from "./login-window";
+import { openLoginWindow, type ExtractedCredentials } from "./login-window";
 import { validateVolcenginePlanCredentials } from "../adapters/volcengine_plan";
 import { BROWSER_UA } from "../lib/user-agent";
 
@@ -32,18 +29,14 @@ export function openVolcengineLogin(): Promise<VolcengineCredentials | null> {
     title: "登录火山方舟 - 登录成功后自动获取凭证",
     allowedDomains: ["volcengine.com"],
     extractHeaders: ["cookie", "x-web-id"],
-    isValid: (h) =>
-      !!h.cookie && !!h["x-web-id"] && h.cookie.includes("csrfToken"),
+    isValid: (h) => !!h.cookie && !!h["x-web-id"] && h.cookie.includes("csrfToken"),
     // 候选凭证须通过真实接口验证，避免残留过期 cookie 被秒返回
-    validate: (h) =>
-      validateVolcenginePlanCredentials(h.cookie ?? "", h["x-web-id"] ?? ""),
+    validate: (h) => validateVolcenginePlanCredentials(h.cookie ?? "", h["x-web-id"] ?? ""),
     userAgent: BROWSER_UA,
   }).then(toVolcengineCredentials);
 }
 
-function toVolcengineCredentials(
-  cred: ExtractedCredentials | null,
-): VolcengineCredentials | null {
+function toVolcengineCredentials(cred: ExtractedCredentials | null): VolcengineCredentials | null {
   if (!cred) return null;
   return {
     cookie: cred.cookie ?? "",

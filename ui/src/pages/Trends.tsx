@@ -10,12 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import { PageHeader } from "@/components/PageHeader";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -170,8 +165,7 @@ export function Trends() {
     }
   }, [tab, range, loadLocalDaily]);
 
-  const nameOf = (id: string) =>
-    services.find((s) => s.id === id)?.name ?? id;
+  const nameOf = (id: string) => services.find((s) => s.id === id)?.name ?? id;
 
   // 按货币分组，每组一张图（不同货币不能共用 Y 轴）
   const groups = useMemo(() => {
@@ -225,10 +219,7 @@ export function Trends() {
       </PageHeader>
 
       <div className="px-8">
-        <Tabs
-          value={tab}
-          onValueChange={(v) => setTab(v as "balance" | "local")}
-        >
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "balance" | "local")}>
           <TabsList>
             <TabsTrigger value="balance">余额趋势</TabsTrigger>
             <TabsTrigger value="local">本地 agent 用量</TabsTrigger>
@@ -316,15 +307,11 @@ export function Trends() {
             <div className="space-y-4 py-4">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
-                  按天聚合的本地 agent 用量。Codex 为差分精确按天，OpenCode
-                  归会话创建日，Claude Code 逐条精确按天。
-                  {metric === "cost" &&
-                    "（费用按各自货币，不同币种混合累加仅作近似参考）"}
+                  按天聚合的本地 agent 用量。Codex 为差分精确按天，OpenCode 归会话创建日，Claude
+                  Code 逐条精确按天。
+                  {metric === "cost" && "（费用按各自货币，不同币种混合累加仅作近似参考）"}
                 </p>
-                <Select
-                  value={metric}
-                  onValueChange={(v) => setMetric(v as Metric)}
-                >
+                <Select value={metric} onValueChange={(v) => setMetric(v as Metric)}>
                   <SelectTrigger className="w-32" aria-label="用量指标">
                     <SelectValue />
                   </SelectTrigger>
@@ -346,11 +333,7 @@ export function Trends() {
                       该范围内无数据。去用量页「本地 agent」tab 点「重新扫描」采集。
                     </div>
                   ) : (
-                    <LocalUsageBarChart
-                      data={localChartData}
-                      height={300}
-                      metric={metric}
-                    />
+                    <LocalUsageBarChart data={localChartData} height={300} metric={metric} />
                   )}
                 </CardContent>
               </Card>

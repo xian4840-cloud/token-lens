@@ -22,8 +22,7 @@ import {
  */
 
 /** 阿里云官方固定参数示例的期望签名（help.aliyun.com v3-request-structure-and-signature） */
-const ACS3_OFFICIAL_SIGNATURE =
-  "06563a9e1b43f5dfe96b81484da74bceab24a1d853912eee15083a6f0f3283c0";
+const ACS3_OFFICIAL_SIGNATURE = "06563a9e1b43f5dfe96b81484da74bceab24a1d853912eee15083a6f0f3283c0";
 
 function acs3OfficialVector() {
   return signAcs3({
@@ -51,9 +50,7 @@ function acs3OfficialVector() {
 describe("signAcs3 对官方向量", () => {
   it("签名值与阿里云文档的自校验向量一致（回归）", () => {
     const { authorization } = acs3OfficialVector();
-    expect(/Signature=([0-9a-f]+)$/.exec(authorization)?.[1]).toBe(
-      ACS3_OFFICIAL_SIGNATURE,
-    );
+    expect(/Signature=([0-9a-f]+)$/.exec(authorization)?.[1]).toBe(ACS3_OFFICIAL_SIGNATURE);
   });
 
   it("SignedHeaders 只含 host 与 x-acs-*，不含 accept", () => {
@@ -130,9 +127,7 @@ describe("signSigV4 的结构性质", () => {
   it("Credential 形如 AK/日期/区域/服务/requestType", () => {
     // 派生密钥链按这四段逐级 HMAC，任何一段错位都会签出完全不同的值
     const { authorization } = signSigV4(params);
-    expect(authorization).toContain(
-      "Credential=AKLT-test/20260910/cn-north-1/billing/request",
-    );
+    expect(authorization).toContain("Credential=AKLT-test/20260910/cn-north-1/billing/request");
     expect(authorization.startsWith("HMAC-SHA256 ")).toBe(true);
   });
 
@@ -172,9 +167,7 @@ describe("时间与随机数格式", () => {
   it("时间戳按 UTC 而非本地时区", () => {
     // 用本地时区会随机器时区偏移而签错
     expect(formatSigV4Date(new Date("2026-01-01T00:30:00Z"))).toBe("20260101");
-    expect(formatAcs3DateTime(new Date("2026-01-01T23:30:00Z"))).toBe(
-      "2026-01-01T23:30:00Z",
-    );
+    expect(formatAcs3DateTime(new Date("2026-01-01T23:30:00Z"))).toBe("2026-01-01T23:30:00Z");
   });
 
   it("randomNonce 是 32 位十六进制且无连字符", () => {
@@ -186,9 +179,7 @@ describe("时间与随机数格式", () => {
 
 describe("sha256Hex", () => {
   it("与已知摘要一致", () => {
-    expect(sha256Hex("")).toBe(
-      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    );
+    expect(sha256Hex("")).toBe("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
     expect(sha256Hex("abc")).toBe(
       "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
     );

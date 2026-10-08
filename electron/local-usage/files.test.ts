@@ -24,9 +24,7 @@ afterEach(() => {
 });
 
 function loggedWith(scope: string, fragment: string): boolean {
-  return getRecentLogs().some(
-    (e) => e.scope === scope && e.message.includes(fragment),
-  );
+  return getRecentLogs().some((e) => e.scope === scope && e.message.includes(fragment));
 }
 
 describe("listJsonlFilesWithStat", () => {

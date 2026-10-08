@@ -3,18 +3,9 @@ import { toCostTokens } from "./index";
 import { visibleTokens } from "../../ui/src/lib/format";
 import type { LocalSource, LocalUsageRow } from "./types";
 
-const SOURCES: LocalSource[] = [
-  "claude-code",
-  "codex",
-  "opencode",
-  "antigravity",
-  "grok-build",
-];
+const SOURCES: LocalSource[] = ["claude-code", "codex", "opencode", "antigravity", "grok-build"];
 
-function row(
-  source: LocalSource,
-  partial: Partial<LocalUsageRow> = {},
-): LocalUsageRow {
+function row(source: LocalSource, partial: Partial<LocalUsageRow> = {}): LocalUsageRow {
   return {
     source,
     model: "test-model",
@@ -45,9 +36,7 @@ describe("toCostTokens", () => {
     for (const source of SOURCES) {
       const r = fullRow(source);
       const cost = toCostTokens(r);
-      expect(cost.output, `${source} 的 reasoning 未计入`).toBe(
-        r.outputTokens + r.reasoningTokens,
-      );
+      expect(cost.output, `${source} 的 reasoning 未计入`).toBe(r.outputTokens + r.reasoningTokens);
     }
   });
 
@@ -75,11 +64,7 @@ describe("toCostTokens", () => {
     for (const source of SOURCES) {
       const r = fullRow(source);
       const c = toCostTokens(r);
-      const billed =
-        (c.input ?? 0) +
-        (c.output ?? 0) +
-        (c.cacheRead ?? 0) +
-        (c.cacheCreation ?? 0);
+      const billed = (c.input ?? 0) + (c.output ?? 0) + (c.cacheRead ?? 0) + (c.cacheCreation ?? 0);
       expect(billed, `${source} 的计费与显示口径不一致`).toBe(visibleTokens(r));
     }
   });

@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  REDACTION_MASK,
-  redactError,
-  redactHeaders,
-  redactText,
-  redactUrl,
-} from "./redact";
+import { REDACTION_MASK, redactError, redactHeaders, redactText, redactUrl } from "./redact";
 
 // 这些用例守的是「日志里绝不能出现明文密钥」这一条。
 // 断言写成 not.toContain(密钥片段) 而不是比对完整输出：
@@ -98,9 +92,7 @@ describe("redactText", () => {
   });
 
   it("一段文本里多个密钥全部打掉", () => {
-    const out = redactText(
-      "key1=sk-abcdefghijklmnopqrstuvwx key2=gsk_abcdefghijklmnopqrst",
-    );
+    const out = redactText("key1=sk-abcdefghijklmnopqrstuvwx key2=gsk_abcdefghijklmnopqrst");
     expect(out).not.toContain("sk-abcdefghijklmnopqrstuvwx");
     expect(out).not.toContain("gsk_abcdefghijklmnopqrst");
   });

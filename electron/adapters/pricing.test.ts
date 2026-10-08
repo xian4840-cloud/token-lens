@@ -74,13 +74,9 @@ describe("pruneDefaultOverrides", () => {
   it("部分字段的覆盖按「有效值」比较，缺省字段不算差异", () => {
     const row = DEFAULT_PRICING.find((r) => r.key === "gpt-5")!;
     // 只给 inputPerM 且等于内置值 -> 整项冗余
-    expect(
-      pruneDefaultOverrides({ "gpt-5": { inputPerM: row.inputPerM } }),
-    ).toEqual({});
+    expect(pruneDefaultOverrides({ "gpt-5": { inputPerM: row.inputPerM } })).toEqual({});
     // 只给 outputPerM 且等于内置值 -> 同样冗余
-    expect(
-      pruneDefaultOverrides({ "gpt-5": { outputPerM: row.outputPerM } }),
-    ).toEqual({});
+    expect(pruneDefaultOverrides({ "gpt-5": { outputPerM: row.outputPerM } })).toEqual({});
   });
 
   it("内置表里查不到的 key 原样保留（旧版本遗留）", () => {
@@ -113,9 +109,7 @@ describe("parseOverrides", () => {
   it("损坏的 JSON 回退为空而不是抛异常，并记一条警告", () => {
     expect(parseOverrides("{ 不是 JSON")).toEqual({});
     expect(
-      getRecentLogs().some(
-        (e) => e.scope === "pricing" && e.message.includes("不是合法 JSON"),
-      ),
+      getRecentLogs().some((e) => e.scope === "pricing" && e.message.includes("不是合法 JSON")),
     ).toBe(true);
     expect(parseOverrides(undefined)).toEqual({});
     expect(parseOverrides("")).toEqual({});

@@ -25,9 +25,7 @@ describe("来源清单两侧一致", () => {
     // 但兜不住「只给主进程加了新来源」——那边照常落盘，界面这边完全不认识它，
     // 于是图表里少一条系列，而合计里却含它的量：合计不等于各来源之和。
     // 这条测试就是那道跨进程的闸。
-    expect(LOCAL_SOURCES.map((s) => s.value).sort()).toEqual(
-      [...ALL_LOCAL_SOURCES].sort(),
-    );
+    expect(LOCAL_SOURCES.map((s) => s.value).sort()).toEqual([...ALL_LOCAL_SOURCES].sort());
   });
 
   it("展示名为空或重复都会被发现", () => {
@@ -72,11 +70,7 @@ describe("pivotDailyUsage", () => {
       }),
     ]);
     const r = rows[0];
-    const parts =
-      (r.input ?? 0) +
-      (r.output ?? 0) +
-      (r.cacheRead ?? 0) +
-      (r.cacheCreation ?? 0);
+    const parts = (r.input ?? 0) + (r.output ?? 0) + (r.cacheRead ?? 0) + (r.cacheCreation ?? 0);
     expect(parts).toBe(r.total);
     // 且合计与单一事实来源 visibleTokens 一致
     expect(r.total).toBe(21_750);
@@ -129,11 +123,7 @@ describe("pivotDailyUsage", () => {
       rec({ date: "2026-09-01", model: "big", inputTokens: 1_000 }),
       rec({ date: "2026-09-01", model: "mid", inputTokens: 100 }),
     ]);
-    expect(rows[0].models?.codex.map((m) => m.model)).toEqual([
-      "big",
-      "mid",
-      "small",
-    ]);
+    expect(rows[0].models?.codex.map((m) => m.model)).toEqual(["big", "mid", "small"]);
   });
 
   it("同来源同模型跨记录累加到一条分项", () => {
@@ -206,8 +196,22 @@ describe("summarizeLocalDay", () => {
   it("只汇总指定日期，按来源列出", () => {
     const s = summarizeLocalDay(
       [
-        rec({ date: "2026-09-11", model: "a", source: "codex", inputTokens: 100, cost: 0.5, currency: "USD" }),
-        rec({ date: "2026-09-11", model: "b", source: "claude-code", inputTokens: 50, cost: 1, currency: "USD" }),
+        rec({
+          date: "2026-09-11",
+          model: "a",
+          source: "codex",
+          inputTokens: 100,
+          cost: 0.5,
+          currency: "USD",
+        }),
+        rec({
+          date: "2026-09-11",
+          model: "b",
+          source: "claude-code",
+          inputTokens: 50,
+          cost: 1,
+          currency: "USD",
+        }),
         rec({ date: "2026-09-10", model: "a", source: "codex", inputTokens: 999, cost: 9 }),
       ],
       "2026-09-11",
@@ -257,8 +261,22 @@ describe("summarizeLocalRecords", () => {
   it("跨天合计，不丢某一天", () => {
     const s = summarizeLocalRecords(
       [
-        rec({ date: "2026-09-01", model: "a", source: "codex", inputTokens: 100, cost: 1, currency: "USD" }),
-        rec({ date: "2026-09-12", model: "a", source: "codex", inputTokens: 50, cost: 0.5, currency: "USD" }),
+        rec({
+          date: "2026-09-01",
+          model: "a",
+          source: "codex",
+          inputTokens: 100,
+          cost: 1,
+          currency: "USD",
+        }),
+        rec({
+          date: "2026-09-12",
+          model: "a",
+          source: "codex",
+          inputTokens: 50,
+          cost: 0.5,
+          currency: "USD",
+        }),
       ],
       "2026-09",
     );

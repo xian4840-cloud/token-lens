@@ -141,10 +141,8 @@ function parseStepMetadata(blob: Uint8Array, stepType: number): StepUsage | unde
   return {
     modelEnum: enumF?.varint ?? -1,
     inputTokens: inputF.varint,
-    outputTokens:
-      usage.find((f) => f.num === 9 && f.varint !== undefined)?.varint ?? 0,
-    reasoningTokens:
-      usage.find((f) => f.num === 10 && f.varint !== undefined)?.varint ?? 0,
+    outputTokens: usage.find((f) => f.num === 9 && f.varint !== undefined)?.varint ?? 0,
+    reasoningTokens: usage.find((f) => f.num === 10 && f.varint !== undefined)?.varint ?? 0,
     tsMs,
   };
 }
@@ -270,10 +268,7 @@ export async function scanAntigravity(since?: string): Promise<AntigravityResult
     if (entry && entry.mtimeMs === mtimeMs && isAntigravityEntryValid(entry)) {
       if (Object.keys(entry.models).length === 0) continue; // 无 usage 的空会话
       // B 类：全量扫描，或会话最早 usage 已在界内 -> 整文件复用缓存
-      if (
-        since === undefined ||
-        (entry.firstTs !== undefined && entry.firstTs >= since)
-      ) {
+      if (since === undefined || (entry.firstTs !== undefined && entry.firstTs >= since)) {
         mergeEntry(agg, dbPath, entry);
         continue;
       }

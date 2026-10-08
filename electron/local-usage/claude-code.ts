@@ -50,11 +50,7 @@ function freshAgg(): ModelDayAgg {
 type ModelsAgg = ClaudeFileEntry["models"];
 
 /** 缓存命中且整文件在界内：直接合并缓存的 per-model-per-day 全量聚合 */
-function mergeEntry(
-  agg: Map<string, ModelDayAgg>,
-  filePath: string,
-  models: ModelsAgg,
-): void {
+function mergeEntry(agg: Map<string, ModelDayAgg>, filePath: string, models: ModelsAgg): void {
   for (const [model, days] of Object.entries(models)) {
     for (const [date, m] of Object.entries(days)) {
       const key = `${model}|${date}`;
@@ -64,8 +60,7 @@ function mergeEntry(
       cur.output += m.output;
       cur.cacheCreation += m.cacheCreation;
       cur.cacheRead += m.cacheRead;
-      if (m.firstTs && (!cur.firstAt || m.firstTs < cur.firstAt))
-        cur.firstAt = m.firstTs;
+      if (m.firstTs && (!cur.firstAt || m.firstTs < cur.firstAt)) cur.firstAt = m.firstTs;
       if (m.lastTs && (!cur.lastAt || m.lastTs > cur.lastAt)) cur.lastAt = m.lastTs;
       agg.set(key, cur);
     }
@@ -156,9 +151,7 @@ export async function scanClaudeCode(
   for (const file of files) {
     const entry = cache.claude[file.path];
     const valid =
-      entry !== undefined &&
-      entry.mtimeMs === file.mtimeMs &&
-      isClaudeEntryValid(entry);
+      entry !== undefined && entry.mtimeMs === file.mtimeMs && isClaudeEntryValid(entry);
 
     // A 类：mtime 早于 since（留 60s 临界余量）-> 所有行都在界外，整个跳过。
     // 有缓存时照样登记它的 message.id，后面文件里的副本才能被识别出来。
@@ -179,10 +172,7 @@ export async function scanClaudeCode(
         register(ids, file.path);
         if (Object.keys(models).length === 0) continue; // 无 usage 行（或全是副本）
         // B 类：全量扫描，或文件最早 usage 行已在界内 -> 整文件复用缓存
-        if (
-          since === undefined ||
-          (entry.firstTs !== undefined && entry.firstTs >= since)
-        ) {
+        if (since === undefined || (entry.firstTs !== undefined && entry.firstTs >= since)) {
           mergeEntry(agg, file.path, models);
           continue;
         }
@@ -203,10 +193,7 @@ export async function scanClaudeCode(
       continue;
     }
     // 同一 message.id 会写多次（流式中间态 + 终态）。只留最后一条，否则用量翻倍。
-    const lastByMsg = new Map<
-      string,
-      { model: string; usage: AssistantUsage; ts?: string }
-    >();
+    const lastByMsg = new Map<string, { model: string; usage: AssistantUsage; ts?: string }>();
     let anon = 0;
     try {
       for await (const line of rl) {

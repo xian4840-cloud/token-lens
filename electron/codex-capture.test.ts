@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ARCHIVE_JOURNAL, captureDirectory, compactCaptureJournals, readCapturedModels, resetCaptureReaders } from "./codex-capture";
+import {
+  ARCHIVE_JOURNAL,
+  captureDirectory,
+  compactCaptureJournals,
+  readCapturedModels,
+  resetCaptureReaders,
+} from "./codex-capture";
 
 /**
  * Codex 采集日志（responses-<后端pid>.jsonl）的增量读取与合并。
@@ -14,7 +20,13 @@ import { ARCHIVE_JOURNAL, captureDirectory, compactCaptureJournals, readCaptured
 let root: string, dir: string;
 const DEAD_PID = 2147483646;
 const row = (responseId: string, model: string, eventType = "response.completed") =>
-  JSON.stringify({ source: "codex-native-trace-v1", responseId, model, observedAt: "2026-10-04T00:00:01Z", eventType });
+  JSON.stringify({
+    source: "codex-native-trace-v1",
+    responseId,
+    model,
+    observedAt: "2026-10-04T00:00:01Z",
+    eventType,
+  });
 
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "token-lens-capture-"));
@@ -54,10 +66,16 @@ describe("readCapturedModels 增量读取", () => {
     const journal = path.join(dir, "responses-1.jsonl");
     const line = Buffer.from(row("r-中文", "通义千问-🚀") + "\n", "utf8");
     // 分别切在 emoji（4 字节）和汉字（3 字节）中间
-    for (const [needle, inside] of [["🚀", 2], ["问", 1]] as const) {
+    for (const [needle, inside] of [
+      ["🚀", 2],
+      ["问", 1],
+    ] as const) {
       resetCaptureReaders();
       const cut = line.indexOf(Buffer.from(needle, "utf8")) + inside;
-      fs.writeFileSync(journal, Buffer.concat([Buffer.from(row("r0", "m0") + "\n"), line.subarray(0, cut)]));
+      fs.writeFileSync(
+        journal,
+        Buffer.concat([Buffer.from(row("r0", "m0") + "\n"), line.subarray(0, cut)]),
+      );
       expect([...(await readCapturedModels(root)).keys()]).toEqual(["r0"]);
       fs.appendFileSync(journal, line.subarray(cut));
       const models = await readCapturedModels(root);
@@ -68,29 +86,40 @@ describe("readCapturedModels 增量读取", () => {
 
   it("增量读到的字节数等于新增部分，而不是整份文件", async () => {
     const journal = path.join(dir, "responses-1.jsonl");
-    fs.writeFileSync(journal, Array.from({ length: 500 }, (_, i) => row(`r${i}`, "m")).join("\n") + "\n");
+    fs.writeFileSync(
+      journal,
+      Array.from({ length: 500 }, (_, i) => row(`r${i}`, "m")).join("\n") + "\n",
+    );
     await readCapturedModels(root);
     const added = row("new", "m2") + "\n";
     fs.appendFileSync(journal, added);
     const reads: number[] = [];
     const realOpen = fs.promises.open.bind(fs.promises);
-    vi.spyOn(fs.promises, "open").mockImplementation(async (...args: Parameters<typeof fs.promises.open>) => {
-      const h = await realOpen(...args);
-      const realRead = h.read.bind(h);
-      (h as unknown as { read: unknown }).read = async (buf: Buffer, off: number, len: number, pos: number) => {
-        const r = await realRead(buf, off, len, pos);
-        reads.push(r.bytesRead);
-        return r;
-      };
-      return h;
-    });
+    vi.spyOn(fs.promises, "open").mockImplementation(
+      async (...args: Parameters<typeof fs.promises.open>) => {
+        const h = await realOpen(...args);
+        const realRead = h.read.bind(h);
+        (h as unknown as { read: unknown }).read = async (
+          buf: Buffer,
+          off: number,
+          len: number,
+          pos: number,
+        ) => {
+          const r = await realRead(buf, off, len, pos);
+          reads.push(r.bytesRead);
+          return r;
+        };
+        return h;
+      },
+    );
     const models = await readCapturedModels(root);
     expect([...models.get("new")!]).toEqual(["m2"]);
     expect(reads.reduce((a, b) => a + b, 0)).toBe(Buffer.byteLength(added));
   });
 
   it("文件被删除或截短时整体重建，不残留已删除的证据", async () => {
-    const a = path.join(dir, "responses-1.jsonl"), b = path.join(dir, "responses-2.jsonl");
+    const a = path.join(dir, "responses-1.jsonl"),
+      b = path.join(dir, "responses-2.jsonl");
     fs.writeFileSync(a, row("r1", "m1") + "\n");
     fs.writeFileSync(b, row("r2", "m2") + "\n" + row("r3", "m3") + "\n");
     expect((await readCapturedModels(root)).size).toBe(3);
@@ -104,9 +133,21 @@ describe("readCapturedModels 增量读取", () => {
 describe("compactCaptureJournals 合并已退出后端的日志", () => {
   it("合并进 archive 并按 (responseId, model) 去重，源文件删除，读取结果不变", async () => {
     const a = path.join(dir, `responses-${DEAD_PID}.jsonl`);
-    fs.writeFileSync(a, [row("r1", "m1", "response.created"), row("r1", "m1"), row("r2", "m2"), row("r2", "m2b"), '{"partial":'].join("\n") + "\n");
+    fs.writeFileSync(
+      a,
+      [
+        row("r1", "m1", "response.created"),
+        row("r1", "m1"),
+        row("r2", "m2"),
+        row("r2", "m2b"),
+        '{"partial":',
+      ].join("\n") + "\n",
+    );
     age(a, 60 * 60_000);
-    const before = new Map([["r1", ["m1"]], ["r2", ["m2", "m2b"]]]);
+    const before = new Map([
+      ["r1", ["m1"]],
+      ["r2", ["m2", "m2b"]],
+    ]);
 
     expect(await compactCaptureJournals(root)).toBe(1);
     expect(fs.existsSync(a)).toBe(false);
@@ -155,7 +196,9 @@ describe("compactCaptureJournals 合并已退出后端的日志", () => {
     const a = path.join(dir, `responses-${DEAD_PID}.jsonl`);
     fs.writeFileSync(a, row("r1", "m1") + "\n");
     age(a, 60 * 60_000);
-    vi.spyOn(fs.promises, "unlink").mockRejectedValue(Object.assign(new Error("busy"), { code: "EBUSY" }));
+    vi.spyOn(fs.promises, "unlink").mockRejectedValue(
+      Object.assign(new Error("busy"), { code: "EBUSY" }),
+    );
     expect(await compactCaptureJournals(root)).toBe(0);
     expect(fs.existsSync(a)).toBe(true);
     const models = await readCapturedModels(root);

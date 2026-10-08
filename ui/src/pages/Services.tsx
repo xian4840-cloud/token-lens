@@ -36,8 +36,7 @@ export function Services() {
     const matched = services.filter((s) => {
       if (onlyHidden && hiddenCount > 0 && !hiddenIds.includes(s.id)) return false;
       if (!q) return true;
-      const label =
-        definitions.find((d) => d.provider === s.provider)?.label ?? s.provider;
+      const label = definitions.find((d) => d.provider === s.provider)?.label ?? s.provider;
       return (
         s.name.toLowerCase().includes(q) ||
         s.provider.toLowerCase().includes(q) ||
@@ -91,9 +90,7 @@ export function Services() {
           </div>
         ) : null}
         {!loaded ? (
-          <Card className="py-16 text-center text-sm text-muted-foreground">
-            加载中…
-          </Card>
+          <Card className="py-16 text-center text-sm text-muted-foreground">加载中…</Card>
         ) : services.length === 0 ? (
           <Card className="flex flex-col items-center justify-center gap-3 border-dashed border-border bg-white/30 py-16 text-center">
             <Server className="size-6 text-muted-foreground" />
@@ -121,7 +118,10 @@ export function Services() {
           visible.map((s) => {
             const def = definitions.find((d) => d.provider === s.provider);
             return (
-              <Card key={s.id} className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_14px_40px_rgba(90,75,50,0.14)]">
+              <Card
+                key={s.id}
+                className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_14px_40px_rgba(90,75,50,0.14)]"
+              >
                 <CardContent className="flex items-center gap-4 p-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -130,12 +130,8 @@ export function Services() {
                         {def?.label ?? s.provider}
                       </Badge>
                       {def && !def.official && <Badge variant="warning">非官方</Badge>}
-                      {s.needsCredentials && (
-                        <Badge variant="warning">需重新填写密钥</Badge>
-                      )}
-                      {hiddenIds.includes(s.id) && (
-                        <Badge variant="outline">总览已隐藏</Badge>
-                      )}
+                      {s.needsCredentials && <Badge variant="warning">需重新填写密钥</Badge>}
+                      {hiddenIds.includes(s.id) && <Badge variant="outline">总览已隐藏</Badge>}
                     </div>
                     {def?.description && (
                       <div className="mt-1 truncate text-xs text-muted-foreground">
@@ -179,11 +175,7 @@ export function Services() {
           })
         )}
       </div>
-      <ServiceFormDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        editing={editing}
-      />
+      <ServiceFormDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
       <ConfirmDialog
         open={deleting != null}
         onOpenChange={(open) => {
@@ -198,8 +190,7 @@ export function Services() {
           const name = deleting.name;
           void deleteService(deleting.id).then(
             () => showToast(`已删除「${name}」`),
-            (e: unknown) =>
-              showToast(e instanceof Error ? e.message : "删除失败", "err"),
+            (e: unknown) => showToast(e instanceof Error ? e.message : "删除失败", "err"),
           );
           setDeleting(null);
         }}

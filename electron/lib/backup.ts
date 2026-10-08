@@ -141,18 +141,14 @@ export function mergeImportedIdList(
   return out;
 }
 
-export function saveDialogFilters(
-  defaultName: string,
-): { name: string; extensions: string[] }[] {
+export function saveDialogFilters(defaultName: string): { name: string; extensions: string[] }[] {
   const ext = defaultName.split(".").pop()?.toLowerCase();
   if (ext === "json") return [{ name: "JSON", extensions: ["json"] }];
   if (ext === "csv") return [{ name: "CSV", extensions: ["csv"] }];
   return [{ name: "文本", extensions: ["txt"] }];
 }
 
-export type ParsedBackup =
-  | { ok: true; payload: BackupPayload }
-  | { ok: false; error: string };
+export type ParsedBackup = { ok: true; payload: BackupPayload } | { ok: false; error: string };
 
 /** 字段缺省时当空数组（旧备份 / 手工裁剪过的文件）；存在但不是数组则报错。 */
 function optionalArray(
@@ -222,9 +218,7 @@ export function parseBackupJson(raw: string): ParsedBackup {
   if (typeof settings.proxyCustomUrl === "string" && settings.proxyCustomUrl) {
     return { ok: false, error: "备份含代理地址，已拒绝导入" };
   }
-  const services = svc.value
-    .map(normalizeService)
-    .filter((s): s is BackupService => s !== null);
+  const services = svc.value.map(normalizeService).filter((s): s is BackupService => s !== null);
   return {
     ok: true,
     payload: {
@@ -236,31 +230,18 @@ export function parseBackupJson(raw: string): ParsedBackup {
       localDailyUsage: local.value,
       settings: {
         refreshInterval:
-          typeof settings.refreshInterval === "string"
-            ? settings.refreshInterval
-            : "5",
+          typeof settings.refreshInterval === "string" ? settings.refreshInterval : "5",
         requestTimeout:
-          typeof settings.requestTimeout === "string"
-            ? settings.requestTimeout
-            : "15",
+          typeof settings.requestTimeout === "string" ? settings.requestTimeout : "15",
         monthlyBudgetUsd:
-          typeof settings.monthlyBudgetUsd === "string"
-            ? settings.monthlyBudgetUsd
-            : "",
+          typeof settings.monthlyBudgetUsd === "string" ? settings.monthlyBudgetUsd : "",
         pricingOverrides:
-          typeof settings.pricingOverrides === "string"
-            ? settings.pricingOverrides
-            : "",
-        petEnabled:
-          typeof settings.petEnabled === "string" ? settings.petEnabled : "0",
+          typeof settings.pricingOverrides === "string" ? settings.pricingOverrides : "",
+        petEnabled: typeof settings.petEnabled === "string" ? settings.petEnabled : "0",
         pinnedServiceIds:
-          typeof settings.pinnedServiceIds === "string"
-            ? settings.pinnedServiceIds
-            : "[]",
+          typeof settings.pinnedServiceIds === "string" ? settings.pinnedServiceIds : "[]",
         hiddenServiceIds:
-          typeof settings.hiddenServiceIds === "string"
-            ? settings.hiddenServiceIds
-            : "[]",
+          typeof settings.hiddenServiceIds === "string" ? settings.hiddenServiceIds : "[]",
       },
     },
   };

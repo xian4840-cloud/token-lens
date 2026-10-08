@@ -12,7 +12,11 @@ const http = vi.hoisted(() => ({
 vi.mock("../lib/http", () => ({
   fetchWithTimeout: async (url: string, init?: { headers?: Record<string, string> }) => {
     http.calls.push({ url, headers: init?.headers ?? {} });
-    return { ok: http.response.ok, status: http.response.status, text: async () => http.response.text };
+    return {
+      ok: http.response.ok,
+      status: http.response.status,
+      text: async () => http.response.text,
+    };
   },
 }));
 
@@ -78,29 +82,32 @@ beforeEach(() => {
   http.response = { ok: true, status: 200, text: "" };
 });
 
-describe.each(cases)("$definition.label（key-check）", ({ adapter, definition, url, headers, errorName }) => {
-  it("定义与抽取前一致", () => {
-    expect(adapter.definition).toStrictEqual(definition);
-    expect(adapter.fetchUsage).toBeUndefined();
-  });
+describe.each(cases)(
+  "$definition.label（key-check）",
+  ({ adapter, definition, url, headers, errorName }) => {
+    it("定义与抽取前一致", () => {
+      expect(adapter.definition).toStrictEqual(definition);
+      expect(adapter.fetchUsage).toBeUndefined();
+    });
 
-  it("用 Key 请求 /models，成功时只返回「Key 有效」", async () => {
-    const r = await adapter.fetchBalance({}, { apiKey: "k-1" });
-    expect(http.calls).toEqual([{ url, headers }]);
-    expect(r).toMatchObject({ currency: "USD", statusLabel: "Key 有效" });
-    expect(Object.keys(r).sort()).toEqual(["currency", "fetchedAt", "statusLabel"]);
-    expect(Number.isFinite(Date.parse(r.fetchedAt))).toBe(true);
-  });
+    it("用 Key 请求 /models，成功时只返回「Key 有效」", async () => {
+      const r = await adapter.fetchBalance({}, { apiKey: "k-1" });
+      expect(http.calls).toEqual([{ url, headers }]);
+      expect(r).toMatchObject({ currency: "USD", statusLabel: "Key 有效" });
+      expect(Object.keys(r).sort()).toEqual(["currency", "fetchedAt", "statusLabel"]);
+      expect(Number.isFinite(Date.parse(r.fetchedAt))).toBe(true);
+    });
 
-  it("失败时报「名称 状态码: 响应前 200 字」", async () => {
-    http.response = { ok: false, status: 401, text: "x".repeat(300) };
-    await expect(adapter.fetchBalance({}, { apiKey: "k-1" })).rejects.toThrow(
-      `${errorName} 401: ${"x".repeat(200)}`,
-    );
-  });
+    it("失败时报「名称 状态码: 响应前 200 字」", async () => {
+      http.response = { ok: false, status: 401, text: "x".repeat(300) };
+      await expect(adapter.fetchBalance({}, { apiKey: "k-1" })).rejects.toThrow(
+        `${errorName} 401: ${"x".repeat(200)}`,
+      );
+    });
 
-  it("缺少 Key 时不发请求", async () => {
-    await expect(adapter.fetchBalance({}, {})).rejects.toThrow("缺少 API Key");
-    expect(http.calls).toEqual([]);
-  });
-});
+    it("缺少 Key 时不发请求", async () => {
+      await expect(adapter.fetchBalance({}, {})).rejects.toThrow("缺少 API Key");
+      expect(http.calls).toEqual([]);
+    });
+  },
+);

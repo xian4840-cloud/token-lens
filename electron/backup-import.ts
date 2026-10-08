@@ -6,11 +6,7 @@ import {
   setSetting,
   upsertLocalDailyUsage,
 } from "./db";
-import {
-  mergeImportedIdList,
-  toLocalUsageRows,
-  type BackupPayload,
-} from "./lib/backup";
+import { mergeImportedIdList, toLocalUsageRows, type BackupPayload } from "./lib/backup";
 import { parseIdList } from "./lib/id-list";
 import type { ServiceKind } from "./types";
 import type { BackupImportResult } from "../shared/types";

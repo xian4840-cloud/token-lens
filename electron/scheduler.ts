@@ -21,10 +21,7 @@ export function setMainWindow(win: BrowserWindow | null): void {
 }
 
 /** 通知前端某服务余额更新（或出错） */
-function notify(
-  id: string,
-  payload: { balance?: BalanceResult; error?: string },
-): void {
+function notify(id: string, payload: { balance?: BalanceResult; error?: string }): void {
   // 窗口可能已关闭或正在销毁，send 前检查
   if (mainWin && !mainWin.isDestroyed()) {
     const event: EventPayload<"balance:updated"> = { id, ...payload };
@@ -74,9 +71,7 @@ const DEFAULT_INTERVAL_MIN = 5;
  * 取值规则：显式的数值且 ≤0 才表示关闭，其余一律退回默认值。
  * 不把「关闭」和「疯狂刷新」这两个相反的后果交给一个比较运算的副作用决定。
  */
-export function normalizeIntervalMinutes(
-  raw: string | number | undefined,
-): number | null {
+export function normalizeIntervalMinutes(raw: string | number | undefined): number | null {
   // 空字符串按「未设置」处理，不按 Number("") === 0 理解成关闭
   if (raw === undefined || raw === "") return DEFAULT_INTERVAL_MIN;
   const n = typeof raw === "number" ? raw : Number(raw);

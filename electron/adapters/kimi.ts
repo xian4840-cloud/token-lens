@@ -53,7 +53,11 @@ export const kimiAdapter: Adapter = {
         const data = json.data ?? {};
         const remaining =
           pickNumber(data, ["available_balance", "availableBalance", "balance"]) ??
-          pickNumber(json as Record<string, unknown>, ["available_balance", "availableBalance", "balance"]);
+          pickNumber(json as Record<string, unknown>, [
+            "available_balance",
+            "availableBalance",
+            "balance",
+          ]);
         if (remaining != null) {
           return {
             remaining,

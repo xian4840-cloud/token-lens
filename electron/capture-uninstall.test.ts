@@ -60,8 +60,14 @@ function memoryStore(initial: string | undefined) {
   const state = { value: initial, sets: [] as string[], removes: 0 };
   const store: UserEnvStore = {
     get: () => state.value ?? "",
-    set: (v) => { state.value = v; state.sets.push(v); },
-    remove: () => { state.value = undefined; state.removes += 1; },
+    set: (v) => {
+      state.value = v;
+      state.sets.push(v);
+    },
+    remove: () => {
+      state.value = undefined;
+      state.removes += 1;
+    },
   };
   return { state, store };
 }
@@ -129,8 +135,14 @@ describe("stripTokenLensPreload", () => {
     expect(stripTokenLensPreload(` \t${FLAG}\t `)).toBe("");
   });
   it("复查：剩余值里是否仍引用我们的脚本（不区分大小写、正反斜杠）", () => {
-    expect(referencesTokenLensPreload(`--preload="C:/Users/me/.claude/token-lens-monitor/claude.cjs"`)).toBe(true);
-    expect(referencesTokenLensPreload("--preload C:\\Users\\me\\.claude\\TOKEN-LENS-MONITOR\\Claude.cjs")).toBe(true);
+    expect(
+      referencesTokenLensPreload(`--preload="C:/Users/me/.claude/token-lens-monitor/claude.cjs"`),
+    ).toBe(true);
+    expect(
+      referencesTokenLensPreload(
+        "--preload C:\\Users\\me\\.claude\\TOKEN-LENS-MONITOR\\Claude.cjs",
+      ),
+    ).toBe(true);
     expect(referencesTokenLensPreload("--smol --preload=C:/other.cjs")).toBe(false);
     expect(referencesTokenLensPreload("")).toBe(false);
     expect(PRELOAD_PATH_SUFFIX.endsWith(PRELOAD_REFERENCE)).toBe(true);
@@ -207,7 +219,10 @@ describe("disableClaudeCapture", () => {
 
   it("什么都没装时不报错、不动注册表；重复关闭是幂等的", () => {
     const { state, store } = memoryStore(undefined);
-    expect(disableClaudeCapture(dataRoot, { home, envStore: store })).toEqual({ removed: [], kept: [] });
+    expect(disableClaudeCapture(dataRoot, { home, envStore: store })).toEqual({
+      removed: [],
+      kept: [],
+    });
     expect(state.sets).toEqual([]);
     expect(state.removes).toBe(0);
   });
@@ -251,14 +266,21 @@ describe("disableClaudeCapture", () => {
       for (const f of [p.preload, p.helper, p.journalPointer]) expect(fs.existsSync(f)).toBe(true);
       expect(r.removed).toEqual([]);
       expect(r.kept[0]).toMatch(/BUN_OPTIONS.*仍引用 token-lens-monitor\/claude\.cjs/);
-      expect(r.kept.slice(1).map((k) => k.split("（")[0])).toEqual([p.preload, p.helper, p.journalPointer, p.directory]);
+      expect(r.kept.slice(1).map((k) => k.split("（")[0])).toEqual([
+        p.preload,
+        p.helper,
+        p.journalPointer,
+        p.directory,
+      ]);
       expect(r.kept.slice(1).every((k) => k.includes("Claude Code 无法启动"))).toBe(true);
     }
   });
 
   it("去掉了我们那段、但还有另一处引用：写回剩余值，文件仍保留", () => {
     const p = seedClaudeFiles();
-    const { state, store } = memoryStore(`${claudePreloadFlag(p.preload)} --preload "${p.preload}"`);
+    const { state, store } = memoryStore(
+      `${claudePreloadFlag(p.preload)} --preload "${p.preload}"`,
+    );
     const r = disableClaudeCapture(dataRoot, { home, envStore: store });
     expect(state.value).toBe(`--preload "${p.preload}"`);
     expect(fs.existsSync(p.preload)).toBe(true);
@@ -270,8 +292,12 @@ describe("disableClaudeCapture", () => {
     const p = seedClaudeFiles();
     const store: UserEnvStore = {
       get: () => `--smol ${claudePreloadFlag(p.preload)}`,
-      set: () => { throw new Error("access denied"); },
-      remove: () => { throw new Error("access denied"); },
+      set: () => {
+        throw new Error("access denied");
+      },
+      remove: () => {
+        throw new Error("access denied");
+      },
     };
     const r = disableClaudeCapture(dataRoot, { home, envStore: store });
     expect(fs.existsSync(p.preload)).toBe(true);
@@ -299,7 +325,9 @@ describe("disableClaudeCapture", () => {
     enableClaudeCapture(ASSETS, dataRoot);
     const p = claudeCapturePaths(dataRoot, home);
     expect(state.value).toBe(`--smol ${claudePreloadFlag(p.preload)}`);
-    expect(fs.readdirSync(p.directory).sort()).toEqual([FETCH_HELPER_NAME, "claude-journal.json", "claude.cjs"].sort());
+    expect(fs.readdirSync(p.directory).sort()).toEqual(
+      [FETCH_HELPER_NAME, "claude-journal.json", "claude.cjs"].sort(),
+    );
     expect(isClaudeCaptureInstalled(dataRoot, home)).toBe(true);
     disableClaudeCapture(dataRoot);
     expect(state.value).toBe("--smol");
@@ -359,7 +387,9 @@ describe("与 NSIS 卸载脚本（build/installer.nsh）一致", () => {
     expect(`${define("TL_OPENCODE_MARKER")}\n`).toBe(OPENCODE_PLUGIN_MARKER);
     expect(`${define("TL_HELPER_MARKER")}\n`).toBe(FETCH_HELPER_MARKER);
     expect(define("TL_HELPER_NAME")).toBe(FETCH_HELPER_NAME);
-    expect(fs.readFileSync(path.join(ASSETS, FETCH_HELPER_NAME), "utf8").startsWith(FETCH_HELPER_MARKER)).toBe(true);
+    expect(
+      fs.readFileSync(path.join(ASSETS, FETCH_HELPER_NAME), "utf8").startsWith(FETCH_HELPER_MARKER),
+    ).toBe(true);
   });
 
   it("清理的路径与 enable 写入的路径逐项对应", () => {
@@ -379,12 +409,16 @@ describe("与 NSIS 卸载脚本（build/installer.nsh）一致", () => {
     expect(define("TL_PRELOAD_SUFFIX")).toBe(PRELOAD_PATH_SUFFIX);
     expect(define("TL_PRELOAD_REFERENCE")).toBe(PRELOAD_REFERENCE);
     expect(nsh).toContain('StrCmp $0 "--preload=" 0 tl_iop_done');
-    for (const ws of [" ", "$\\t", "$\\r", "$\\n"]) expect(nsh).toContain(`StrCmp $2 "${ws}" tl_sv_ws`);
+    for (const ws of [" ", "$\\t", "$\\r", "$\\n"])
+      expect(nsh).toContain(`StrCmp $2 "${ws}" tl_sv_ws`);
   });
 
   it("剩余值仍引用 claude.cjs 或写注册表失败时，跳过 Claude 文件的删除（与 TS 的复查一致）", () => {
     expect(nsh).toMatch(/Call un\.TLStripBunOptions\s+StrCmp \$TLStillRef 1 tl_cac_opencode/);
-    const skipped = nsh.slice(nsh.indexOf("StrCmp $TLStillRef 1 tl_cac_opencode"), nsh.indexOf("tl_cac_opencode:"));
+    const skipped = nsh.slice(
+      nsh.indexOf("StrCmp $TLStillRef 1 tl_cac_opencode"),
+      nsh.indexOf("tl_cac_opencode:"),
+    );
     expect(skipped).toContain("token-lens-monitor\\claude.cjs");
     expect(skipped).toContain("${TL_HELPER_NAME}");
     expect(skipped).toContain("claude-journal.json");

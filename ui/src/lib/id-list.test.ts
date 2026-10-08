@@ -19,12 +19,7 @@ describe("parseIdList", () => {
 describe("sortPinnedFirst", () => {
   it("置顶按列表顺序排在最前，其余保持原序", () => {
     const items = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }];
-    expect(sortPinnedFirst(items, ["c", "a"]).map((x) => x.id)).toEqual([
-      "c",
-      "a",
-      "b",
-      "d",
-    ]);
+    expect(sortPinnedFirst(items, ["c", "a"]).map((x) => x.id)).toEqual(["c", "a", "b", "d"]);
   });
 
   it("没有置顶时不改顺序", () => {

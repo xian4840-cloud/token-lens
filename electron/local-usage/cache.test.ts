@@ -74,9 +74,7 @@ describe("getScanCache", () => {
     expect(
       getRecentLogs()
         .slice(before)
-        .some(
-          (e) => e.scope === "local-usage" && e.message.includes("缓存不可用"),
-        ),
+        .some((e) => e.scope === "local-usage" && e.message.includes("缓存不可用")),
     ).toBe(true);
   });
 
@@ -86,9 +84,7 @@ describe("getScanCache", () => {
     expect(
       getRecentLogs()
         .slice(before)
-        .some(
-          (e) => e.scope === "local-usage" && e.message.includes("缓存不可用"),
-        ),
+        .some((e) => e.scope === "local-usage" && e.message.includes("缓存不可用")),
     ).toBe(false);
   });
 });
@@ -214,20 +210,22 @@ describe("缓存条目的结构守卫", () => {
   it("Codex 只认增量结构（v===2 且 increments 是数组）", () => {
     expect(isCodexEntryValid(entry(1) as never)).toBe(true);
     expect(isCodexEntryValid({ mtimeMs: 1, increments: [] } as never)).toBe(false);
-    expect(isCodexEntryValid({ mtimeMs: 1, v: 1, increments: [] } as never)).toBe(
-      false,
-    );
+    expect(isCodexEntryValid({ mtimeMs: 1, v: 1, increments: [] } as never)).toBe(false);
     expect(isCodexEntryValid({ mtimeMs: 1, v: 2 } as never)).toBe(false);
   });
 
   it("Claude 认 per-model-per-day 结构，旧的单层聚合视为未命中", () => {
     expect(
-      isClaudeEntryValid({ mtimeMs: 1, ids: [], models: { m: { "2026-09-01": { input: 1 } } } } as never),
+      isClaudeEntryValid({
+        mtimeMs: 1,
+        ids: [],
+        models: { m: { "2026-09-01": { input: 1 } } },
+      } as never),
     ).toBe(true);
     // 旧版：models[model] 直接是聚合对象，其属性值是 number
-    expect(
-      isClaudeEntryValid({ mtimeMs: 1, ids: [], models: { m: { input: 1 } } } as never),
-    ).toBe(false);
+    expect(isClaudeEntryValid({ mtimeMs: 1, ids: [], models: { m: { input: 1 } } } as never)).toBe(
+      false,
+    );
     expect(isClaudeEntryValid({ mtimeMs: 1, ids: [], models: {} } as never)).toBe(true);
   });
 
@@ -241,9 +239,7 @@ describe("缓存条目的结构守卫", () => {
     const good = { mtimeMs: 1, models: { m: { "2026-09-01": { input: 1 } } } };
     expect(isAntigravityEntryValid(good as never)).toBe(true);
     expect(isGrokEntryValid(good as never)).toBe(true);
-    expect(isAntigravityEntryValid({ mtimeMs: 1, models: { m: { x: 1 } } } as never)).toBe(
-      false,
-    );
+    expect(isAntigravityEntryValid({ mtimeMs: 1, models: { m: { x: 1 } } } as never)).toBe(false);
     expect(isGrokEntryValid({ mtimeMs: 1, models: { m: { x: 1 } } } as never)).toBe(false);
   });
 });

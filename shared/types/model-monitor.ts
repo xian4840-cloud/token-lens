@@ -1,6 +1,7 @@
 /** 模型监测（请求模型 vs 实际响应模型）与采集开关 */
 
-export type ModelMonitorSource = "codex" | "claude-code" | "opencode" | "grok-build" | "antigravity";
+export type ModelMonitorSource =
+  "codex" | "claude-code" | "opencode" | "grok-build" | "antigravity";
 
 export interface ModelMonitorSession {
   id: string;
@@ -95,9 +96,7 @@ export interface ModelMonitorState {
  * - confirm-pending：已有一个确认框开着，本次请求被直接拒绝（不排队）。
  */
 export type HighRiskResult<T> =
-  | { status: "ok"; value: T }
-  | { status: "cancelled" }
-  | { status: "confirm-pending" };
+  { status: "ok"; value: T } | { status: "cancelled" } | { status: "confirm-pending" };
 
 /** 「关闭采集」的结果 */
 export interface CaptureRemovalResult {

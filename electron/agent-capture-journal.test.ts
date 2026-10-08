@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { claudeCapturePaths, readClaudeCaptures, readOpenCodeCaptures, openCodeCapturePaths } from "./agent-response-capture";
+import {
+  claudeCapturePaths,
+  readClaudeCaptures,
+  readOpenCodeCaptures,
+  openCodeCapturePaths,
+} from "./agent-response-capture";
 
 /**
  * Claude / OpenCode 采集日志（model-responses/*.jsonl）的增量读取。
@@ -13,7 +18,16 @@ vi.mock("electron", () => ({ app: { getPath: () => "" } }));
 
 let dataRoot: string, journal: string;
 const rec = (id: string, extra: Record<string, unknown> = {}) =>
-  JSON.stringify({ id, sessionId: "s1", startedAt: "2026-10-04T00:00:00Z", requestedModel: "m", responseModel: "m", inputTokens: 1, outputTokens: 2, ...extra });
+  JSON.stringify({
+    id,
+    sessionId: "s1",
+    startedAt: "2026-10-04T00:00:00Z",
+    requestedModel: "m",
+    responseModel: "m",
+    inputTokens: 1,
+    outputTokens: 2,
+    ...extra,
+  });
 
 beforeEach(() => {
   dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), "token-lens-journal-"));
@@ -28,22 +42,32 @@ afterEach(() => {
 function countReadBytes(): number[] {
   const reads: number[] = [];
   const realOpen = fs.promises.open.bind(fs.promises);
-  vi.spyOn(fs.promises, "open").mockImplementation(async (...args: Parameters<typeof fs.promises.open>) => {
-    const h = await realOpen(...args);
-    const realRead = h.read.bind(h);
-    (h as unknown as { read: unknown }).read = async (buf: Buffer, off: number, len: number, pos: number) => {
-      const r = await realRead(buf, off, len, pos);
-      reads.push(r.bytesRead);
-      return r;
-    };
-    return h;
-  });
+  vi.spyOn(fs.promises, "open").mockImplementation(
+    async (...args: Parameters<typeof fs.promises.open>) => {
+      const h = await realOpen(...args);
+      const realRead = h.read.bind(h);
+      (h as unknown as { read: unknown }).read = async (
+        buf: Buffer,
+        off: number,
+        len: number,
+        pos: number,
+      ) => {
+        const r = await realRead(buf, off, len, pos);
+        reads.push(r.bytesRead);
+        return r;
+      };
+      return h;
+    },
+  );
   return reads;
 }
 
 describe("采集日志增量读取", () => {
   it("追加后只读新增字节，结果与整份重读一致", async () => {
-    fs.writeFileSync(journal, Array.from({ length: 200 }, (_, i) => rec(`a${i}`)).join("\n") + "\n");
+    fs.writeFileSync(
+      journal,
+      Array.from({ length: 200 }, (_, i) => rec(`a${i}`)).join("\n") + "\n",
+    );
     expect(await readClaudeCaptures(dataRoot)).toHaveLength(200);
     const added = rec("new", { responseModel: "other" }) + "\n";
     fs.appendFileSync(journal, added);
@@ -55,20 +79,36 @@ describe("采集日志增量读取", () => {
   });
 
   it("读取边界切在多字节字符中间（中文 / emoji）时不会把该行解码坏", async () => {
-    const line = Buffer.from(rec("z", { requestedModel: "通义千问-😀", responseModel: "通义千问-😀" }) + "\n", "utf8");
-    for (const [needle, inside] of [["😀", 3], ["千", 2]] as const) {
+    const line = Buffer.from(
+      rec("z", { requestedModel: "通义千问-😀", responseModel: "通义千问-😀" }) + "\n",
+      "utf8",
+    );
+    for (const [needle, inside] of [
+      ["😀", 3],
+      ["千", 2],
+    ] as const) {
       fs.rmSync(journal, { force: true });
       const cut = line.lastIndexOf(Buffer.from(needle, "utf8")) + inside;
-      fs.writeFileSync(journal, Buffer.concat([Buffer.from(rec("a") + "\n"), line.subarray(0, cut)]));
+      fs.writeFileSync(
+        journal,
+        Buffer.concat([Buffer.from(rec("a") + "\n"), line.subarray(0, cut)]),
+      );
       expect((await readClaudeCaptures(dataRoot)).map((r) => r.id)).toEqual(["a"]);
       fs.appendFileSync(journal, line.subarray(cut));
       const z = (await readClaudeCaptures(dataRoot)).find((r) => r.id === "z");
-      expect(z).toMatchObject({ requestedModel: "通义千问-😀", responseModel: "通义千问-😀", status: "match" });
+      expect(z).toMatchObject({
+        requestedModel: "通义千问-😀",
+        responseModel: "通义千问-😀",
+        status: "match",
+      });
     }
   });
 
   it("同一 id 的后续行覆盖前一行（与整份重读语义一致），半行等补全", async () => {
-    fs.writeFileSync(journal, rec("x", { responseModel: undefined }) + "\n" + rec("x").slice(0, 10));
+    fs.writeFileSync(
+      journal,
+      rec("x", { responseModel: undefined }) + "\n" + rec("x").slice(0, 10),
+    );
     let records = await readClaudeCaptures(dataRoot);
     expect(records).toHaveLength(1);
     expect(records[0].status).toBe("unknown");

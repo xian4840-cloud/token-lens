@@ -61,10 +61,7 @@ describe("智谱钱包主数字不混币种", () => {
   });
 
   it("国际区域只汇总 USD 包", async () => {
-    const bal = await zhipuAdapter.fetchBalance(
-      { region: "global" },
-      { apiKey: "k" },
-    );
+    const bal = await zhipuAdapter.fetchBalance({ region: "global" }, { apiKey: "k" });
     expect(bal.currency).toBe("USD");
     expect(bal.remaining).toBe(50);
   });

@@ -6,9 +6,16 @@ describe("applySearchEscape", () => {
     let cleared = false;
     let prevented = false;
     const used = applySearchEscape(
-      { key: "Escape", preventDefault: () => { prevented = true; } },
+      {
+        key: "Escape",
+        preventDefault: () => {
+          prevented = true;
+        },
+      },
       "foo",
-      () => { cleared = true; },
+      () => {
+        cleared = true;
+      },
     );
     expect(used).toBe(true);
     expect(cleared).toBe(true);
@@ -18,9 +25,16 @@ describe("applySearchEscape", () => {
   it("空内容的 Esc 不拦截，好让对话框能关", () => {
     let cleared = false;
     const used = applySearchEscape(
-      { key: "Escape", preventDefault: () => { /* noop */ } },
+      {
+        key: "Escape",
+        preventDefault: () => {
+          /* noop */
+        },
+      },
       "",
-      () => { cleared = true; },
+      () => {
+        cleared = true;
+      },
     );
     expect(used).toBe(false);
     expect(cleared).toBe(false);
@@ -30,9 +44,16 @@ describe("applySearchEscape", () => {
     let cleared = false;
     expect(
       applySearchEscape(
-        { key: "Enter", preventDefault: () => { /* noop */ } },
+        {
+          key: "Enter",
+          preventDefault: () => {
+            /* noop */
+          },
+        },
         "foo",
-        () => { cleared = true; },
+        () => {
+          cleared = true;
+        },
       ),
     ).toBe(false);
     expect(cleared).toBe(false);

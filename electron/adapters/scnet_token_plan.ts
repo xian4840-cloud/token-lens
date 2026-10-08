@@ -4,8 +4,7 @@ import { pickNumber } from "../lib/amount";
 import { epochToIso } from "../lib/time";
 import { BROWSER_UA } from "../lib/user-agent";
 
-const USAGE_URL =
-  "https://www.scnet.cn/acx/charge/account/currentuser/tokenplan/list";
+const USAGE_URL = "https://www.scnet.cn/acx/charge/account/currentuser/tokenplan/list";
 
 /** 控制台 origin：接口 Referer/Origin 来源校验 */
 const CONSOLE_ORIGIN = "https://www.scnet.cn";
@@ -61,10 +60,7 @@ interface ScnetResponse {
 /**
  * 按候选字段名取时间，返回 ISO 字符串（兼容毫秒/秒级时间戳与日期字符串）
  */
-function pickTime(
-  obj: { [key: string]: unknown },
-  keys: string[],
-): string | undefined {
+function pickTime(obj: { [key: string]: unknown }, keys: string[]): string | undefined {
   for (const k of keys) {
     const v = obj[k];
     if (typeof v === "number" && v > 0) {
@@ -96,8 +92,7 @@ export const scnetTokenPlanAdapter: Adapter = {
     label: "超算互联网 Token Plan",
     kind: "plan",
     official: false,
-    description:
-      "超算互联网 Token Plan 套餐 Credits 用量（控制台 cookie，非官方，过期需更新）",
+    description: "超算互联网 Token Plan 套餐 Credits 用量（控制台 cookie，非官方，过期需更新）",
     configSchema: [
       {
         key: "cookie",
@@ -128,12 +123,8 @@ export const scnetTokenPlanAdapter: Adapter = {
     if (!res.ok) {
       const text = await res.text();
       const hint =
-        res.status === 401
-          ? "（Cookie 可能已过期，请在「管理」页重新「登录获取凭证」）"
-          : "";
-      throw new Error(
-        `超算互联网 Token Plan ${res.status}: ${text.slice(0, 300)}${hint}`,
-      );
+        res.status === 401 ? "（Cookie 可能已过期，请在「管理」页重新「登录获取凭证」）" : "";
+      throw new Error(`超算互联网 Token Plan ${res.status}: ${text.slice(0, 300)}${hint}`);
     }
 
     const json = (await res.json()) as ScnetResponse;
@@ -144,9 +135,7 @@ export const scnetTokenPlanAdapter: Adapter = {
 
     const data = json.data ?? [];
     if (data.length === 0) {
-      throw new Error(
-        "未订阅 Token Plan 套餐（请先在超算互联网控制台购买 Token Plan）",
-      );
+      throw new Error("未订阅 Token Plan 套餐（请先在超算互联网控制台购买 Token Plan）");
     }
 
     // data 为数组（可同时持有多个套餐），逐条解析后汇总
@@ -236,9 +225,7 @@ export const scnetTokenPlanAdapter: Adapter = {
  * 过期 cookie 透过 isValid 格式校验（含 Token=）被秒返回。验证逻辑与
  * fetchBalance 同源，复用同一接口与伪装头。
  */
-export async function validateScnetCredentials(
-  cookie: string,
-): Promise<boolean> {
+export async function validateScnetCredentials(cookie: string): Promise<boolean> {
   if (!cookie) return false;
   try {
     const res = await fetchWithTimeout(USAGE_URL, {

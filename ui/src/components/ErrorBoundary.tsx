@@ -44,8 +44,8 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="max-w-lg space-y-4 rounded-lg border bg-card p-6 shadow-sm">
           <div className="font-display text-lg font-medium">界面出错了</div>
           <p className="text-sm text-muted-foreground">
-            这次渲染失败了，不影响已保存的配置与数据。错误详情已记入本地日志，
-            可在「设置 → 诊断日志」查看或导出。
+            这次渲染失败了，不影响已保存的配置与数据。错误详情已记入本地日志， 可在「设置 →
+            诊断日志」查看或导出。
           </p>
           {/* 摘要直接摆出来：多数用户不会去翻日志文件，但会截图 */}
           <pre className="max-h-40 overflow-auto rounded-md bg-muted/50 p-3 text-xs break-all whitespace-pre-wrap">

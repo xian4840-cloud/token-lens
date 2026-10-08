@@ -20,7 +20,10 @@ vi.mock("electron", () => ({
     },
   },
   ipcRenderer: {
-    invoke: (channel: string) => (electronFake.calls.push({ kind: "invoke", channel }), Promise.resolve()),
+    invoke: (channel: string) => (
+      electronFake.calls.push({ kind: "invoke", channel }),
+      Promise.resolve()
+    ),
     send: (channel: string) => void electronFake.calls.push({ kind: "send", channel }),
     on: (channel: string) => void electronFake.calls.push({ kind: "on", channel }),
     removeListener: () => undefined,
@@ -55,7 +58,12 @@ async function loadPreload(file: "./preload" | "./pet-preload"): Promise<Preload
     expect(electronFake.calls, name).toHaveLength(1);
     methods[name] = electronFake.calls[0];
   }
-  return { methods, channels: Object.values(methods).filter((m) => m.kind !== "on").map((m) => m.channel) };
+  return {
+    methods,
+    channels: Object.values(methods)
+      .filter((m) => m.kind !== "on")
+      .map((m) => m.channel),
+  };
 }
 
 const mainPreload = await loadPreload("./preload");
@@ -133,13 +141,22 @@ describe("IPC 暴露面", () => {
   });
 
   it("除上述通道外，没有任何通道对桌宠窗口开放", () => {
-    const petOpen = [...policies].filter(([, p]) => p.roles.includes("pet")).map(([c]) => c).sort();
+    const petOpen = [...policies]
+      .filter(([, p]) => p.roles.includes("pet"))
+      .map(([c]) => c)
+      .sort();
     expect(petOpen).toEqual(channelsUsedBy("pet-preload.ts").sort());
   });
 
   it("主窗口 preload 不再暴露桌宠专用通道", () => {
     const used = channelsUsedBy("preload.ts");
-    for (const c of ["pet:todaySpend", "pet:getActivity", "pet:drag-start", "pet:drag-move", "pet:drag-end"]) {
+    for (const c of [
+      "pet:todaySpend",
+      "pet:getActivity",
+      "pet:drag-start",
+      "pet:drag-move",
+      "pet:drag-end",
+    ]) {
       expect(used).not.toContain(c);
     }
   });
@@ -152,15 +169,20 @@ describe("IPC 暴露面", () => {
       "model-monitor:disable-opencode",
       "model-monitor:launch-codex",
     ]) {
-      expect(policies.get(c), c).toEqual({ roles: ["main"], highRisk: { route: "/model-monitor" } });
+      expect(policies.get(c), c).toEqual({
+        roles: ["main"],
+        highRisk: { route: "/model-monitor" },
+      });
     }
   });
 
   it("preload 的每个方法都打到 shared/ipc.ts 通道表里登记的通道", () => {
     for (const usage of [mainPreload, petPreload]) {
       for (const [method, { kind, channel }] of Object.entries(usage.methods)) {
-        if (kind === "invoke") expect(channel, method).toBe(INVOKE_CHANNELS[method as keyof typeof INVOKE_CHANNELS]);
-        else if (kind === "send") expect(channel, method).toBe(SEND_CHANNELS[method as keyof typeof SEND_CHANNELS]);
+        if (kind === "invoke")
+          expect(channel, method).toBe(INVOKE_CHANNELS[method as keyof typeof INVOKE_CHANNELS]);
+        else if (kind === "send")
+          expect(channel, method).toBe(SEND_CHANNELS[method as keyof typeof SEND_CHANNELS]);
         else {
           // onXxxUpdated / onXxx -> 事件名 xxxUpdated / xxx
           const event = method.replace(/^on(.)/, (_m, c: string) => c.toLowerCase());
@@ -187,9 +209,10 @@ describe("IPC 暴露面", () => {
   it("preload 运行在沙箱里，运行时只能 require electron（其余只允许 import type）", () => {
     for (const file of ["preload.ts", "pet-preload.ts"]) {
       const src = fs.readFileSync(path.join(__dirname, file), "utf8");
-      const runtimeImports = [...src.matchAll(/^import\s+(?!type\b)[^;]*?from\s+"([^"]+)"/gm)].map((m) => m[1]);
+      const runtimeImports = [...src.matchAll(/^import\s+(?!type\b)[^;]*?from\s+"([^"]+)"/gm)].map(
+        (m) => m[1],
+      );
       expect(runtimeImports, file).toEqual(["electron"]);
     }
   });
 });
-

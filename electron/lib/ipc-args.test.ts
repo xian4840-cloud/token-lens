@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { optionalId, optionalProxyOverride, optionalTime, requireId, requireSettingKey } from "./ipc-args";
+import {
+  optionalId,
+  optionalProxyOverride,
+  optionalTime,
+  requireId,
+  requireSettingKey,
+} from "./ipc-args";
 
 describe("IPC 参数校验", () => {
   it("requireId：非空字符串、限长", () => {
@@ -31,7 +37,9 @@ describe("IPC 参数校验", () => {
   });
   it("optionalProxyOverride：只保留三个字符串字段，类型不对就拒绝", () => {
     expect(optionalProxyOverride(undefined)).toBeUndefined();
-    expect(optionalProxyOverride({ mode: "custom", customUrl: "http://127.0.0.1:7890", extra: 1 })).toEqual({
+    expect(
+      optionalProxyOverride({ mode: "custom", customUrl: "http://127.0.0.1:7890", extra: 1 }),
+    ).toEqual({
       mode: "custom",
       customUrl: "http://127.0.0.1:7890",
     });

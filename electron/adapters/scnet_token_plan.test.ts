@@ -85,28 +85,22 @@ describe("SCNet Token Plan 余额", () => {
 
   it("未订阅（data 为空）时给出可操作的提示，而不是 0", async () => {
     respond([]);
-    await expect(
-      scnetTokenPlanAdapter.fetchBalance({}, { cookie: "c" }),
-    ).rejects.toThrow(/未订阅/);
+    await expect(scnetTokenPlanAdapter.fetchBalance({}, { cookie: "c" })).rejects.toThrow(/未订阅/);
   });
 
   it("缺少 totalAmount / usedAmount 时报错并列出实际字段名", async () => {
     respond([{ name: "标准版", unit: "Credits" }]);
-    await expect(
-      scnetTokenPlanAdapter.fetchBalance({}, { cookie: "c" }),
-    ).rejects.toThrow(/缺少 totalAmount\/usedAmount/);
+    await expect(scnetTokenPlanAdapter.fetchBalance({}, { cookie: "c" })).rejects.toThrow(
+      /缺少 totalAmount\/usedAmount/,
+    );
   });
 
   it("业务错误码写在 code 字段里时也要报错（HTTP 可能是 200）", async () => {
     state.body = { code: "401", msg: "未登录", data: [] };
-    await expect(
-      scnetTokenPlanAdapter.fetchBalance({}, { cookie: "c" }),
-    ).rejects.toThrow(/401/);
+    await expect(scnetTokenPlanAdapter.fetchBalance({}, { cookie: "c" })).rejects.toThrow(/401/);
   });
 
   it("缺少 Cookie 时立刻报错，不发请求", async () => {
-    await expect(scnetTokenPlanAdapter.fetchBalance({}, {})).rejects.toThrow(
-      /缺少 Cookie/,
-    );
+    await expect(scnetTokenPlanAdapter.fetchBalance({}, {})).rejects.toThrow(/缺少 Cookie/);
   });
 });

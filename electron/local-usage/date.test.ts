@@ -43,7 +43,18 @@ describe("localHistoryStartKey（bootstrap 下发的本地用量起点）", () =
     const today = "2026-10-03";
     const all = Array.from({ length: 20 }, (_, i) => {
       const date = toDateKey(new Date(2026, 9, 3 - i).getTime())!;
-      return { source: "codex", model: "m", date, sessions: 1, inputTokens: 100, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, reasoningTokens: 0, scannedAt: "" };
+      return {
+        source: "codex",
+        model: "m",
+        date,
+        sessions: 1,
+        inputTokens: 100,
+        outputTokens: 0,
+        cacheCreationTokens: 0,
+        cacheReadTokens: 0,
+        reasoningTokens: 0,
+        scannedAt: "",
+      };
     });
     const start = localHistoryStartKey(today)!;
     const boot = all.filter((r) => r.date >= start && r.date <= today);

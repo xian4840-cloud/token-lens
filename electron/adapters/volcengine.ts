@@ -1,11 +1,7 @@
 import type { Adapter, BalanceResult } from "../types";
 import { fetchWithTimeout } from "../lib/http";
 import { toFiniteNumber } from "../lib/amount";
-import {
-  signSigV4,
-  formatSigV4Date,
-  formatSigV4DateTime,
-} from "./signing";
+import { signSigV4, formatSigV4Date, formatSigV4DateTime } from "./signing";
 
 const HOST = "billing.volcengineapi.com";
 

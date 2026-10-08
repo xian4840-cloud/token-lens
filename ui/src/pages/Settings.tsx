@@ -17,13 +17,7 @@ import {
 import { DiagnosticsCard } from "@/components/DiagnosticsCard";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PageHeader } from "@/components/PageHeader";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -213,10 +207,7 @@ export function SettingsPage() {
           <CardContent>
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">刷新间隔</span>
-              <Select
-                value={refreshInterval}
-                onValueChange={(v) => saveRefreshInterval(Number(v))}
-              >
+              <Select value={refreshInterval} onValueChange={(v) => saveRefreshInterval(Number(v))}>
                 <SelectTrigger className="w-44" aria-label="刷新间隔">
                   <SelectValue />
                 </SelectTrigger>
@@ -239,8 +230,8 @@ export function SettingsPage() {
               桌面宠物
             </CardTitle>
             <CardDescription>
-              开启后桌面上会出现一只可拖动的小雷姆，本地 agent 在干活时她会跟着忙。点击她显示今日本地 agent
-              的花费估算。关闭本应用时宠物一起关掉。
+              开启后桌面上会出现一只可拖动的小雷姆，本地 agent
+              在干活时她会跟着忙。点击她显示今日本地 agent 的花费估算。关闭本应用时宠物一起关掉。
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -286,15 +277,10 @@ export function SettingsPage() {
                     setDisabledSources(next);
                     void ipc
                       .setSetting("disabledLocalSources", JSON.stringify(next))
-                      .then(() =>
-                        showToast(on ? `已关闭 ${s.label}` : `已开启 ${s.label}`),
-                      )
+                      .then(() => showToast(on ? `已关闭 ${s.label}` : `已开启 ${s.label}`))
                       .catch((e: unknown) => {
                         setDisabledSources(prev);
-                        showToast(
-                          e instanceof Error ? e.message : "保存来源开关失败",
-                          "err",
-                        );
+                        showToast(e instanceof Error ? e.message : "保存来源开关失败", "err");
                       });
                   }}
                 >
@@ -370,10 +356,7 @@ export function SettingsPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <span className="text-sm font-medium">代理工作模式</span>
-                <Select
-                  value={proxyMode}
-                  onValueChange={(v) => saveProxyMode(v as ProxyMode)}
-                >
+                <Select value={proxyMode} onValueChange={(v) => saveProxyMode(v as ProxyMode)}>
                   <SelectTrigger className="w-full" aria-label="代理工作模式">
                     <SelectValue />
                   </SelectTrigger>
@@ -395,10 +378,7 @@ export function SettingsPage() {
                   <Clock className="size-3.5 text-muted-foreground" />
                   请求超时时间
                 </span>
-                <Select
-                  value={requestTimeout}
-                  onValueChange={(v) => saveRequestTimeout(v)}
-                >
+                <Select value={requestTimeout} onValueChange={(v) => saveRequestTimeout(v)}>
                   <SelectTrigger className="w-full" aria-label="请求超时时间">
                     <SelectValue />
                   </SelectTrigger>
@@ -438,7 +418,8 @@ export function SettingsPage() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  支持 HTTP、HTTPS 与 SOCKS5 代理协议（例如 <code>http://127.0.0.1:7890</code> 或 <code>socks5://127.0.0.1:10808</code>）。
+                  支持 HTTP、HTTPS 与 SOCKS5 代理协议（例如 <code>http://127.0.0.1:7890</code> 或{" "}
+                  <code>socks5://127.0.0.1:10808</code>）。
                 </p>
               </div>
             )}
@@ -451,7 +432,8 @@ export function SettingsPage() {
                     智能分流已启用
                   </Badge>
                   <span className="text-xs text-muted-foreground">
-                    火山方舟、阿里云百炼、硅基流动、Kimi、DeepSeek 等国内服务及 <code>*.cn</code> 自动直连旁路。
+                    火山方舟、阿里云百炼、硅基流动、Kimi、DeepSeek 等国内服务及 <code>*.cn</code>{" "}
+                    自动直连旁路。
                   </span>
                 </div>
                 <Button
@@ -544,11 +526,7 @@ export function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void ipc.revealUserData()}
-            >
+            <Button variant="outline" size="sm" onClick={() => void ipc.revealUserData()}>
               打开数据目录
             </Button>
             <Button
@@ -566,10 +544,7 @@ export function SettingsPage() {
                     );
                     if (ok) showToast("备份已导出（不含密钥）");
                   } catch (e) {
-                    showToast(
-                      e instanceof Error ? e.message : "导出失败",
-                      "err",
-                    );
+                    showToast(e instanceof Error ? e.message : "导出失败", "err");
                   } finally {
                     setBackingUp(false);
                   }
@@ -595,7 +570,8 @@ export function SettingsPage() {
               导入备份
             </Button>
             <p className="w-full text-xs text-muted-foreground">
-              备份含服务清单、用量历史和价格覆盖，不含 API Key、Cookie 和代理地址。导入不会写入密钥。
+              备份含服务清单、用量历史和价格覆盖，不含 API Key、Cookie
+              和代理地址。导入不会写入密钥。
             </p>
           </CardContent>
         </Card>
@@ -660,11 +636,7 @@ export function SettingsPage() {
             if (!open) setBackupPending(null);
           }}
           title="导入备份？"
-          description={
-            backupPending
-              ? formatBackupPreviewText(backupPending.preview)
-              : "导入备份"
-          }
+          description={backupPending ? formatBackupPreviewText(backupPending.preview) : "导入备份"}
           confirmLabel="导入"
           onConfirm={() => {
             const pending = backupPending;
@@ -675,8 +647,7 @@ export function SettingsPage() {
                 showToast(formatBackupImportResult(r));
                 void useAppStore.getState().reloadAfterBackupImport();
               },
-              (e: unknown) =>
-                showToast(e instanceof Error ? e.message : "导入失败", "err"),
+              (e: unknown) => showToast(e instanceof Error ? e.message : "导入失败", "err"),
             );
           }}
         />
@@ -699,4 +670,3 @@ export function SettingsPage() {
     </div>
   );
 }
-

@@ -41,27 +41,83 @@ afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-interface AMsg { at: Date; input: number; output: number; reasoning?: number; cacheRead?: number; cacheWrite?: number; cost: number; model?: string }
+interface AMsg {
+  at: Date;
+  input: number;
+  output: number;
+  reasoning?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  cost: number;
+  model?: string;
+}
 
 /** 写一个会话：session 合计 = 消息合计（与 OpenCode 自己的维护方式一致），可加 extra 模拟对不上 */
-function addSession(id: string, created: Date, msgs: AMsg[], opts: { model?: string; extra?: Partial<Record<"input" | "output" | "cost", number>> } = {}): void {
+function addSession(
+  id: string,
+  created: Date,
+  msgs: AMsg[],
+  opts: { model?: string; extra?: Partial<Record<"input" | "output" | "cost", number>> } = {},
+): void {
   const db = new DatabaseSync(dbPath);
   const sum = { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
   let n = 0;
   for (const m of msgs) {
     const t = m.at.getTime();
-    db.prepare("INSERT INTO message VALUES (?,?,?,?,?)").run(`${id}-u${n}`, id, t - 1000, t - 1000,
-      JSON.stringify({ role: "user", time: { created: t - 1000 }, agent: "build", model: { providerID: "anthropic", modelID: m.model ?? "claude-sonnet-4-5" } }));
-    db.prepare("INSERT INTO message VALUES (?,?,?,?,?)").run(`${id}-a${n}`, id, t, t + 5000,
-      JSON.stringify({ role: "assistant", parentID: `${id}-u${n}`, time: { created: t, completed: t + 5000 }, modelID: m.model ?? "claude-sonnet-4-5", providerID: "anthropic",
-        cost: m.cost, tokens: { input: m.input, output: m.output, reasoning: m.reasoning ?? 0, cache: { read: m.cacheRead ?? 0, write: m.cacheWrite ?? 0 } } }));
+    db.prepare("INSERT INTO message VALUES (?,?,?,?,?)").run(
+      `${id}-u${n}`,
+      id,
+      t - 1000,
+      t - 1000,
+      JSON.stringify({
+        role: "user",
+        time: { created: t - 1000 },
+        agent: "build",
+        model: { providerID: "anthropic", modelID: m.model ?? "claude-sonnet-4-5" },
+      }),
+    );
+    db.prepare("INSERT INTO message VALUES (?,?,?,?,?)").run(
+      `${id}-a${n}`,
+      id,
+      t,
+      t + 5000,
+      JSON.stringify({
+        role: "assistant",
+        parentID: `${id}-u${n}`,
+        time: { created: t, completed: t + 5000 },
+        modelID: m.model ?? "claude-sonnet-4-5",
+        providerID: "anthropic",
+        cost: m.cost,
+        tokens: {
+          input: m.input,
+          output: m.output,
+          reasoning: m.reasoning ?? 0,
+          cache: { read: m.cacheRead ?? 0, write: m.cacheWrite ?? 0 },
+        },
+      }),
+    );
     n++;
-    sum.input += m.input; sum.output += m.output; sum.reasoning += m.reasoning ?? 0;
-    sum.cacheRead += m.cacheRead ?? 0; sum.cacheWrite += m.cacheWrite ?? 0; sum.cost += m.cost;
+    sum.input += m.input;
+    sum.output += m.output;
+    sum.reasoning += m.reasoning ?? 0;
+    sum.cacheRead += m.cacheRead ?? 0;
+    sum.cacheWrite += m.cacheWrite ?? 0;
+    sum.cost += m.cost;
   }
-  db.prepare("INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?)").run(id, "p", "t", JSON.stringify({ id: opts.model ?? "claude-sonnet-4-5", providerID: "anthropic" }),
-    sum.cost + (opts.extra?.cost ?? 0), sum.input + (opts.extra?.input ?? 0), sum.output + (opts.extra?.output ?? 0), sum.reasoning, sum.cacheRead, sum.cacheWrite,
-    created.getTime(), created.getTime());
+  db.prepare("INSERT INTO session VALUES (?,?,?,?,?,?,?,?,?,?,?,?)").run(
+    id,
+    "p",
+    "t",
+    JSON.stringify({ id: opts.model ?? "claude-sonnet-4-5", providerID: "anthropic" }),
+    sum.cost + (opts.extra?.cost ?? 0),
+    sum.input + (opts.extra?.input ?? 0),
+    sum.output + (opts.extra?.output ?? 0),
+    sum.reasoning,
+    sum.cacheRead,
+    sum.cacheWrite,
+    created.getTime(),
+    created.getTime(),
+  );
   db.close();
 }
 
@@ -77,20 +133,36 @@ describe("scanOpenCode 按消息时间归档", () => {
     const { available, rows } = await scanOpenCode(undefined, dbPath);
     expect(available).toBe(true);
     const byDate = Object.fromEntries(rows.map((r) => [r.date, r]));
-    expect(Object.keys(byDate).sort()).toEqual([toDateKey(d(1).getTime())!, toDateKey(d(2).getTime())!, toDateKey(d(5).getTime())!]);
-    expect(byDate[toDateKey(d(2).getTime())!]).toMatchObject({ inputTokens: 200, outputTokens: 20, sessions: 1 });
+    expect(Object.keys(byDate).sort()).toEqual([
+      toDateKey(d(1).getTime())!,
+      toDateKey(d(2).getTime())!,
+      toDateKey(d(5).getTime())!,
+    ]);
+    expect(byDate[toDateKey(d(2).getTime())!]).toMatchObject({
+      inputTokens: 200,
+      outputTokens: 20,
+      sessions: 1,
+    });
     expect(byDate[toDateKey(d(2).getTime())!].cost).toBeCloseTo(0.2);
     expect(rows.reduce((s, r) => s + r.inputTokens, 0)).toBe(600);
     expect(rows.reduce((s, r) => s + (r.cost ?? 0), 0)).toBeCloseTo(0.6);
   });
 
   it("会话中途切模型时按消息的 modelID 归模型", async () => {
-    addSession("s1", d(1), [
-      { at: d(1, 10), input: 100, output: 10, cost: 0.1, model: "claude-sonnet-4-5" },
-      { at: d(1, 11), input: 50, output: 5, cost: 0.05, model: "gpt-5" },
-    ], { model: "gpt-5" });
+    addSession(
+      "s1",
+      d(1),
+      [
+        { at: d(1, 10), input: 100, output: 10, cost: 0.1, model: "claude-sonnet-4-5" },
+        { at: d(1, 11), input: 50, output: 5, cost: 0.05, model: "gpt-5" },
+      ],
+      { model: "gpt-5" },
+    );
     const { rows } = await scanOpenCode(undefined, dbPath);
-    expect(rows.map((r) => [r.model, r.inputTokens]).sort()).toEqual([["claude-sonnet-4-5", 100], ["gpt-5", 50]]);
+    expect(rows.map((r) => [r.model, r.inputTokens]).sort()).toEqual([
+      ["claude-sonnet-4-5", 100],
+      ["gpt-5", 50],
+    ]);
   });
 
   it("reasoning 已含在 output 里时照旧拆开（逐条消息）", async () => {
@@ -100,7 +172,9 @@ describe("scanOpenCode 按消息时间归档", () => {
   });
 
   it("消息合计少于 session 合计时，差额照旧归到会话创建日", async () => {
-    addSession("s1", d(1), [{ at: d(3), input: 100, output: 10, cost: 0.1 }], { extra: { input: 7, cost: 0.01 } });
+    addSession("s1", d(1), [{ at: d(3), input: 100, output: 10, cost: 0.1 }], {
+      extra: { input: 7, cost: 0.01 },
+    });
     const { rows } = await scanOpenCode(undefined, dbPath);
     const byDate = Object.fromEntries(rows.map((r) => [r.date, r]));
     expect(byDate[toDateKey(d(3).getTime())!].inputTokens).toBe(100);
@@ -109,7 +183,9 @@ describe("scanOpenCode 按消息时间归档", () => {
   });
 
   it("消息合计超过 session 合计（数据不一致）时整段退回旧口径，总量不比以前多", async () => {
-    addSession("s1", d(1), [{ at: d(3), input: 100, output: 10, cost: 0.1 }], { extra: { input: -50 } });
+    addSession("s1", d(1), [{ at: d(3), input: 100, output: 10, cost: 0.1 }], {
+      extra: { input: -50 },
+    });
     const { rows } = await scanOpenCode(undefined, dbPath);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ date: toDateKey(d(1).getTime()), inputTokens: 50 });
@@ -144,20 +220,39 @@ describe("scanOpenCode 按消息时间归档", () => {
 
     // 偷偷改消息但不动 session 合计：命中缓存就不会看到这次改动
     const db = new DatabaseSync(dbPath);
-    db.prepare("UPDATE message SET data = json_set(data, '$.tokens.input', 999) WHERE id = 's1-a0'").run();
+    db.prepare(
+      "UPDATE message SET data = json_set(data, '$.tokens.input', 999) WHERE id = 's1-a0'",
+    ).run();
     db.close();
     const second = await scanOpenCode(undefined, dbPath);
     expect(second.rows).toEqual(first.rows);
 
     // session 合计变了（新消息落库）才重算该会话
     const db2 = new DatabaseSync(dbPath);
-    db2.prepare("UPDATE message SET data = json_set(data, '$.tokens.input', 100) WHERE id = 's1-a0'").run();
-    db2.prepare("INSERT INTO message VALUES ('s1-a9','s1',?,?,?)").run(d(6).getTime(), d(6).getTime(),
-      JSON.stringify({ role: "assistant", time: { created: d(6).getTime() }, modelID: "claude-sonnet-4-5", cost: 0.4, tokens: { input: 40, output: 4, reasoning: 0, cache: { read: 0, write: 0 } } }));
-    db2.prepare("UPDATE session SET tokens_input = tokens_input + 40, tokens_output = tokens_output + 4, cost = cost + 0.4 WHERE id = 's1'").run();
+    db2
+      .prepare("UPDATE message SET data = json_set(data, '$.tokens.input', 100) WHERE id = 's1-a0'")
+      .run();
+    db2.prepare("INSERT INTO message VALUES ('s1-a9','s1',?,?,?)").run(
+      d(6).getTime(),
+      d(6).getTime(),
+      JSON.stringify({
+        role: "assistant",
+        time: { created: d(6).getTime() },
+        modelID: "claude-sonnet-4-5",
+        cost: 0.4,
+        tokens: { input: 40, output: 4, reasoning: 0, cache: { read: 0, write: 0 } },
+      }),
+    );
+    db2
+      .prepare(
+        "UPDATE session SET tokens_input = tokens_input + 40, tokens_output = tokens_output + 4, cost = cost + 0.4 WHERE id = 's1'",
+      )
+      .run();
     db2.close();
     const third = await scanOpenCode(undefined, dbPath);
-    expect(third.rows.find((r) => r.date === toDateKey(d(6).getTime()))).toMatchObject({ inputTokens: 40 });
+    expect(third.rows.find((r) => r.date === toDateKey(d(6).getTime()))).toMatchObject({
+      inputTokens: 40,
+    });
     expect(third.rows.reduce((s, r) => s + r.inputTokens, 0)).toBe(145);
   });
 

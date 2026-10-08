@@ -8,7 +8,10 @@ import { buildCsp } from "./http";
  */
 
 function directive(csp: string, name: string): string[] {
-  const part = csp.split(";").map((s) => s.trim()).find((s) => s.startsWith(`${name} `));
+  const part = csp
+    .split(";")
+    .map((s) => s.trim())
+    .find((s) => s.startsWith(`${name} `));
   return part ? part.split(/\s+/).slice(1) : [];
 }
 
@@ -62,7 +65,10 @@ describe("ui/index.html 与生产 CSP 兼容", () => {
     expect(head).toMatch(/<script src="\/pet-boot\.js"><\/script>/);
     const boot = fs.readFileSync(path.resolve(__dirname, "../../ui/public/pet-boot.js"), "utf8");
     // 在一个最小 DOM 替身里跑一遍：#/pet 时加类，其它路由不加
-    for (const [hash, expected] of [["#/pet", true], ["#/", false]] as const) {
+    for (const [hash, expected] of [
+      ["#/pet", true],
+      ["#/", false],
+    ] as const) {
       const classes = new Set<string>();
       const fn = new Function("location", "document", boot);
       fn({ hash }, { documentElement: { classList: { add: (c: string) => classes.add(c) } } });

@@ -19,8 +19,6 @@ describe("parseMonthlyBudgetUsd", () => {
   });
 
   it("超过上限夹到上限", () => {
-    expect(parseMonthlyBudgetUsd(String(MAX_MONTHLY_BUDGET_USD + 1))).toBe(
-      MAX_MONTHLY_BUDGET_USD,
-    );
+    expect(parseMonthlyBudgetUsd(String(MAX_MONTHLY_BUDGET_USD + 1))).toBe(MAX_MONTHLY_BUDGET_USD);
   });
 });

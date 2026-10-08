@@ -102,12 +102,14 @@ function readLimit(raw: Record<string, unknown>): QuotaLimit {
  * 优先用 usage（总量）+ currentValue/remaining 的绝对计数；
  * 只有百分比时退回 100 分制，好画进度条。
  */
-export function measureLimit(limit: QuotaLimit): {
-  used?: number;
-  total?: number;
-  remaining?: number;
-  unit: string;
-} | undefined {
+export function measureLimit(limit: QuotaLimit):
+  | {
+      used?: number;
+      total?: number;
+      remaining?: number;
+      unit: string;
+    }
+  | undefined {
   const isMcp = limit.type === "TIME_LIMIT";
   const countUnit = isMcp ? "次" : "tokens";
   const total = limit.usage;
@@ -143,7 +145,15 @@ function parseLimitsArray(data: unknown): QuotaLimit[] {
 export function planLevelLabel(data: unknown): string | undefined {
   if (!data || typeof data !== "object") return undefined;
   const obj = data as Record<string, unknown>;
-  for (const k of ["planName", "plan_name", "productName", "packageName", "plan", "plan_type", "level"]) {
+  for (const k of [
+    "planName",
+    "plan_name",
+    "productName",
+    "packageName",
+    "plan",
+    "plan_type",
+    "level",
+  ]) {
     const v = obj[k];
     if (typeof v === "string" && v.trim()) {
       const key = v.trim().toLowerCase();
@@ -250,14 +260,11 @@ export const zhipuPlanAdapter: Adapter = {
     ]);
 
     if (quota.status === "rejected") {
-      throw quota.reason instanceof Error
-        ? quota.reason
-        : new Error(String(quota.reason));
+      throw quota.reason instanceof Error ? quota.reason : new Error(String(quota.reason));
     }
 
     const parsed = parseQuotaLimits(quota.value);
-    const subName =
-      sub.status === "fulfilled" ? pickSubscriptionName(sub.value) : undefined;
+    const subName = sub.status === "fulfilled" ? pickSubscriptionName(sub.value) : undefined;
     const level = parsed.level ?? subName;
 
     if (parsed.windows.length === 0) {

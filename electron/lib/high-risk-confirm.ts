@@ -14,7 +14,8 @@ import type { HighRiskResult } from "../../shared/types";
  * - 默认按钮与取消按钮都是「取消」（回车 / Esc / 关窗都不会执行）。
  */
 
-export type HighRiskAction = "enable-claude" | "enable-opencode" | "disable-claude" | "disable-opencode" | "launch-codex";
+export type HighRiskAction =
+  "enable-claude" | "enable-opencode" | "disable-claude" | "disable-opencode" | "launch-codex";
 
 /** 交给渲染进程的结果：确认后执行返回 ok；用户取消或已有待确认的操作时不执行（定义在 shared/types） */
 export type { HighRiskResult };
@@ -43,7 +44,9 @@ export interface ConfirmContent {
 }
 
 export const CANCEL_LABEL = "取消";
-export const CONFIRM_PENDING: HighRiskResult<never> = Object.freeze({ status: "confirm-pending" }) as HighRiskResult<never>;
+export const CONFIRM_PENDING: HighRiskResult<never> = Object.freeze({
+  status: "confirm-pending",
+}) as HighRiskResult<never>;
 
 export function buildConfirmContent(action: HighRiskAction, ctx: HighRiskContext): ConfirmContent {
   const p = ctx.platform === "win32" ? path.win32 : path.posix;
@@ -154,7 +157,11 @@ export interface HighRiskConfirmDeps {
 
 export interface HighRiskConfirm {
   /** 弹确认框；确认后执行 fn。fn 抛错照常抛给调用方 */
-  run<T>(action: HighRiskAction, event: unknown, fn: () => T | Promise<T>): Promise<HighRiskResult<Awaited<T>>>;
+  run<T>(
+    action: HighRiskAction,
+    event: unknown,
+    fn: () => T | Promise<T>,
+  ): Promise<HighRiskResult<Awaited<T>>>;
   /** 是否有确认框正开着 */
   readonly pending: boolean;
 }

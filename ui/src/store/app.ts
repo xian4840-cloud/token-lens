@@ -4,10 +4,7 @@ import { addDateKey, localDateKey } from "@/lib/format";
 import { DEFAULT_BYPASS_RULES as DEFAULT_BYPASS } from "@/lib/proxy";
 import { reportError } from "@/lib/error-reporting";
 import { showToast } from "@/lib/toast";
-import {
-  refreshFailureMessage,
-  usageRefreshFailureMessage,
-} from "@/lib/refresh-summary";
+import { refreshFailureMessage, usageRefreshFailureMessage } from "@/lib/refresh-summary";
 import { parseIdList, toggleId } from "@/lib/id-list";
 import type {
   BalanceResult,
@@ -94,15 +91,10 @@ interface AppState {
     bypassRules?: string;
   }) => Promise<ProxyTestResult>;
   loadUsage: (since?: string) => Promise<void>;
-  refreshUsage: (
-    id: string,
-    period: { start: string; end: string },
-  ) => Promise<void>;
+  refreshUsage: (id: string, period: { start: string; end: string }) => Promise<void>;
   refreshAllUsage: (period: { start: string; end: string }) => Promise<void>;
   loadPricing: () => Promise<void>;
-  savePricing: (
-    overrides: Record<string, Partial<ModelPricing>>,
-  ) => Promise<void>;
+  savePricing: (overrides: Record<string, Partial<ModelPricing>>) => Promise<void>;
   scanLocalUsage: (since?: string) => Promise<void>;
   loadLocalDaily: (since?: string) => Promise<void>;
   loadTodayLocal: () => Promise<void>;
@@ -112,7 +104,6 @@ interface AppState {
   setTrendsTab: (tab: "balance" | "local") => void;
   setTrendsMetric: (metric: "tokens" | "cost") => void;
 }
-
 
 export const useAppStore = create<AppState>((set, get) => ({
   definitions: [],
@@ -364,7 +355,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-
   loadUsage: async (since) => {
     const seq = ++usageSeq;
     const records = await ipc.listUsage(undefined, since);
@@ -387,13 +377,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const { services, definitions } = get();
       const supported = services.filter((s) =>
-        definitions.some(
-          (d) => d.provider === s.provider && d.supportsUsage,
-        ),
+        definitions.some((d) => d.provider === s.provider && d.supportsUsage),
       );
-      await Promise.allSettled(
-        supported.map((s) => get().refreshUsage(s.id, period)),
-      );
+      await Promise.allSettled(supported.map((s) => get().refreshUsage(s.id, period)));
       const { errors } = get();
       const failed = supported.filter((s) => errors[s.id]);
       const msg = usageRefreshFailureMessage(supported.length, failed.length);
@@ -427,14 +413,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (seq !== localDailySeq) return;
       set({ localDailyRecords: records });
       void get().loadTodayLocal();
-      const unexpected = result.unavailable.filter(
-        (u) => u.reason !== "已在设置中关闭",
-      );
+      const unexpected = result.unavailable.filter((u) => u.reason !== "已在设置中关闭");
       if (unexpected.length > 0) {
-        showToast(
-          `${unexpected.map((u) => u.reason).join("；")}`,
-          "err",
-        );
+        showToast(`${unexpected.map((u) => u.reason).join("；")}`, "err");
       }
     } catch (e) {
       reportError("scanLocalUsage", e);

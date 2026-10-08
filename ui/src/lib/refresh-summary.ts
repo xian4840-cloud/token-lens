@@ -10,26 +10,10 @@ export function batchFailureMessage(
   return someFailed(failed);
 }
 
-export function refreshFailureMessage(
-  total: number,
-  failed: number,
-): string | null {
-  return batchFailureMessage(
-    total,
-    failed,
-    "全部刷新失败",
-    (n) => `${n} 个服务刷新失败`,
-  );
+export function refreshFailureMessage(total: number, failed: number): string | null {
+  return batchFailureMessage(total, failed, "全部刷新失败", (n) => `${n} 个服务刷新失败`);
 }
 
-export function usageRefreshFailureMessage(
-  total: number,
-  failed: number,
-): string | null {
-  return batchFailureMessage(
-    total,
-    failed,
-    "全部用量刷新失败",
-    (n) => `${n} 个服务用量刷新失败`,
-  );
+export function usageRefreshFailureMessage(total: number, failed: number): string | null {
+  return batchFailureMessage(total, failed, "全部用量刷新失败", (n) => `${n} 个服务用量刷新失败`);
 }

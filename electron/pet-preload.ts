@@ -20,7 +20,10 @@ import type {
  * 挂载名仍是 window.tokenLens，界面代码（ui/src/lib/ipc.ts）不用分两套。
  * 类型 TokenLensPetApi 定义在 shared/ipc.ts；preload 在沙箱里，只允许 import type。
  */
-function invoke<C extends InvokeChannel>(channel: C, ...args: InvokeArgs<C>): Promise<InvokeResult<C>> {
+function invoke<C extends InvokeChannel>(
+  channel: C,
+  ...args: InvokeArgs<C>
+): Promise<InvokeResult<C>> {
   return ipcRenderer.invoke(channel, ...args);
 }
 
@@ -28,7 +31,10 @@ function send(channel: SendChannel): void {
   ipcRenderer.send(channel);
 }
 
-function subscribe<C extends EventChannel>(channel: C, cb: (payload: EventPayload<C>) => void): () => void {
+function subscribe<C extends EventChannel>(
+  channel: C,
+  cb: (payload: EventPayload<C>) => void,
+): () => void {
   const handler = (_e: unknown, payload: EventPayload<C>) => cb(payload);
   ipcRenderer.on(channel, handler);
   return () => ipcRenderer.removeListener(channel, handler);

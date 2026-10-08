@@ -24,11 +24,7 @@ import { openScnetLogin } from "./auth/scnet-login";
 import { refreshService } from "./refresh";
 import { refreshUsageInternal } from "./usage";
 import { restart as restartScheduler } from "./scheduler";
-import {
-  validateSettingKey,
-  validatePeriod,
-  validatePricingOverrides,
-} from "./validation";
+import { validateSettingKey, validatePeriod, validatePricingOverrides } from "./validation";
 import {
   applySessionProxy,
   clearProxyAgentCache,
@@ -88,7 +84,12 @@ import {
   enableOpenCodeCapture,
   openCodeCapturePaths,
 } from "./agent-response-capture";
-import { CONFIRM_PENDING, createHighRiskConfirm, type HighRiskConfirm, type HighRiskContext } from "./lib/high-risk-confirm";
+import {
+  CONFIRM_PENDING,
+  createHighRiskConfirm,
+  type HighRiskConfirm,
+  type HighRiskContext,
+} from "./lib/high-risk-confirm";
 import { singleFlight } from "./lib/inflight";
 import { applyBackupImport } from "./backup-import";
 import { createServiceFromInput, updateServiceFromInput } from "./service-update";
@@ -111,14 +112,16 @@ function highRiskContextFromMain(): HighRiskContext {
 
 function defaultHighRiskConfirm(): HighRiskConfirm {
   return createHighRiskConfirm({
-    dialog: { showMessageBox: (win, options) => dialog.showMessageBox(win as BrowserWindow, options) },
+    dialog: {
+      showMessageBox: (win, options) => dialog.showMessageBox(win as BrowserWindow, options),
+    },
     // 只用 event.sender 定位所在窗口（guard 已保证是主窗口），不读取渲染进程提供的任何内容
-    getParent: (event) => BrowserWindow.fromWebContents((event as { sender: Electron.WebContents }).sender) ?? undefined,
+    getParent: (event) =>
+      BrowserWindow.fromWebContents((event as { sender: Electron.WebContents }).sender) ??
+      undefined,
     getContext: highRiskContextFromMain,
   });
 }
-
-
 
 function parseBackupOrThrow(raw: unknown): BackupPayload {
   if (typeof raw !== "string") throw new Error("无效的备份内容");
@@ -166,22 +169,46 @@ export function registerIpc(
   const typed = typedIpc(guard);
   const handle = <C extends InvokeChannel>(channel: C, listener: InvokeHandler<C>) =>
     typed.handle(channel, MAIN_ONLY, listener);
-  handle("model-monitor:state", (_e, date?: unknown, source?: unknown) => getAgentModelMonitorState(date, source, app.getPath("userData")));
+  handle("model-monitor:state", (_e, date?: unknown, source?: unknown) =>
+    getAgentModelMonitorState(date, source, app.getPath("userData")),
+  );
   // 以下五个会写用户目录 / 用户环境变量（HKCU\Environment）或启动外部程序：
   // 1. guard：只接受主窗口、前台、且当前就在「模型监测」页发起的请求；
   // 2. 主进程弹系统确认框（文案只由主进程状态拼出），用户点「继续」才执行；
   //    取消返回 { status: "cancelled" }，已有确认框开着时立即返回 { status: "confirm-pending" }。
   // 处理函数故意不接收任何渲染进程参数。
   typed.handle("model-monitor:enable-opencode", MODEL_MONITOR_HIGH_RISK, (e) =>
-    confirm.run("enable-opencode", e, () => enableOpenCodeCapture(path.join(app.getAppPath(), "electron", "agent-capture", "opencode.mjs"), app.getPath("userData"))));
+    confirm.run("enable-opencode", e, () =>
+      enableOpenCodeCapture(
+        path.join(app.getAppPath(), "electron", "agent-capture", "opencode.mjs"),
+        app.getPath("userData"),
+      ),
+    ),
+  );
   typed.handle("model-monitor:enable-claude", MODEL_MONITOR_HIGH_RISK, (e) =>
-    confirm.run("enable-claude", e, () => enableClaudeCapture(path.join(app.getAppPath(), "electron", "agent-capture"), app.getPath("userData"))));
+    confirm.run("enable-claude", e, () =>
+      enableClaudeCapture(
+        path.join(app.getAppPath(), "electron", "agent-capture"),
+        app.getPath("userData"),
+      ),
+    ),
+  );
   typed.handle("model-monitor:disable-opencode", MODEL_MONITOR_HIGH_RISK, (e) =>
-    confirm.run("disable-opencode", e, () => disableOpenCodeCapture(app.getPath("userData"))));
+    confirm.run("disable-opencode", e, () => disableOpenCodeCapture(app.getPath("userData"))),
+  );
   typed.handle("model-monitor:disable-claude", MODEL_MONITOR_HIGH_RISK, (e) =>
-    confirm.run("disable-claude", e, () => disableClaudeCapture(app.getPath("userData"))));
+    confirm.run("disable-claude", e, () => disableClaudeCapture(app.getPath("userData"))),
+  );
   typed.handle("model-monitor:launch-codex", MODEL_MONITOR_HIGH_RISK, (e) =>
-    confirm.run("launch-codex", e, () => singleFlight(captureLaunch, () => launchCapturedCodex(path.join(app.getAppPath(), "electron", "codex-capture", "CodexCapture.cs"), app.getPath("userData")))));
+    confirm.run("launch-codex", e, () =>
+      singleFlight(captureLaunch, () =>
+        launchCapturedCodex(
+          path.join(app.getAppPath(), "electron", "codex-capture", "CodexCapture.cs"),
+          app.getPath("userData"),
+        ),
+      ),
+    ),
+  );
   handle("app:ping", () => "pong");
   handle("encryption:available", () => isEncryptionAvailable());
 
@@ -205,8 +232,7 @@ export function registerIpc(
       lastBalances: getLastBalances(),
       petEnabled: getSetting("petEnabled") === "1",
       todayLocal: today ? listLocalDailyUsage(today, today) : [],
-      monthLocal:
-        today && historyStart ? listLocalDailyUsage(historyStart, today) : [],
+      monthLocal: today && historyStart ? listLocalDailyUsage(historyStart, today) : [],
     };
   });
 
@@ -273,7 +299,6 @@ export function registerIpc(
     testNetworkConnectivity(optionalProxyOverride(override) as ProxyConfigOverride | undefined),
   );
 
-
   // 手动刷新失败要留痕：用户点了刷新看到报错，日志里得有对应记录，
   // 否则用户描述「刷新报错」时我们对不上任何上下文。
   // 抛出的错误照旧交给前端展示，只是顺带记一笔。
@@ -289,22 +314,16 @@ export function registerIpc(
     }
   });
 
-  handle(
-    "snapshots:list",
-    (_e, serviceId?: unknown, since?: unknown) =>
-      listBalanceSnapshots(optionalId(serviceId), optionalTime(since)),
+  handle("snapshots:list", (_e, serviceId?: unknown, since?: unknown) =>
+    listBalanceSnapshots(optionalId(serviceId), optionalTime(since)),
   );
 
-  handle(
-    "usage:refresh",
-    async (_e, id: unknown, period: unknown) =>
-      refreshUsageInternal(requireId(id), validatePeriod(period)),
+  handle("usage:refresh", async (_e, id: unknown, period: unknown) =>
+    refreshUsageInternal(requireId(id), validatePeriod(period)),
   );
 
-  handle(
-    "usage:list",
-    (_e, serviceId?: unknown, since?: unknown) =>
-      listUsageRecords(optionalId(serviceId), optionalTime(since)),
+  handle("usage:list", (_e, serviceId?: unknown, since?: unknown) =>
+    listUsageRecords(optionalId(serviceId), optionalTime(since)),
   );
 
   handle("pricing:get", () => {
@@ -323,10 +342,8 @@ export function registerIpc(
   handle("local-usage:scan", async (_e, since?: unknown) =>
     scanAndPersistLocalUsage(optionalTime(since)),
   );
-  handle(
-    "local-daily:list",
-    (_e, since?: unknown, until?: unknown) =>
-      listLocalDailyUsage(optionalTime(since), optionalTime(until)),
+  handle("local-daily:list", (_e, since?: unknown, until?: unknown) =>
+    listLocalDailyUsage(optionalTime(since), optionalTime(until)),
   );
 
   handle("auth:volcengine-login", () => openVolcengineLogin());
@@ -368,10 +385,7 @@ export function registerIpc(
     return backupPreviewStats(payload);
   });
   handle("app:import-backup", (_e, raw: unknown) =>
-    applyBackupImport(
-      parseBackupOrThrow(raw),
-      (provider) => getDefinition(provider)?.kind,
-    ),
+    applyBackupImport(parseBackupOrThrow(raw), (provider) => getDefinition(provider)?.kind),
   );
   handle("app:stats", () => dataStats());
   handle("local-usage:import-rows", (_e, rows: unknown) => {
@@ -381,31 +395,28 @@ export function registerIpc(
     upsertLocalDailyUsage(localRows);
     return { imported: localRows.length, skipped: rows.length - localRows.length };
   });
-  handle(
-    "app:save-text",
-    async (_e, defaultName: unknown, content: unknown) => {
-      if (typeof defaultName !== "string" || typeof content !== "string") {
-        throw new Error("无效的导出内容");
-      }
-      if (content.length > 20_000_000) throw new Error("导出内容过大");
-      const win = BrowserWindow.fromWebContents(_e.sender);
-      const saveOpts = {
-        defaultPath: defaultName.replace(/[/\\]/g, "_").slice(0, 120),
-        filters: saveDialogFilters(defaultName),
-      };
-      const result = win
-        ? await dialog.showSaveDialog(win, saveOpts)
-        : await dialog.showSaveDialog(saveOpts);
-      if (result.canceled || !result.filePath) return false;
-      try {
-        await fs.promises.writeFile(result.filePath, content, "utf8");
-      } catch (e) {
-        logError("export", e);
-        throw new Error("写入文件失败");
-      }
-      return true;
-    },
-  );
+  handle("app:save-text", async (_e, defaultName: unknown, content: unknown) => {
+    if (typeof defaultName !== "string" || typeof content !== "string") {
+      throw new Error("无效的导出内容");
+    }
+    if (content.length > 20_000_000) throw new Error("导出内容过大");
+    const win = BrowserWindow.fromWebContents(_e.sender);
+    const saveOpts = {
+      defaultPath: defaultName.replace(/[/\\]/g, "_").slice(0, 120),
+      filters: saveDialogFilters(defaultName),
+    };
+    const result = win
+      ? await dialog.showSaveDialog(win, saveOpts)
+      : await dialog.showSaveDialog(saveOpts);
+    if (result.canceled || !result.filePath) return false;
+    try {
+      await fs.promises.writeFile(result.filePath, content, "utf8");
+    } catch (e) {
+      logError("export", e);
+      throw new Error("写入文件失败");
+    }
+    return true;
+  });
   handle("logs:clear", () => {
     clearLogs();
     return true;

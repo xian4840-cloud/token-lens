@@ -11,16 +11,11 @@ export function toCsv(
     if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
     return s;
   };
-  const lines = [
-    headers.map(esc).join(","),
-    ...rows.map((r) => r.map(esc).join(",")),
-  ];
+  const lines = [headers.map(esc).join(","), ...rows.map((r) => r.map(esc).join(","))];
   return `\uFEFF${lines.join("\r\n")}`;
 }
 
-export type ParsedCsv =
-  | { ok: true; rows: string[][] }
-  | { ok: false; error: string };
+export type ParsedCsv = { ok: true; rows: string[][] } | { ok: false; error: string };
 
 /**
  * 解析 CSV（含 BOM、引号转义、CRLF）。
@@ -85,12 +80,7 @@ export function parseCsv(text: string): ParsedCsv {
   return { ok: true, rows };
 }
 
-const PRICE_FIELDS = [
-  "inputPerM",
-  "outputPerM",
-  "cacheReadPerM",
-  "cacheWritePerM",
-] as const;
+const PRICE_FIELDS = ["inputPerM", "outputPerM", "cacheReadPerM", "cacheWritePerM"] as const;
 
 type PriceField = (typeof PRICE_FIELDS)[number];
 
@@ -284,10 +274,7 @@ export function applyLocalUsageCsv(csvText: string): LocalCsvApplyResult {
     sessions: findCol(headers, LOCAL_HEADER_ALIASES.sessions ?? []),
     inputTokens: findCol(headers, LOCAL_HEADER_ALIASES.inputTokens ?? []),
     outputTokens: findCol(headers, LOCAL_HEADER_ALIASES.outputTokens ?? []),
-    cacheCreationTokens: findCol(
-      headers,
-      LOCAL_HEADER_ALIASES.cacheCreationTokens ?? [],
-    ),
+    cacheCreationTokens: findCol(headers, LOCAL_HEADER_ALIASES.cacheCreationTokens ?? []),
     cacheReadTokens: findCol(headers, LOCAL_HEADER_ALIASES.cacheReadTokens ?? []),
     reasoningTokens: findCol(headers, LOCAL_HEADER_ALIASES.reasoningTokens ?? []),
     cost: findCol(headers, LOCAL_HEADER_ALIASES.cost ?? []),
@@ -348,8 +335,7 @@ export function applyLocalUsageCsv(csvText: string): LocalCsvApplyResult {
         cost = n;
       }
     }
-    const currencyRaw =
-      cols.currency >= 0 ? (cells[cols.currency] ?? "").trim() : "";
+    const currencyRaw = cols.currency >= 0 ? (cells[cols.currency] ?? "").trim() : "";
     rows.push({
       source: source as LocalSource,
       model,
