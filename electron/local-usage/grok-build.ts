@@ -7,6 +7,8 @@ import { toDateKey } from "./date";
 import { secToIso } from "../lib/time";
 import {
   getScanCache,
+  markScanCacheDirty,
+  pruneScanCache,
   isGrokEntryValid,
   type GrokFileEntry,
   type GrokModelDayAgg,
@@ -198,7 +200,7 @@ export async function scanGrokBuild(since?: string): Promise<GrokScanResult> {
   }
 
   // 会话目录里混着 prompt_history.jsonl 等非用量文件，只认每会话一份的 updates.jsonl
-  const files = listJsonlFilesWithStat(GROK_SESSIONS_DIR).filter(
+  const files = (await listJsonlFilesWithStat(GROK_SESSIONS_DIR)).filter(
     (f) => path.basename(f.path) === "updates.jsonl",
   );
   if (files.length === 0) {
@@ -210,6 +212,7 @@ export async function scanGrokBuild(since?: string): Promise<GrokScanResult> {
   }
 
   const cache = getScanCache();
+  pruneScanCache("grok", new Set(files.map((f) => f.path)));
   const sinceMs = since ? Date.parse(since) : Number.NaN;
   const agg = new Map<string, ModelDayAgg>();
 
@@ -262,6 +265,7 @@ export async function scanGrokBuild(since?: string): Promise<GrokScanResult> {
       addTurn(agg, file.path, ts, update.usage, since, newEntry);
     }
     cache.grok[file.path] = newEntry;
+    markScanCacheDirty();
   }
 
   return {

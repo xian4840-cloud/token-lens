@@ -1,10 +1,10 @@
 import type { BrowserWindow } from "electron";
 import { listServices, getSetting } from "./db";
-import { refreshServiceInternal } from "./refresh";
+import { refreshServices } from "./refresh";
 import { scanAndPersistLocalUsage } from "./local-usage";
 import { logError } from "./lib/logger";
 import { mapErrorToUserMessage } from "./lib/user-error";
-import { createBusyLock, mapPool } from "./lib/concurrency";
+import { createBusyLock } from "./lib/concurrency";
 import { flushDb } from "./db";
 import type { BalanceResult } from "./types";
 
@@ -14,7 +14,6 @@ import type { BalanceResult } from "./types";
 let timer: NodeJS.Timeout | null = null;
 let mainWin: BrowserWindow | null = null;
 const refreshLock = createBusyLock();
-const REFRESH_CONCURRENCY = 3;
 
 export function setMainWindow(win: BrowserWindow | null): void {
   mainWin = win;
@@ -31,22 +30,22 @@ function notify(
   }
 }
 
-/** 刷新所有服务：有限并发，单个失败不影响其他；本地扫描与余额拆开。 */
+/**
+ * 刷新所有服务：单个失败不影响其他；本地扫描与余额拆开。
+ * 并发上限与「同一服务不重复请求」由 refresh.ts 的统一调度负责，与手动刷新共享；
+ * 失败日志也在那里记（自动刷新在后台跑，用户只看到卡片不更新，必须留痕）。
+ */
 async function refreshAll(): Promise<void> {
   const started = refreshLock.tryRun(async () => {
     // 备份恢复、尚未补密钥的服务不进后台轮询：每轮必然失败，只会刷日志
     const services = listServices().filter((s) => !s.needsCredentials);
-    await mapPool(services, REFRESH_CONCURRENCY, async (s) => {
-      try {
-        const balance = await refreshServiceInternal(s.id);
-        notify(s.id, { balance });
-      } catch (e) {
-        // 记日志：自动刷新在后台跑，用户看到的只是卡片一直不更新，
-        // 不落盘的话事后完全无从查证是哪个服务在报什么错
-        logError(`refresh:${s.provider}`, e);
-        notify(s.id, { error: mapErrorToUserMessage(e) });
-      }
-    });
+    await Promise.all(
+      services.map(async (s) => {
+        const [result] = await refreshServices([s.id]);
+        if (result.status === "fulfilled") notify(s.id, { balance: result.value });
+        else notify(s.id, { error: mapErrorToUserMessage(result.reason) });
+      }),
+    );
     flushDb();
   });
   if (!started) return;

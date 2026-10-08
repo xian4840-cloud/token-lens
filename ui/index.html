@@ -10,11 +10,8 @@
         background: transparent !important;
       }
     </style>
-    <script>
-      if (location.hash === "#/pet") {
-        document.documentElement.classList.add("pet-window");
-      }
-    </script>
+    <!-- 同源外链（不能内联：生产 CSP 为 script-src 'self'），见 public/pet-boot.js -->
+    <script src="/pet-boot.js"></script>
   </head>
   <body>
     <div id="root"></div>

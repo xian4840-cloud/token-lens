@@ -84,7 +84,7 @@ export function observationsFromEvents(events: UsageEvents, responseModels: Read
 }
 
 async function readSession(file: string): Promise<ParsedSession> {
-  const stat = fs.statSync(file);
+  const stat = await fs.promises.stat(file);
   const hit = cache.get(file);
   if (hit?.mtimeMs === stat.mtimeMs && hit.size === stat.size) return hit.parsed;
   const events: UsageEvents = [];
@@ -118,13 +118,13 @@ async function readSession(file: string): Promise<ParsedSession> {
   return parsed;
 }
 
-function readTitles(root: string): Map<string, string> {
+async function readTitles(root: string): Promise<Map<string, string>> {
   const index = path.join(root, "session_index.jsonl");
   try {
-    const stat = fs.statSync(index);
+    const stat = await fs.promises.stat(index);
     if (titleCache?.path === index && titleCache.mtimeMs === stat.mtimeMs) return titleCache.titles;
     const titles = new Map<string, string>();
-    for (const line of fs.readFileSync(index, "utf8").split("\n")) {
+    for (const line of (await fs.promises.readFile(index, "utf8")).split("\n")) {
       try {
         const entry = JSON.parse(line);
         const id = smallString(entry.id), name = smallString(entry.thread_name);
@@ -142,10 +142,14 @@ export function validateModelMonitorDate(date?: unknown): asserts date is string
 
 export async function getModelMonitorState(date?: unknown, root = process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), dataRoot = root): Promise<ModelMonitorState> {
   validateModelMonitorDate(date);
-  const titles = readTitles(root);
+  const [titles, live, archived] = await Promise.all([
+    readTitles(root),
+    listJsonlFilesWithStat(path.join(root, "sessions")),
+    listJsonlFilesWithStat(path.join(root, "archived_sessions")),
+  ]);
   const files = [
-    ...listJsonlFilesWithStat(path.join(root, "sessions")).map(f => ({ ...f, archived: false })),
-    ...listJsonlFilesWithStat(path.join(root, "archived_sessions")).map(f => ({ ...f, archived: true })),
+    ...live.map(f => ({ ...f, archived: false })),
+    ...archived.map(f => ({ ...f, archived: true })),
   ].sort((a, b) => b.mtimeMs - a.mtimeMs);
   const paths = new Map<string, string>();
   const sessions: ModelMonitorSession[] = [];
@@ -155,12 +159,12 @@ export async function getModelMonitorState(date?: unknown, root = process.env.CO
     paths.set(id, file.path);
     sessions.push({ id, name: titles.get(id) ?? id, modifiedAt: new Date(file.mtimeMs).toISOString(), archived: file.archived });
   }
-  const state: ModelMonitorState = { source: "codex", root, scannedAt: new Date().toISOString(), sessions, days: [], selectedDate: date, callCount: 0, records: [], capture: getCodexCaptureState(dataRoot) };
+  const state: ModelMonitorState = { source: "codex", root, scannedAt: new Date().toISOString(), sessions, days: [], selectedDate: date, callCount: 0, records: [], capture: await getCodexCaptureState(dataRoot) };
   if (!sessions.length) return { ...state, unavailable: "未找到本地 Codex 会话记录" };
   const livePaths = new Set(paths.values());
   for (const file of cache.keys()) if (!livePaths.has(file)) cache.delete(file);
   const results = await mapPool(sessions, 3, session => readSession(paths.get(session.id)!));
-  const capturedModels = readCapturedModels(dataRoot);
+  const capturedModels = await readCapturedModels(dataRoot);
   const groups = sessions.flatMap((session, i) => {
     const result = results[i];
     if (result.status === "rejected") return [];

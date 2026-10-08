@@ -4,6 +4,8 @@ import { ANTIGRAVITY_CONVERSATIONS_DIR } from "./paths";
 import { toDateKey } from "./date";
 import {
   getScanCache,
+  markScanCacheDirty,
+  pruneScanCache,
   isAntigravityEntryValid,
   type AntigravityFileEntry,
   type AntigravityModelDayAgg,
@@ -152,11 +154,11 @@ function enumToModel(e: number): string {
 }
 
 /** 会话 db 的有效 mtime：WAL 未 checkpoint 时主文件不变，需并入 -wal 的 mtime */
-function effectiveMtime(dbPath: string): number {
+async function effectiveMtime(dbPath: string): Promise<number> {
   try {
-    let m = fs.statSync(dbPath).mtimeMs;
+    let m = (await fs.promises.stat(dbPath)).mtimeMs;
     try {
-      m = Math.max(m, fs.statSync(dbPath + "-wal").mtimeMs);
+      m = Math.max(m, (await fs.promises.stat(dbPath + "-wal")).mtimeMs);
     } catch {
       // 无 -wal 文件，正常
     }
@@ -225,8 +227,7 @@ export async function scanAntigravity(since?: string): Promise<AntigravityResult
 
   let dbFiles: string[];
   try {
-    dbFiles = fs
-      .readdirSync(ANTIGRAVITY_CONVERSATIONS_DIR)
+    dbFiles = (await fs.promises.readdir(ANTIGRAVITY_CONVERSATIONS_DIR))
       .filter((f) => f.endsWith(".db"))
       .map((f) => path.join(ANTIGRAVITY_CONVERSATIONS_DIR, f));
   } catch (e) {
@@ -251,13 +252,14 @@ export async function scanAntigravity(since?: string): Promise<AntigravityResult
   }
 
   const cache = getScanCache();
+  pruneScanCache("antigravity", new Set(dbFiles));
   const sinceMs = since ? Date.parse(since) : Number.NaN;
   const agg = new Map<string, ModelDayAgg>();
   let attempted = 0; // 实际尝试打开的会话数（不含 A 类界外跳过）
   let dbOpenFailures = 0;
 
   for (const dbPath of dbFiles) {
-    const mtimeMs = effectiveMtime(dbPath);
+    const mtimeMs = await effectiveMtime(dbPath);
     if (mtimeMs === 0) continue;
 
     // A 类：mtime 明显早于 since -> 该会话所有用量都在界外，整体跳过
@@ -345,6 +347,7 @@ export async function scanAntigravity(since?: string): Promise<AntigravityResult
       agg.get(k)?.sessions.add(dbPath);
     }
     cache.antigravity[dbPath] = newEntry;
+    markScanCacheDirty();
   }
 
   const out: LocalUsageRow[] = Array.from(agg.entries()).map(([key, v]) => {

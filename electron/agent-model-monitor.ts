@@ -20,9 +20,10 @@ type Group = { session: ModelMonitorSession; records: ModelMonitorRecord[] };
 const cache = new Map<string, { stamp: string; group: Group }>();
 const text = (v: unknown): string | undefined => typeof v === "string" && v.length > 0 && v.length <= 256 ? v : undefined;
 const tokens = (v: unknown): number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? v : 0;
-function stamp(file: string): string {
-  try { const s = fs.statSync(file); return `${s.mtimeMs}:${s.size}`; } catch { return "missing"; }
+async function stamp(file: string): Promise<string> {
+  try { const s = await fs.promises.stat(file); return `${s.mtimeMs}:${s.size}`; } catch { return "missing"; }
 }
+const exists = (file: string) => fs.promises.access(file).then(() => true, () => false);
 async function lines(file: string, read: (row: any) => void): Promise<void> {
   const stream = fs.createReadStream(file, { encoding: "utf8" });
   const input = readline.createInterface({ input: stream, crlfDelay: Infinity });
@@ -34,10 +35,11 @@ async function lines(file: string, read: (row: any) => void): Promise<void> {
     }
   } finally { input.close(); stream.destroy(); }
 }
-function grokArchives(dir: string): string[] {
-  return ["compaction_requests", "recap_requests"].flatMap(name => {
-    try { return fs.readdirSync(path.join(dir, name)).filter(f => f.endsWith(".json")).map(f => path.join(dir, name, f)); } catch { return []; }
-  }).sort();
+async function grokArchives(dir: string): Promise<string[]> {
+  const lists = await Promise.all(["compaction_requests", "recap_requests"].map(async name => {
+    try { return (await fs.promises.readdir(path.join(dir, name))).filter(f => f.endsWith(".json")).map(f => path.join(dir, name, f)); } catch { return []; }
+  }));
+  return lists.flat().sort();
 }
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 async function readClaude(file: string, modifiedAt: string): Promise<Group> {
@@ -61,7 +63,7 @@ async function readGrok(file: string, modifiedAt: string): Promise<Group> {
   try { session.name = text(JSON.parse(await fs.promises.readFile(path.join(dir, "summary.json"), "utf8")).generated_title) ?? session.name; } catch { /* Optional title. */ }
   const turns: { start: number; end?: number; model?: string }[] = [];
   const events = path.join(dir, "events.jsonl");
-  if (fs.existsSync(events)) await lines(events, row => {
+  if (await exists(events)) await lines(events, row => {
     const time = typeof row.ts === "string" ? Date.parse(row.ts) : NaN;
     if (!Number.isFinite(time)) return;
     if (row.type === "turn_started") {
@@ -115,7 +117,7 @@ async function readGrok(file: string, modifiedAt: string): Promise<Group> {
   }
   let historyIndex: number | undefined;
   const historyFile = path.join(dir, "chat_history.jsonl");
-  if (fs.existsSync(historyFile)) await lines(historyFile, row => {
+  if (await exists(historyFile)) await lines(historyFile, row => {
     if (row.type === "user" && (Number.isSafeInteger(row.prompt_index) || !row.synthetic_reason || row.synthetic_reason === "human")) {
       historyIndex = promptIndex(row);
       if (historyIndex === undefined) return;
@@ -124,10 +126,10 @@ async function readGrok(file: string, modifiedAt: string): Promise<Group> {
     } else if (row.type === "assistant" && historyIndex !== undefined) liveRows.get(historyIndex)!.push({ hash: digest(JSON.stringify(row)), model: text(row.model_id) });
   });
   merge(liveRows);
-  for (const archive of grokArchives(dir)) {
+  for (const archive of await grokArchives(dir)) {
     try {
       // ponytail: one native archive at a time, discard bodies after extracting hashes/model names.
-      if (fs.statSync(archive).size > 16 * 1024 * 1024) continue;
+      if ((await fs.promises.stat(archive)).size > 16 * 1024 * 1024) continue;
       const rows = JSON.parse(await fs.promises.readFile(archive, "utf8")).chat_history;
       if (!Array.isArray(rows)) continue;
       const archived = new Map<number, { hash: string; model?: string }[]>();
@@ -190,6 +192,16 @@ async function readGrok(file: string, modifiedAt: string): Promise<Group> {
   });
   return { session, records: [...records.values()] };
 }
+/** OpenCode 监控结果按数据库文件（含 -wal）的 mtime/size 缓存：库没变就不再逐条 json_extract */
+let openCodeCache: { file: string; stamp: string; groups: Group[] } | undefined;
+async function readOpenCodeCached(file: string): Promise<Group[]> {
+  const current = (await Promise.all([file, file + "-wal"].map(stamp))).join("|");
+  if (openCodeCache?.file !== file || openCodeCache.stamp !== current) {
+    openCodeCache = { file, stamp: current, groups: readOpenCode(file) };
+  }
+  // 调用方会改写 group.records / 追加 group，必须给一份浅拷贝
+  return openCodeCache.groups.map(g => ({ session: { ...g.session }, records: [...g.records] }));
+}
 function readOpenCode(file: string): Group[] {
   const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
   const db = new DatabaseSync(file, { readOnly: true });
@@ -234,7 +246,7 @@ export async function getAgentModelMonitorState(date?: unknown, source: unknown 
     // 找不到数据库（例如已卸载 OpenCode）时也要带上采集安装状态，好让用户还能「关闭采集」清理插件
     if (!root) return { ...state, unavailable: "未找到本地 OpenCode 数据库", ...(dataRoot ? { agentCapture: { enabled: false, installed: isOpenCodeCaptureInstalled(dataRoot), requestCount: 0, responseCount: 0 } } : {}) };
     // ponytail: query metadata per refresh; incremental SQL if very large histories become slow.
-    try { groups = readOpenCode(root); } catch { return { ...state, unavailable: "OpenCode 数据库暂时无法读取或版本结构不兼容" }; }
+    try { groups = await readOpenCodeCached(root); } catch { return { ...state, unavailable: "OpenCode 数据库暂时无法读取或版本结构不兼容" }; }
     if (dataRoot) {
       const captures = await readOpenCodeCaptures(dataRoot);
       state.agentCapture = { enabled: isOpenCodeCaptureEnabled(dataRoot), installed: isOpenCodeCaptureInstalled(dataRoot), requestCount: captures.length, responseCount: captures.filter(c => c.responseModel).length };
@@ -260,13 +272,13 @@ export async function getAgentModelMonitorState(date?: unknown, source: unknown 
     }
   } else if (source === "antigravity") {
     let files: string[];
-    try { files = fs.readdirSync(root).filter(f => f.endsWith(".db")).map(f => path.join(root, f)); }
+    try { files = (await fs.promises.readdir(root)).filter(f => f.endsWith(".db")).map(f => path.join(root, f)); }
     catch { return { ...state, unavailable: "未找到或无法读取 Antigravity 本地会话目录" }; }
     const live = new Set(files.map(f => `${source}:${f}`));
     for (const key of cache.keys()) if (key.startsWith(`${source}:`) && !live.has(key)) cache.delete(key);
     let failed = 0;
     for (const file of files) {
-      const key = `${source}:${file}`, current = [file, file + "-wal"].map(stamp).join("|");
+      const key = `${source}:${file}`, current = (await Promise.all([file, file + "-wal"].map(stamp))).join("|");
       try {
         const hit = cache.get(key), group = hit?.stamp === current ? hit.group : readAntigravityModelSession(file);
         cache.set(key, { stamp: current, group }); groups.push(group);
@@ -275,12 +287,14 @@ export async function getAgentModelMonitorState(date?: unknown, source: unknown 
     if (failed) state.unavailable = `${failed} 个 Antigravity 会话库无法读取或版本结构不兼容`;
     else if (files.length && groups.every(g => !g.records.length)) state.unavailable = "会话中未找到可关联的响应模型，当前版本或历史记录可能未保存该字段";
   } else {
-    const files = listJsonlFilesWithStat(root).filter(f => source !== "grok-build" || path.basename(f.path) === "updates.jsonl").sort((a, b) => b.mtimeMs - a.mtimeMs);
+    const files = (await listJsonlFilesWithStat(root)).filter(f => source !== "grok-build" || path.basename(f.path) === "updates.jsonl").sort((a, b) => b.mtimeMs - a.mtimeMs);
     const live = new Set(files.map(f => `${source}:${f.path}`));
     for (const key of cache.keys()) if (key.startsWith(`${source}:`) && !live.has(key)) cache.delete(key);
     const results = await mapPool(files, 3, async f => {
       const key = `${source}:${f.path}`, dir = path.dirname(f.path);
-      const current = [f.path, ...(source === "grok-build" ? [path.join(dir, "events.jsonl"), path.join(dir, "summary.json"), path.join(dir, "chat_history.jsonl"), ...grokArchives(dir)] : [])].map(f => `${f}:${stamp(f)}`).join("|");
+      const deps = [f.path, ...(source === "grok-build" ? [path.join(dir, "events.jsonl"), path.join(dir, "summary.json"), path.join(dir, "chat_history.jsonl"), ...await grokArchives(dir)] : [])];
+      // Claude 单文件：列目录时已拿到 mtime/size，不必再 stat 一次
+      const current = source === "claude-code" ? `${f.path}:${f.mtimeMs}:${f.size}` : (await Promise.all(deps.map(async d => `${d}:${await stamp(d)}`))).join("|");
       const hit = cache.get(key);
       if (hit?.stamp === current) return hit.group;
       const group = await (source === "claude-code" ? readClaude(f.path, new Date(f.mtimeMs).toISOString()) : readGrok(f.path, new Date(f.mtimeMs).toISOString()));

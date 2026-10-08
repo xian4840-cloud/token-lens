@@ -7,6 +7,7 @@ import { persistScanCache } from "./cache";
 import { computeCost, parseOverrides, type TokenUsage } from "../adapters/pricing";
 import {
   getSetting,
+  markLocalScanned,
   replaceLocalDailyUsageBySource,
   upsertLocalDailyUsage,
 } from "../db";
@@ -59,12 +60,18 @@ export async function scanLocalUsage(since?: string): Promise<ScanLocalUsageResu
   const overrides = parseOverrides(getSetting("pricingOverrides"));
   const disabled = new Set(parseIdList(getSetting("disabledLocalSources")));
 
+  // 设置里关掉的来源直接不扫：此前是五家全扫完再把关掉的行过滤掉，
+  // 关掉一个几千会话的来源照样每轮把它的目录完整走一遍、逐行读新文件。
+  const skipped: { available: boolean; unavailableReason?: string; rows: LocalUsageRow[] } = {
+    available: true,
+    rows: [],
+  };
   const [claudeRows, codexRows, opencode, antigravity, grok] = await Promise.all([
-    scanClaudeCode(since),
-    scanCodex(since),
-    scanOpenCode(since),
-    scanAntigravity(since),
-    scanGrokBuild(since),
+    disabled.has("claude-code") ? [] : scanClaudeCode(since),
+    disabled.has("codex") ? [] : scanCodex(since),
+    disabled.has("opencode") ? skipped : scanOpenCode(since),
+    disabled.has("antigravity") ? skipped : scanAntigravity(since),
+    disabled.has("grok-build") ? skipped : scanGrokBuild(since),
   ]);
   // 扫描期间更新的文件级缓存统一落盘（写失败仅意味着下次重扫）
   persistScanCache();
@@ -187,11 +194,14 @@ async function persistScannedUsage(
   }
   const unavailable = new Set(result.unavailable.map((u) => u.source));
   const fullScan = since === undefined;
+  const scannedAt = new Date().toISOString();
   for (const source of ALL_LOCAL_SOURCES) {
     if (unavailable.has(source)) continue;
     const rows = grouped.get(source) ?? [];
+    // 内容没变时 db 层不会改写也不会落盘；扫描时间单独记在内存里供界面显示
     if (fullScan) replaceLocalDailyUsageBySource(source, rows);
     else upsertLocalDailyUsage(rows);
+    markLocalScanned(source, scannedAt);
   }
   notifyRenderer("local-usage:updated");
   return result;

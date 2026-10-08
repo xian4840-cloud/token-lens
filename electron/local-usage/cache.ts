@@ -33,6 +33,21 @@ export interface ClaudeFileEntry {
   firstTs?: string;
   /** per-model -> per-day 全量聚合；空对象表示文件无 usage 行 */
   models: Record<string, Record<string, ClaudeModelDayAgg>>;
+  /**
+   * 文件内出现过的 message.id（按首次出现顺序）。跨文件去重用：
+   * Claude Code 续接会话（--resume / --continue）会把旧会话的历史消息原样复制进
+   * 新的会话文件，message.id 不变。缺省（旧缓存）视为未命中，重读一次自愈。
+   */
+  ids?: string[];
+  /**
+   * 本文件里有消息已在「排在前面的文件」中出现过时，扣掉这些重复消息之后的聚合。
+   * deps 记录这些前序文件当时的 mtime：重复来源与 mtime 都没变才能复用，
+   * 否则（前序文件变了、新增了更靠前的副本文件……）重读本文件重算。
+   */
+  dedup?: {
+    deps: Record<string, number>;
+    models: Record<string, Record<string, ClaudeModelDayAgg>>;
+  };
 }
 
 /** Codex：单次 API 调用增量（已从累计值/重放里拆出来） */
@@ -96,6 +111,33 @@ export interface GrokFileEntry {
   models: Record<string, Record<string, GrokModelDayAgg>>;
 }
 
+/** OpenCode：某会话按 (模型, 本地日期) 拆开的用量（output 已扣 reasoning） */
+export interface OpenCodeBucket {
+  model: string;
+  date: string;
+  input: number;
+  output: number;
+  reasoning: number;
+  cacheRead: number;
+  cacheWrite: number;
+  cost?: number;
+  firstTs?: string;
+  lastTs?: string;
+}
+
+export interface OpenCodeSessionEntry {
+  /** session 行的用量合计 + 创建时间 + 模型。变了才重新按消息拆分 */
+  fp: string;
+  buckets: OpenCodeBucket[];
+  /**
+   * 消息合计与 session 合计对得上（没有余量、没有回退）。没对上的条目在会话
+   * 仍活跃（最后一条消息 30 分钟内）时每轮重算，避免消息行晚于合计更新造成的瞬时偏差被永久缓存。
+   */
+  settled: boolean;
+  /** 会话内最后一条 assistant 消息时间（ms） */
+  lastMs?: number;
+}
+
 /** 解析口径变更时 +1，旧缓存整份作废，避免修过的虚高结果继续命中。 */
 const CACHE_FORMAT_VERSION = 2;
 
@@ -105,13 +147,27 @@ interface ScanCacheData {
   codex: Record<string, CodexFileEntry>;
   antigravity: Record<string, AntigravityFileEntry>;
   grok: Record<string, GrokFileEntry>;
+  /** OpenCode：按 session id 缓存的逐消息拆分结果；db 换了路径整段作废 */
+  opencode: { db?: string; sessions: Record<string, OpenCodeSessionEntry> };
 }
 
-/** 每个来源的缓存条目上限，超出按 mtime 淘汰最旧，防止缓存文件无限膨胀 */
-const MAX_ENTRIES_PER_SOURCE = 4000;
+/**
+ * 每个来源的缓存条目安全上限。
+ *
+ * 正常情况下缓存靠 pruneScanCache 收缩：每次列目录后，已经不存在的文件条目直接删掉，
+ * 条目数始终等于磁盘上的会话文件数。此前的做法是固定 4000 条、按 mtime 淘汰最旧，
+ * 结果会话文件超过 4000 个的用户每一轮都会把最旧的那批文件重新逐行读一遍
+ * （读完写回、下一轮又被淘汰），缓存对这批文件永远不命中。
+ * 这里只保留一个很高的兜底，防止异常情况下（例如目录被反复改名）无限膨胀。
+ */
+export const MAX_ENTRIES_PER_SOURCE = 50_000;
+
+type CacheSourceKey = "claude" | "codex" | "antigravity" | "grok";
 
 let cache: ScanCacheData | null = null;
 let cachePath = "";
+/** 内存缓存相对磁盘是否有改动；没改动就不重写整份缓存文件。 */
+let cacheDirty = false;
 
 function emptyCache(): ScanCacheData {
   return {
@@ -120,6 +176,7 @@ function emptyCache(): ScanCacheData {
     codex: {},
     antigravity: {},
     grok: {},
+    opencode: { sessions: {} },
   };
 }
 
@@ -134,6 +191,27 @@ function emptyCache(): ScanCacheData {
 export function resetScanCache(): void {
   cache = null;
   cachePath = "";
+  cacheDirty = false;
+}
+
+/** 采集器写入/替换了缓存条目之后调用，标记需要落盘。 */
+export function markScanCacheDirty(): void {
+  cacheDirty = true;
+}
+
+/**
+ * 删掉磁盘上已不存在的文件条目（livePaths 是本轮完整列目录的结果）。
+ * 只能在「这一轮确实完整列过该来源目录」时调用，被设置关闭而跳过扫描的来源不要调。
+ */
+export function pruneScanCache(source: CacheSourceKey, livePaths: ReadonlySet<string>): void {
+  const c = getScanCache();
+  const bucket = c[source] as Record<string, unknown>;
+  for (const p of Object.keys(bucket)) {
+    if (!livePaths.has(p)) {
+      delete bucket[p];
+      cacheDirty = true;
+    }
+  }
 }
 
 /** 懒加载缓存（首次调用时读盘），之后返回内存中的同一份引用。 */
@@ -154,6 +232,12 @@ export function getScanCache(): ScanCacheData {
             antigravity:
               typeof parsed.antigravity === "object" ? parsed.antigravity : {},
             grok: typeof parsed.grok === "object" ? parsed.grok : {},
+            opencode:
+              parsed.opencode &&
+              typeof parsed.opencode === "object" &&
+              typeof parsed.opencode.sessions === "object"
+                ? parsed.opencode
+                : { sessions: {} },
           }
         : emptyCache();
   } catch (e) {
@@ -173,26 +257,39 @@ export function getScanCache(): ScanCacheData {
   return cache;
 }
 
-/** 扫描结束后落盘。写失败不影响主流程（下次重扫而已）。 */
-export function persistScanCache(): void {
-  if (!cache || !cachePath) return;
+/**
+ * 扫描结束后落盘。写失败不影响主流程（下次重扫而已）。
+ *
+ * 只在本轮确有条目变化时才写：缓存文件动辄数 MB，此前每 5 分钟一次的定时扫描
+ * 即便一个会话文件都没变，也要把整份缓存重新序列化写一遍。
+ * 返回是否真的写了盘（测试用）。
+ */
+export function persistScanCache(): boolean {
+  if (!cache || !cachePath) return false;
   cache.version = CACHE_FORMAT_VERSION;
   for (const key of ["claude", "codex", "antigravity", "grok"] as const) {
     const entries = Object.entries(cache[key]);
     if (entries.length > MAX_ENTRIES_PER_SOURCE) {
       entries.sort((a, b) => b[1].mtimeMs - a[1].mtimeMs);
       cache[key] = Object.fromEntries(entries.slice(0, MAX_ENTRIES_PER_SOURCE));
+      cacheDirty = true;
     }
   }
+  if (!cacheDirty) return false;
+  cacheDirty = false;
   try {
     const tmp = cachePath + ".tmp";
     fs.writeFileSync(tmp, JSON.stringify(cache), "utf8");
     fs.renameSync(tmp, cachePath);
+    return true;
   } catch (e) {
+    // 写失败保持 dirty，下一轮再试
+    cacheDirty = true;
     logWarn(
       "local-usage",
       `用量扫描缓存写入失败（下次会重扫）：${e instanceof Error ? e.message : String(e)}`,
     );
+    return false;
   }
 }
 
@@ -202,6 +299,8 @@ export function persistScanCache(): void {
  */
 export function isClaudeEntryValid(entry: ClaudeFileEntry): boolean {
   if (!entry.models || typeof entry.models !== "object") return false;
+  // 跨文件去重之前写下的条目没有 ids，重读一次补上
+  if (!Array.isArray(entry.ids)) return false;
   for (const v of Object.values(entry.models)) {
     if (v == null || typeof v !== "object") return false;
     // 新版 v 是 Record<dateKey, agg>，其属性值是带 input 的对象
