@@ -30,6 +30,19 @@ const modelKey = (r: ModelMonitorRecord) =>
     r.requestedModel ?? r.responseModel,
   ]);
 
+/** 当天按「模型证据 + 模型名」聚合的会话组 */
+type ModelGroup = {
+  key: string;
+  model?: string;
+  basis?: string;
+  sessions: ModelMonitorSessionDay[];
+  callCount: number;
+  matched: number;
+  mismatched: number;
+  unknown: number;
+  tokens: number;
+};
+
 export function ModelMonitor() {
   const [state, setState] = useState<ModelMonitorState | null>(null);
   const [source, setSource] = useState<ModelMonitorSource>("codex");
@@ -144,20 +157,7 @@ export function ModelMonitor() {
     `${day.date} ${day.models.join(" ")}`.toLowerCase().includes(search.toLowerCase()),
   );
 
-  const modelGroups = new Map<
-    string,
-    {
-      key: string;
-      model?: string;
-      basis?: string;
-      sessions: ModelMonitorSessionDay[];
-      callCount: number;
-      matched: number;
-      mismatched: number;
-      unknown: number;
-      tokens: number;
-    }
-  >();
+  const modelGroups = new Map<string, ModelGroup>();
   for (const session of state?.sessionDays ?? []) {
     const key = JSON.stringify([session.modelBasis, session.model]);
     const group = modelGroups.get(key) ?? {
@@ -235,110 +235,22 @@ export function ModelMonitor() {
           </CardHeader>
           <CardContent className="space-y-2">
             {source === "codex" && (
-              <div className="mb-4 space-y-2 rounded-lg border bg-muted/30 p-4" data-codex-capture>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-medium">
-                      桌面实时采集{" "}
-                      <Badge className="ml-2" variant="secondary">
-                        实验功能 · Windows
-                      </Badge>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {state?.capture.active
-                        ? `已捕获 ${state.capture.responseCount} 次响应，继续在 Codex 中聊天即可。`
-                        : state?.capture.ready
-                          ? "采集器已准备好。退出 Codex 后，从这里启动即可采集。"
-                          : "先退出 Codex，再从这里启动。首次启动会准备本地采集器。"}
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    disabled={launching || !state?.capture.supported || state.capture.active}
-                    onClick={() => void launchCodex()}
-                  >
-                    {launching
-                      ? "正在准备…"
-                      : state?.capture.active
-                        ? "采集已连接"
-                        : "启动 Codex 并采集"}
-                  </Button>
-                </div>
-                <p className="text-xs leading-5 text-muted-foreground">
-                  使用现有官方登录，只保存响应
-                  ID、模型名称与时间，不保存聊天正文。采集器不额外发送模型请求。每次从这个入口启动
-                  Codex 才会启用采集；恢复普通使用时，退出 Codex 后通过原来的快捷方式打开。
-                </p>
-                {!state?.capture.supported && state && (
-                  <p className="text-xs text-muted-foreground">
-                    当前系统仅支持查看历史记录，桌面实时采集第一版支持 Windows。
-                  </p>
-                )}
-                {state?.capture.lastResponseAt && (
-                  <p className="text-xs text-muted-foreground">
-                    最近捕获：{new Date(state.capture.lastResponseAt).toLocaleString()}
-                  </p>
-                )}
-                {(captureMessage || state?.capture.error) && (
-                  <p className="text-sm" role="status">
-                    {state?.capture.error || captureMessage}
-                  </p>
-                )}
-              </div>
+              <CodexCapturePanel
+                state={state}
+                launching={launching}
+                captureMessage={captureMessage}
+                launchCodex={launchCodex}
+              />
             )}
             {(source === "opencode" || source === "claude-code") && (
-              <div
-                className="mb-4 rounded-lg border bg-muted/30 p-4"
-                data-opencode-capture={source === "opencode" ? true : undefined}
-                data-claude-capture={source === "claude-code" ? true : undefined}
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium">响应模型核验</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {state?.agentCapture?.requestCount
-                        ? `已采集 ${state.agentCapture.requestCount} 次请求，读到 ${state.agentCapture.responseCount} 次响应模型。`
-                        : state?.agentCapture?.enabled
-                          ? source === "claude-code"
-                            ? "在新终端中启动 Claude Code，正常聊天即可。"
-                            : "重新打开 OpenCode，正常聊天即可。"
-                          : "启用一次，在 Agent 自身进程内记录请求与响应模型，无额外后台进程。"}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    {(state?.agentCapture?.enabled || state?.agentCapture?.installed) && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        data-disable-capture
-                        disabled={launching}
-                        onClick={() => void disableAgentCapture()}
-                      >
-                        关闭采集
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      disabled={launching || state?.agentCapture?.enabled}
-                      onClick={() => void enableAgentCapture()}
-                    >
-                      {launching
-                        ? "正在处理…"
-                        : state?.agentCapture?.enabled
-                          ? "已启用"
-                          : "启用响应核验"}
-                    </Button>
-                  </div>
-                </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  仅记录模型、标识、时间和用量，不保存聊天正文或密钥。
-                </p>
-                {captureMessage && (
-                  <p className="mt-2 text-sm" role="status">
-                    {captureMessage}
-                  </p>
-                )}
-              </div>
+              <AgentCapturePanel
+                source={source}
+                state={state}
+                launching={launching}
+                captureMessage={captureMessage}
+                enableAgentCapture={enableAgentCapture}
+                disableAgentCapture={disableAgentCapture}
+              />
             )}
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
               <span className="text-muted-foreground">
@@ -492,210 +404,12 @@ export function ModelMonitor() {
                               .sort((a, b) => b.callCount - a.callCount)
                               .filter((group) => !differencesOnly || group.mismatched > 0)
                               .map((group) => (
-                                <details
+                                <ModelGroupDetails
                                   key={group.key}
-                                  data-monitor-model={group.key}
-                                  className="rounded-lg border"
-                                >
-                                  <summary className="flex cursor-pointer flex-wrap items-center gap-3 px-4 py-3">
-                                    <div className="min-w-0 flex-1">
-                                      <p className="break-all font-mono text-sm font-medium">
-                                        {group.model ?? "未记录模型"}
-                                      </p>
-                                      <p className="mt-1 text-xs text-muted-foreground">
-                                        {group.basis === "request"
-                                          ? "请求模型"
-                                          : group.basis === "response"
-                                            ? "仅记录响应模型"
-                                            : "模型证据不足"}{" "}
-                                        · {group.sessions.length} 个会话
-                                      </p>
-                                    </div>
-                                    <span className="text-sm tabular-nums">
-                                      请求 {group.callCount.toLocaleString()} 次
-                                    </span>
-                                    <Badge variant="success">一致 {group.matched}</Badge>
-                                    <Badge variant={group.mismatched ? "warning" : "secondary"}>
-                                      差异 {group.mismatched}
-                                    </Badge>
-                                    <Badge variant="secondary">无法核验 {group.unknown}</Badge>
-                                    <span className="text-xs tabular-nums text-muted-foreground">
-                                      {group.tokens.toLocaleString()} Tokens
-                                    </span>
-                                  </summary>
-                                  <div className="space-y-2 border-t p-3">
-                                    {group.sessions
-                                      .filter(
-                                        (session) =>
-                                          !differencesOnly || session.mismatchedCount > 0,
-                                      )
-                                      .map((session) => (
-                                        <details
-                                          key={session.sessionId}
-                                          data-monitor-session={session.sessionId}
-                                          className="rounded-lg border"
-                                        >
-                                          <summary className="flex cursor-pointer flex-wrap items-center gap-3 px-4 py-3">
-                                            <span className="min-w-0 flex-1 break-all font-medium">
-                                              {session.name}
-                                            </span>
-                                            <span className="text-xs tabular-nums text-muted-foreground">
-                                              请求 {session.callCount.toLocaleString()} 次
-                                            </span>
-                                            <Badge variant="success">
-                                              一致 {session.matchedCount}
-                                            </Badge>
-                                            <Badge
-                                              variant={
-                                                session.mismatchedCount ? "warning" : "secondary"
-                                              }
-                                            >
-                                              差异 {session.mismatchedCount}
-                                            </Badge>
-                                            <Badge variant="secondary">
-                                              无法核验 {session.unknownCount}
-                                            </Badge>
-                                            <span className="text-xs tabular-nums text-muted-foreground">
-                                              {session.totalTokens.toLocaleString()} Tokens
-                                            </span>
-                                          </summary>
-                                          <div className="overflow-x-auto border-t px-2">
-                                            <p className="px-3 py-3 text-xs text-muted-foreground">
-                                              按天加载最近 200
-                                              条详情；汇总次数包含全部请求。当前会话已加载{" "}
-                                              {
-                                                visible.filter(
-                                                  (r) =>
-                                                    r.sessionId === session.sessionId &&
-                                                    modelKey(r) === group.key,
-                                                ).length
-                                              }{" "}
-                                              条。
-                                            </p>
-                                            <table className="w-full text-left text-sm">
-                                              <thead>
-                                                <tr className="border-b text-xs text-muted-foreground">
-                                                  {[
-                                                    "时间 / 会话",
-                                                    "该次所选模型",
-                                                    "响应 / 本地模型记录",
-                                                    "核对结果",
-                                                    "Tokens",
-                                                  ].map((h) => (
-                                                    <th key={h} className="px-3 py-3 font-medium">
-                                                      {h}
-                                                    </th>
-                                                  ))}
-                                                </tr>
-                                              </thead>
-                                              <tbody>
-                                                {visible
-                                                  .filter(
-                                                    (r) =>
-                                                      r.sessionId === session.sessionId &&
-                                                      modelKey(r) === group.key,
-                                                  )
-                                                  .map((r) => (
-                                                    <tr
-                                                      key={r.id}
-                                                      className="border-b last:border-0"
-                                                    >
-                                                      <td className="max-w-64 px-3 py-3 text-xs">
-                                                        <p className="tabular-nums text-muted-foreground">
-                                                          {new Date(
-                                                            r.startedAt,
-                                                          ).toLocaleTimeString()}
-                                                          {r.archived ? " · 已归档" : ""}
-                                                        </p>
-                                                        <p
-                                                          className="mt-1 truncate"
-                                                          title={r.sessionName}
-                                                        >
-                                                          {r.sessionName}
-                                                        </p>
-                                                        <details className="mt-1 text-muted-foreground">
-                                                          <summary className="cursor-pointer">
-                                                            标识详情
-                                                          </summary>
-                                                          <p className="mt-1 break-all">
-                                                            会话：{r.sessionId}
-                                                          </p>
-                                                          <p className="break-all">
-                                                            记录：{r.responseId ?? r.id}
-                                                          </p>
-                                                        </details>
-                                                        {r.modelCalls !== undefined && (
-                                                          <p className="mt-1 text-muted-foreground">
-                                                            该轮 {r.modelCalls} 次请求 · 一致{" "}
-                                                            {r.matchedCalls ?? 0} · 差异{" "}
-                                                            {r.mismatchedCalls ?? 0} · 未核验{" "}
-                                                            {r.unverifiedCalls ?? r.modelCalls}
-                                                          </p>
-                                                        )}
-                                                      </td>
-                                                      <td className="break-all px-3 py-3 font-mono text-xs">
-                                                        {r.requestedModel ?? "会话未记录"}
-                                                        {r.sentModel &&
-                                                          r.sentModel !== r.requestedModel && (
-                                                            <p className="mt-1 text-muted-foreground">
-                                                              发送名称：{r.sentModel}
-                                                            </p>
-                                                          )}
-                                                      </td>
-                                                      <td className="break-all px-3 py-3 text-xs">
-                                                        <p className="font-mono">
-                                                          {r.responseModel ??
-                                                            r.reportedModel ??
-                                                            "本地未记录"}
-                                                        </p>
-                                                        <p className="mt-1 text-muted-foreground">
-                                                          {r.evidence === "usage"
-                                                            ? "整轮用量分项 · 非独立响应证据"
-                                                            : r.evidence === "selection"
-                                                              ? "助手消息配置 · 非响应模型"
-                                                              : r.evidence === "generation-response"
-                                                                ? "生成记录 response_model"
-                                                                : r.responseModel
-                                                                  ? "响应模型记录"
-                                                                  : "响应证据缺失"}
-                                                        </p>
-                                                      </td>
-                                                      <td className="whitespace-nowrap px-3 py-3">
-                                                        <Badge
-                                                          variant={
-                                                            r.status === "match"
-                                                              ? "success"
-                                                              : r.status === "mismatch"
-                                                                ? "warning"
-                                                                : "secondary"
-                                                          }
-                                                        >
-                                                          {r.status === "match"
-                                                            ? "名称一致"
-                                                            : r.status === "mismatch"
-                                                              ? "名称差异"
-                                                              : r.responseModel
-                                                                ? "已记录响应"
-                                                                : r.reportedModel
-                                                                  ? "仅本地记录"
-                                                                  : "无法核验"}
-                                                        </Badge>
-                                                      </td>
-                                                      <td
-                                                        className="px-3 py-3 tabular-nums"
-                                                        title={`输入 ${r.inputTokens} · 输出 ${r.outputTokens}`}
-                                                      >
-                                                        {r.totalTokens.toLocaleString()}
-                                                      </td>
-                                                    </tr>
-                                                  ))}
-                                              </tbody>
-                                            </table>
-                                          </div>
-                                        </details>
-                                      ))}
-                                  </div>
-                                </details>
+                                  group={group}
+                                  differencesOnly={differencesOnly}
+                                  visible={visible}
+                                />
                               ))}
                           </div>
                         )}
@@ -729,5 +443,314 @@ export function ModelMonitor() {
         </details>
       </div>
     </>
+  );
+}
+
+/** Codex 桌面实时采集的入口与状态 */
+function CodexCapturePanel({
+  state,
+  launching,
+  captureMessage,
+  launchCodex,
+}: {
+  state: ModelMonitorState | null;
+  launching: boolean;
+  captureMessage: string;
+  launchCodex: () => Promise<void>;
+}) {
+  return (
+    <div className="mb-4 space-y-2 rounded-lg border bg-muted/30 p-4" data-codex-capture>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-medium">
+            桌面实时采集{" "}
+            <Badge className="ml-2" variant="secondary">
+              实验功能 · Windows
+            </Badge>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {state?.capture.active
+              ? `已捕获 ${state.capture.responseCount} 次响应，继续在 Codex 中聊天即可。`
+              : state?.capture.ready
+                ? "采集器已准备好。退出 Codex 后，从这里启动即可采集。"
+                : "先退出 Codex，再从这里启动。首次启动会准备本地采集器。"}
+          </p>
+        </div>
+        <Button
+          size="sm"
+          disabled={launching || !state?.capture.supported || state.capture.active}
+          onClick={() => void launchCodex()}
+        >
+          {launching ? "正在准备…" : state?.capture.active ? "采集已连接" : "启动 Codex 并采集"}
+        </Button>
+      </div>
+      <p className="text-xs leading-5 text-muted-foreground">
+        使用现有官方登录，只保存响应
+        ID、模型名称与时间，不保存聊天正文。采集器不额外发送模型请求。每次从这个入口启动 Codex
+        才会启用采集；恢复普通使用时，退出 Codex 后通过原来的快捷方式打开。
+      </p>
+      {!state?.capture.supported && state && (
+        <p className="text-xs text-muted-foreground">
+          当前系统仅支持查看历史记录，桌面实时采集第一版支持 Windows。
+        </p>
+      )}
+      {state?.capture.lastResponseAt && (
+        <p className="text-xs text-muted-foreground">
+          最近捕获：{new Date(state.capture.lastResponseAt).toLocaleString()}
+        </p>
+      )}
+      {(captureMessage || state?.capture.error) && (
+        <p className="text-sm" role="status">
+          {state?.capture.error || captureMessage}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Claude Code / OpenCode 的响应模型核验开关 */
+function AgentCapturePanel({
+  source,
+  state,
+  launching,
+  captureMessage,
+  enableAgentCapture,
+  disableAgentCapture,
+}: {
+  source: ModelMonitorSource;
+  state: ModelMonitorState | null;
+  launching: boolean;
+  captureMessage: string;
+  enableAgentCapture: () => Promise<void>;
+  disableAgentCapture: () => Promise<void>;
+}) {
+  return (
+    <div
+      className="mb-4 rounded-lg border bg-muted/30 p-4"
+      data-opencode-capture={source === "opencode" ? true : undefined}
+      data-claude-capture={source === "claude-code" ? true : undefined}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium">响应模型核验</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {state?.agentCapture?.requestCount
+              ? `已采集 ${state.agentCapture.requestCount} 次请求，读到 ${state.agentCapture.responseCount} 次响应模型。`
+              : state?.agentCapture?.enabled
+                ? source === "claude-code"
+                  ? "在新终端中启动 Claude Code，正常聊天即可。"
+                  : "重新打开 OpenCode，正常聊天即可。"
+                : "启用一次，在 Agent 自身进程内记录请求与响应模型，无额外后台进程。"}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          {(state?.agentCapture?.enabled || state?.agentCapture?.installed) && (
+            <Button
+              size="sm"
+              variant="outline"
+              data-disable-capture
+              disabled={launching}
+              onClick={() => void disableAgentCapture()}
+            >
+              关闭采集
+            </Button>
+          )}
+          <Button
+            size="sm"
+            disabled={launching || state?.agentCapture?.enabled}
+            onClick={() => void enableAgentCapture()}
+          >
+            {launching ? "正在处理…" : state?.agentCapture?.enabled ? "已启用" : "启用响应核验"}
+          </Button>
+        </div>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        仅记录模型、标识、时间和用量，不保存聊天正文或密钥。
+      </p>
+      {captureMessage && (
+        <p className="mt-2 text-sm" role="status">
+          {captureMessage}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** 某天某个模型的汇总，展开后按会话列出 */
+function ModelGroupDetails({
+  group,
+  differencesOnly,
+  visible,
+}: {
+  group: ModelGroup;
+  differencesOnly: boolean;
+  visible: ModelMonitorRecord[];
+}) {
+  return (
+    <details data-monitor-model={group.key} className="rounded-lg border">
+      <summary className="flex cursor-pointer flex-wrap items-center gap-3 px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <p className="break-all font-mono text-sm font-medium">{group.model ?? "未记录模型"}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {group.basis === "request"
+              ? "请求模型"
+              : group.basis === "response"
+                ? "仅记录响应模型"
+                : "模型证据不足"}{" "}
+            · {group.sessions.length} 个会话
+          </p>
+        </div>
+        <span className="text-sm tabular-nums">请求 {group.callCount.toLocaleString()} 次</span>
+        <Badge variant="success">一致 {group.matched}</Badge>
+        <Badge variant={group.mismatched ? "warning" : "secondary"}>差异 {group.mismatched}</Badge>
+        <Badge variant="secondary">无法核验 {group.unknown}</Badge>
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {group.tokens.toLocaleString()} Tokens
+        </span>
+      </summary>
+      <div className="space-y-2 border-t p-3">
+        {group.sessions
+          .filter((session) => !differencesOnly || session.mismatchedCount > 0)
+          .map((session) => (
+            <SessionDetails
+              key={session.sessionId}
+              session={session}
+              group={group}
+              visible={visible}
+            />
+          ))}
+      </div>
+    </details>
+  );
+}
+
+/** 单个会话在该模型下的调用明细表 */
+function SessionDetails({
+  session,
+  group,
+  visible,
+}: {
+  session: ModelMonitorSessionDay;
+  group: ModelGroup;
+  visible: ModelMonitorRecord[];
+}) {
+  return (
+    <details data-monitor-session={session.sessionId} className="rounded-lg border">
+      <summary className="flex cursor-pointer flex-wrap items-center gap-3 px-4 py-3">
+        <span className="min-w-0 flex-1 break-all font-medium">{session.name}</span>
+        <span className="text-xs tabular-nums text-muted-foreground">
+          请求 {session.callCount.toLocaleString()} 次
+        </span>
+        <Badge variant="success">一致 {session.matchedCount}</Badge>
+        <Badge variant={session.mismatchedCount ? "warning" : "secondary"}>
+          差异 {session.mismatchedCount}
+        </Badge>
+        <Badge variant="secondary">无法核验 {session.unknownCount}</Badge>
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {session.totalTokens.toLocaleString()} Tokens
+        </span>
+      </summary>
+      <div className="overflow-x-auto border-t px-2">
+        <p className="px-3 py-3 text-xs text-muted-foreground">
+          按天加载最近 200 条详情；汇总次数包含全部请求。当前会话已加载{" "}
+          {
+            visible.filter((r) => r.sessionId === session.sessionId && modelKey(r) === group.key)
+              .length
+          }{" "}
+          条。
+        </p>
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b text-xs text-muted-foreground">
+              {["时间 / 会话", "该次所选模型", "响应 / 本地模型记录", "核对结果", "Tokens"].map(
+                (h) => (
+                  <th key={h} className="px-3 py-3 font-medium">
+                    {h}
+                  </th>
+                ),
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {visible
+              .filter((r) => r.sessionId === session.sessionId && modelKey(r) === group.key)
+              .map((r) => (
+                <MonitorRecordRow key={r.id} r={r} />
+              ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  );
+}
+
+/** 明细表里的一次调用 */
+function MonitorRecordRow({ r }: { r: ModelMonitorRecord }) {
+  return (
+    <tr className="border-b last:border-0">
+      <td className="max-w-64 px-3 py-3 text-xs">
+        <p className="tabular-nums text-muted-foreground">
+          {new Date(r.startedAt).toLocaleTimeString()}
+          {r.archived ? " · 已归档" : ""}
+        </p>
+        <p className="mt-1 truncate" title={r.sessionName}>
+          {r.sessionName}
+        </p>
+        <details className="mt-1 text-muted-foreground">
+          <summary className="cursor-pointer">标识详情</summary>
+          <p className="mt-1 break-all">会话：{r.sessionId}</p>
+          <p className="break-all">记录：{r.responseId ?? r.id}</p>
+        </details>
+        {r.modelCalls !== undefined && (
+          <p className="mt-1 text-muted-foreground">
+            该轮 {r.modelCalls} 次请求 · 一致 {r.matchedCalls ?? 0} · 差异 {r.mismatchedCalls ?? 0}{" "}
+            · 未核验 {r.unverifiedCalls ?? r.modelCalls}
+          </p>
+        )}
+      </td>
+      <td className="break-all px-3 py-3 font-mono text-xs">
+        {r.requestedModel ?? "会话未记录"}
+        {r.sentModel && r.sentModel !== r.requestedModel && (
+          <p className="mt-1 text-muted-foreground">发送名称：{r.sentModel}</p>
+        )}
+      </td>
+      <td className="break-all px-3 py-3 text-xs">
+        <p className="font-mono">{r.responseModel ?? r.reportedModel ?? "本地未记录"}</p>
+        <p className="mt-1 text-muted-foreground">
+          {r.evidence === "usage"
+            ? "整轮用量分项 · 非独立响应证据"
+            : r.evidence === "selection"
+              ? "助手消息配置 · 非响应模型"
+              : r.evidence === "generation-response"
+                ? "生成记录 response_model"
+                : r.responseModel
+                  ? "响应模型记录"
+                  : "响应证据缺失"}
+        </p>
+      </td>
+      <td className="whitespace-nowrap px-3 py-3">
+        <Badge
+          variant={
+            r.status === "match" ? "success" : r.status === "mismatch" ? "warning" : "secondary"
+          }
+        >
+          {r.status === "match"
+            ? "名称一致"
+            : r.status === "mismatch"
+              ? "名称差异"
+              : r.responseModel
+                ? "已记录响应"
+                : r.reportedModel
+                  ? "仅本地记录"
+                  : "无法核验"}
+        </Badge>
+      </td>
+      <td
+        className="px-3 py-3 tabular-nums"
+        title={`输入 ${r.inputTokens} · 输出 ${r.outputTokens}`}
+      >
+        {r.totalTokens.toLocaleString()}
+      </td>
+    </tr>
   );
 }
