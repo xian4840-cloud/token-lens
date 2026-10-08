@@ -273,6 +273,28 @@ export function initDb(): void {
 
 // ---- services ----
 
+// ---- 服务变更通知 ----
+// 服务的配置 / 密钥 / 凭据标记被改、或服务被删除 / 新建时通知订阅者。
+// refresh.ts 用它作废在途的余额请求，避免复用或写回旧密钥的结果。
+
+type ServiceChangeListener = (serviceId: string) => void;
+const serviceChangeListeners = new Set<ServiceChangeListener>();
+
+export function onServiceChanged(listener: ServiceChangeListener): () => void {
+  serviceChangeListeners.add(listener);
+  return () => serviceChangeListeners.delete(listener);
+}
+
+function emitServiceChanged(serviceId: string): void {
+  for (const listener of serviceChangeListeners) {
+    try {
+      listener(serviceId);
+    } catch (e) {
+      logWarn("db", `服务变更通知处理失败：${String(e)}`);
+    }
+  }
+}
+
 export function listServices(): ServiceRecord[] {
   return [...data.services].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
@@ -284,6 +306,7 @@ export function getService(id: string): ServiceRecord | undefined {
 export function insertService(record: ServiceRecord): void {
   data.services.push(record);
   persist();
+  emitServiceChanged(record.id);
 }
 
 export function updateServiceMeta(
@@ -297,6 +320,7 @@ export function updateServiceMeta(
     s.config = config;
     s.updatedAt = new Date().toISOString();
     persist();
+    emitServiceChanged(id);
   }
 }
 
@@ -307,6 +331,7 @@ export function deleteServiceRow(id: string): void {
   delete data.secrets[id];
   delete data.lastBalances[id];
   persist();
+  emitServiceChanged(id);
 }
 
 function stripRaw(balance: BalanceResult): BalanceResult {
@@ -357,6 +382,7 @@ export function insertServiceWithSecrets(
     data.secrets[record.id] = { ...(data.secrets[record.id] ?? {}), ...encrypted };
   }
   persist();
+  emitServiceChanged(record.id);
 }
 
 /** 批量更新密钥：同样先全部加密成功才写入 */
@@ -365,6 +391,7 @@ export function setSecrets(serviceId: string, secrets: Record<string, string>): 
   if (!Object.keys(encrypted).length) return;
   data.secrets[serviceId] = { ...(data.secrets[serviceId] ?? {}), ...encrypted };
   persist();
+  emitServiceChanged(serviceId);
 }
 
 export function setSecret(serviceId: string, fieldKey: string, value: string): void {
@@ -372,6 +399,7 @@ export function setSecret(serviceId: string, fieldKey: string, value: string): v
   if (!data.secrets[serviceId]) data.secrets[serviceId] = {};
   data.secrets[serviceId][fieldKey] = b64;
   persist();
+  emitServiceChanged(serviceId);
 }
 
 export function getSecrets(serviceId: string): Record<string, string> {
@@ -398,6 +426,7 @@ export function getSecrets(serviceId: string): Record<string, string> {
 export function deleteSecrets(serviceId: string): void {
   delete data.secrets[serviceId];
   persist();
+  emitServiceChanged(serviceId);
 }
 
 // ---- balance snapshots ----
@@ -715,6 +744,7 @@ export function setNeedsCredentials(id: string, value: boolean): void {
   if (value) s.needsCredentials = true;
   else delete s.needsCredentials;
   persist();
+  emitServiceChanged(id);
 }
 
 /** 备份里的一条服务清单（只有清单字段，不含 config 与密钥） */
@@ -842,6 +872,7 @@ export function importBackupServices(
       needsCredentials: true,
     };
     data.services.push(record);
+    emitServiceChanged(record.id);
     idMap.set(row.id, record.id);
     claimed.add(record.id);
     restored += 1;
