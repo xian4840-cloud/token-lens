@@ -61,11 +61,15 @@ describe("Anthropic 正则顺序", () => {
     ["claude-opus-4-20250514", "claude-opus-4"],
     ["claude-opus-4-1-20250805", "claude-opus-4"],
     ["claude-opus-5", "claude-opus-5"],
+    ["claude-opus-5-5", "claude-opus-5-5"],
+    ["anthropic.claude-opus-5-5", "claude-opus-5-5"],
     ["claude-fable-5-1", "claude-fable-5-1"],
     ["claude-mythos-5-1", "claude-fable-5-1"],
     ["claude-fable-5", "claude-fable-5"],
     ["claude-mythos-5", "claude-fable-5"],
     ["claude-sonnet-5", "claude-sonnet-5"],
+    ["claude-sonnet-5-5", "claude-sonnet-5-5"],
+    ["claude-haiku-5-5", "claude-haiku-5-5"],
     ["claude-sonnet-4-6", "claude-sonnet-4"],
     ["claude-sonnet-4-5-20250929", "claude-sonnet-4"],
     ["claude-haiku-4-5-20251001", "claude-haiku-4-5"],
@@ -73,6 +77,19 @@ describe("Anthropic 正则顺序", () => {
     ["claude-3-haiku-20240307", "claude-3-haiku"],
   ])("%s → %s", (model, key) => {
     expect(matchKey(model)).toBe(key);
+  });
+
+  it("回归：Claude 5.5 不落到宽松的 opus-5 / sonnet-5 上", () => {
+    // Opus 5.5 是 $4/$20、缓存读 $0.20；落到 Opus 5 会按 $5/$25、$0.50 算
+    expect(matchKey("claude-opus-5-5")).not.toBe("claude-opus-5");
+    expect(matchKey("claude-sonnet-5-5")).not.toBe("claude-sonnet-5");
+    const c = computeCost("claude-opus-5-5", {
+      input: 1_000_000,
+      output: 1_000_000,
+      cacheRead: 1_000_000,
+      cacheCreation: 1_000_000,
+    });
+    expect(c?.cost).toBeCloseTo(4 + 20 + 0.2 + 5, 6);
   });
 
   it("Opus 4.6 按官方 $5/$25 计费", () => {
@@ -88,6 +105,8 @@ describe("OpenAI 正则顺序", () => {
   it.each([
     ["gpt-6-astra", "gpt-6-astra"],
     ["gpt-6", "gpt-6-astra"],
+    ["gpt-6.1-sol", "gpt-6.1-sol"],
+    ["gpt-6-luna", "gpt-6-luna"],
     ["gpt-5.6-sol", "gpt-5.6-sol"],
     ["daybreak-blue-latest", "gpt-5.6-sol"],
     ["gpt-5.6-terra", "gpt-5.6-terra"],
@@ -109,10 +128,28 @@ describe("OpenAI 正则顺序", () => {
     ["gpt-4.1-mini", "gpt-4.1-mini"],
     ["gpt-4o-mini", "gpt-4o-mini"],
     ["gpt-4o", "gpt-4o"],
+    ["gpt-4o-2024-05-13", "gpt-4o"],
+    ["gpt-4-turbo", "gpt-4-turbo"],
+    ["gpt-4-turbo-2024-04-09", "gpt-4-turbo"],
+    ["gpt-4-turbo-preview", "gpt-4-turbo"],
+    ["gpt-4-0125-preview", "gpt-4-turbo"],
+    ["gpt-4", "gpt-4"],
+    ["gpt-4-0613", "gpt-4"],
+    ["gpt-4-0314", "gpt-4"],
+    ["gpt-4.1", "gpt-4.1"],
+    ["gpt-4.1-2025-04-14", "gpt-4.1"],
+    ["gpt-4.1-nano-2025-04-14", "gpt-4.1-nano"],
     ["o4-mini", "o4-mini"],
     ["o3-pro", "o3-pro"],
   ])("%s → %s", (model, key) => {
     expect(matchKey(model)).toBe(key);
+  });
+
+  it("回归：gpt-6.1-sol / gpt-6-luna 不被 gpt-6-astra 的 \\bgpt-6\\b 兜底吃掉", () => {
+    // astra 是 $10/$50；luna 只有 $0.1/$0.5，错配会虚报 100 倍
+    expect(matchKey("gpt-6.1-sol")).not.toBe("gpt-6-astra");
+    expect(matchKey("gpt-6-luna")).not.toBe("gpt-6-astra");
+    expect(matchKey("gpt-5.6-luna")).toBe("gpt-5.6-luna");
   });
 
   it("gpt-5.6-sol 不被泛化的 gpt-5 或 gpt-6 规则吃掉", () => {
@@ -125,6 +162,8 @@ describe("OpenAI 正则顺序", () => {
 describe("智谱 GLM 正则顺序", () => {
   it.each([
     ["glm-5.3", "glm-5.3"],
+    ["glm-5.3-flash", "glm-5.3-flash"],
+    ["glm-5.3-flashx", "glm-5.3-flashx"],
     ["glm-5.2", "glm-5.2"],
     ["glm-5.1", "glm-5.1"],
     ["glm-5-turbo", "glm-5-turbo"],
@@ -135,6 +174,7 @@ describe("智谱 GLM 正则顺序", () => {
     ["glm-4.7-flashx", "glm-4.7-flashx"],
     ["glm-4.6v", "glm-4.6v"],
     ["glm-4.6v-flash", "glm-4.6v-flash"],
+    ["glm-4.6v-flashx", "glm-4.6v-flashx"],
     ["glm-4.5-air", "glm-4.5-air"],
     ["glm-4.5-airx", "glm-4.5-airx"],
     ["glm-4.5-x", "glm-4.5-x"],
@@ -153,6 +193,14 @@ describe("智谱 GLM 正则顺序", () => {
     });
     expect(c?.cost).toBe(0);
   });
+
+  it("GLM-5.3-Flash 不是免费款，也不按 GLM-5.3 计费", () => {
+    const c = computeCost("glm-5.3-flash", {
+      input: 1_000_000,
+      output: 1_000_000,
+    });
+    expect(c?.cost).toBeCloseTo(0.15 + 0.5, 6);
+  });
 });
 
 describe("其余厂商正则顺序", () => {
@@ -161,9 +209,19 @@ describe("其余厂商正则顺序", () => {
     ["deepseek-v4-flash", "deepseek-v4-flash"],
     ["deepseek-v4-flash-vision-exp", "deepseek-v4-flash-vision"],
     ["deepseek-v4-pro", "deepseek-v4-pro"],
+    ["deepseek-flash", "deepseek-flash"],
+    ["deepseek-v4.1-flash", "deepseek-flash"],
     ["kimi-k3", "kimi-k3"],
+    ["kimi-k2.7-code", "kimi-k2.7-code"],
+    ["kimi-k2.7-code-highspeed", "kimi-k2.7-code-highspeed"],
+    ["kimi-k2.6", "kimi-k2.6"],
+    ["mimo-v2.6-pro", "mimo-v2.6-pro"],
+    ["mimo-v2.6-pro-ultraspeed", "mimo-v2.6-pro-ultraspeed"],
+    ["mimo-v2.6-flash", "mimo-v2.6-flash"],
     ["mimo-v2.5-pro", "mimo-v2.5-pro"],
     ["mimo-v2.5", "mimo-v2.5"],
+    ["grok-4.7", "grok-4.7"],
+    ["grok-4.7-build", "grok-4.7"],
     ["grok-4.6", "grok-4.6"],
     ["grok-4.1-fast", "grok-4.1-fast"],
     // Grok Build 本地采集上报的模型 id（~/.grok/sessions 的 modelUsage key）
@@ -171,6 +229,7 @@ describe("其余厂商正则顺序", () => {
     ["grok-4.5", "grok-4.5"],
     ["grok-4.3", "grok-4.3"],
     ["grok-build-0.1", "grok-build"],
+    ["gemini-3.8-flash", "gemini-3.8-flash"],
     ["gemini-3.7-flash", "gemini-3.7-flash"],
     ["gemini-3.7-flash-high", "gemini-3.7-flash"],
     ["gemini-3.6-flash", "gemini-3.6-flash"],
@@ -185,6 +244,21 @@ describe("其余厂商正则顺序", () => {
     expect(matchKey(model)).toBe(key);
   });
 
+  it("DeepSeek 旧名 v4-flash 已退役，按新 deepseek-flash 的价计费", () => {
+    const tokens = { input: 1_000_000, output: 1_000_000, cacheRead: 1_000_000 };
+    const legacy = computeCost("deepseek-v4-flash", tokens);
+    const vision = computeCost("deepseek-v4-flash-vision-exp", tokens);
+    const current = computeCost("deepseek-flash", tokens);
+    expect(current?.cost).toBeCloseTo(0.3 + 1.2 + 0.006, 6);
+    expect(legacy?.cost).toBeCloseTo(current!.cost, 6);
+    expect(vision?.cost).toBeCloseTo(current!.cost, 6);
+  });
+
+  it("Kimi K3 的缓存写入按 5 分钟档单独计费", () => {
+    const c = computeCost("kimi-k3", { cacheCreation: 1_000_000 });
+    expect(c?.cost).toBeCloseTo(3, 6);
+  });
+
   it("MiMo Pro 不与 DeepSeek Pro 混淆", () => {
     // 两者曾误填同一组价（0.435/0.87 实为 MiMo 的价）
     expect(matchKey("mimo-v2.5-pro")).toBe("mimo-v2.5-pro");
@@ -192,6 +266,81 @@ describe("其余厂商正则顺序", () => {
     const mimo = DEFAULT_PRICING.find((r) => r.key === "mimo-v2.5-pro")!;
     const ds = DEFAULT_PRICING.find((r) => r.key === "deepseek-v4-pro")!;
     expect(mimo.inputPerM).not.toBe(ds.inputPerM);
+  });
+});
+
+describe("带日期后缀的快照名不被相邻小版本吃掉", () => {
+  // 根因：形如 `gpt[.-_]*5[.-_]*2` 的正则，小版本号后面没有 (?!\d)，
+  // 于是 gpt-5-2025-08-07 的「5-2」被当成 5.2、glm-5-20250101 被当成 GLM-5.2。
+  // 各厂商都会发带日期的快照名，所以对每一行都用常见日期格式验一遍。
+  const DATE_SUFFIXES = ["-2025-08-07", "-20250807", "-2026-03-05", "-0309", "-0905-preview"];
+
+  // 只取「key 本身就是一个能命中自己的模型名」的行（如 gpt-5、glm-5、grok-4.20），
+  // 像 claude-opus-4-5-plus 这种合并行的 key 不是真实模型名，跳过
+  const selfMatching = DEFAULT_PRICING.map((r) => r.key).filter((k) => matchKey(k) === k);
+
+  it("能自匹配的行足够多（防止过滤条件失效让下面的用例变成空跑）", () => {
+    expect(selfMatching.length).toBeGreaterThan(60);
+  });
+
+  it.each(selfMatching.flatMap((k) => DATE_SUFFIXES.map((d) => [`${k}${d}`, k])))(
+    "%s → %s",
+    (model, key) => {
+      expect(matchKey(model)).toBe(key);
+    },
+  );
+
+  it.each([
+    // 主版本 + 日期：不能落到同主版本的 x.y 行
+    ["gpt-5-2025-08-07", "gpt-5"],
+    ["gpt-5-mini-2025-08-07", "gpt-5-mini"],
+    ["glm-5-20250101", "glm-5"],
+    ["glm-5-20251231", "glm-5"],
+    ["claude-opus-4-20250514", "claude-opus-4"],
+    ["claude-sonnet-4-20250514", "claude-sonnet-4"],
+    // 小版本号的各种写法仍命中 x.y 行
+    ["gpt-5.2", "gpt-5.2"],
+    ["gpt-5-2", "gpt-5.2"],
+    ["gpt-5.2-2025-12-11", "gpt-5.2"],
+    ["gpt-5-2-2025-12-11", "gpt-5.2"],
+    ["gpt-5.4-2026-03-05", "gpt-5.4"],
+    ["gpt-5.5-2026-04-23", "gpt-5.5"],
+    ["glm-5.2", "glm-5.2"],
+    ["glm-5-2", "glm-5.2"],
+    ["glm-5.1-20260101", "glm-5.1"],
+    ["grok-4.20-0309-reasoning", "grok-4.20"],
+    ["grok-4-20-0309-non-reasoning", "grok-4.20"],
+    ["claude-opus-4-5-20251101", "claude-opus-4-5-plus"],
+    ["claude-haiku-4-5-20251001", "claude-haiku-4-5"],
+  ])("%s → %s", (model, key) => {
+    expect(matchKey(model)).toBe(key);
+  });
+
+  it("官方已不给价的旧快照保持「-」，不被相邻版本或 GPT-4 / Grok 行吃掉", () => {
+    // gpt-4-1106-preview 之前会按 GPT-4.1 计价；官方 GPT-4 / Turbo 页都没列它，不收录
+    expect(matchKey("gpt-4-1106-preview")).toBeUndefined();
+    expect(matchKey("gpt-4-1106-vision-preview")).toBeUndefined();
+    // GPT-4 行不能吃掉其他 4 系：32k、vision、4.5 官方表里都没有现价
+    expect(matchKey("gpt-4-32k")).toBeUndefined();
+    expect(matchKey("gpt-4-vision-preview")).toBeUndefined();
+    expect(matchKey("gpt-4.5-preview")).toBeUndefined();
+    // Grok 4（grok-4-0709）已退役，官方价格页不再列出；之前 grok-4-2025… 会按 Grok 4.20 计价
+    expect(matchKey("grok-4")).toBeUndefined();
+    expect(matchKey("grok-4-0709")).toBeUndefined();
+    expect(matchKey("grok-4-20250709")).toBeUndefined();
+    expect(matchKey("grok-4-latest")).toBeUndefined();
+  });
+
+  it.each([
+    // Grok 4.x 现有名字仍命中各自的行
+    ["grok-4-20-0309-reasoning", "grok-4.20"],
+    ["grok-4.20", "grok-4.20"],
+    ["grok-4.20-multi-agent-0309", "grok-4.20"],
+    ["grok-4.7", "grok-4.7"],
+    ["grok-4-1-fast-reasoning", "grok-4.1-fast"],
+    ["grok-4.3", "grok-4.3"],
+  ])("%s → %s", (model, key) => {
+    expect(matchKey(model)).toBe(key);
   });
 });
 

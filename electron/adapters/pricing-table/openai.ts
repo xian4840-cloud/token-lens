@@ -3,10 +3,35 @@ import type { PricingRow } from "../pricing";
 export const OPENAI_PRICING: PricingRow[] = [
   // ==========================================================================
   // OpenAI — developers.openai.com/api/docs/pricing（标准档、短上下文）
+  // 核对日期 2026-10-08；gpt-6.1-sol / gpt-6-luna 另见 /api/docs/models/<id>
   //
-  // 长上下文档价格翻倍（sol 8/30、terra 4/18、luna 0.4/1.8），此处取短上下文：
+  // 超过 272K 输入的长上下文档：输入与缓存 ×2、输出 ×1.5（整次请求），
+  // 例如 6.1 sol 4/15、6 luna 0.2/0.75、5.6 sol 8/30。此处取短上下文：
   // 编码 agent 绝大多数请求在阈值以内，按长上下文价算会普遍高估。
   // ==========================================================================
+  {
+    // 2026-10 新增。必须排在 gpt-6-astra 之前：astra 的 \bgpt-6\b 兜底
+    // 会把 gpt-6.1-sol / gpt-6-luna 也吃掉（"-" 与 "." 都算词边界）
+    key: "gpt-6.1-sol",
+    label: "GPT-6.1 Sol",
+    match: /gpt[.\-_]*6[.\-_]*1[.\-_]*sol/i,
+    inputPerM: 2,
+    outputPerM: 10,
+    cacheReadPerM: 0.1,
+    cacheWritePerM: 2.5,
+    currency: "USD",
+  },
+  {
+    // 2026-10 新增，同上须排在 gpt-6-astra 之前
+    key: "gpt-6-luna",
+    label: "GPT-6 Luna",
+    match: /gpt[.\-_]*6[.\-_]*luna/i,
+    inputPerM: 0.1,
+    outputPerM: 0.5,
+    cacheReadPerM: 0.01,
+    cacheWritePerM: 0.125,
+    currency: "USD",
+  },
   {
     key: "gpt-6-astra",
     label: "GPT-6 Astra",
@@ -83,7 +108,7 @@ export const OPENAI_PRICING: PricingRow[] = [
   {
     key: "gpt-5.5",
     label: "GPT-5.5",
-    match: /gpt[.\-_]*5[.\-_]*5/i,
+    match: /gpt[.\-_]*5[.\-_]*5(?!\d)/i,
     inputPerM: 5,
     outputPerM: 30,
     cacheReadPerM: 0.5,
@@ -123,7 +148,7 @@ export const OPENAI_PRICING: PricingRow[] = [
   {
     key: "gpt-5.4",
     label: "GPT-5.4",
-    match: /gpt[.\-_]*5[.\-_]*4/i,
+    match: /gpt[.\-_]*5[.\-_]*4(?!\d)/i,
     inputPerM: 2.5,
     outputPerM: 15,
     cacheReadPerM: 0.25,
@@ -143,7 +168,7 @@ export const OPENAI_PRICING: PricingRow[] = [
   {
     key: "gpt-5.2",
     label: "GPT-5.2",
-    match: /gpt[.\-_]*5[.\-_]*2/i,
+    match: /gpt[.\-_]*5[.\-_]*2(?!\d)/i,
     inputPerM: 1.75,
     outputPerM: 14,
     cacheReadPerM: 0.175,
@@ -254,7 +279,7 @@ export const OPENAI_PRICING: PricingRow[] = [
   {
     key: "gpt-4.1",
     label: "GPT-4.1",
-    match: /gpt[.\-_]*4[.\-_]*1/i,
+    match: /gpt[.\-_]*4[.\-_]*1(?!\d)/i,
     inputPerM: 2,
     outputPerM: 8,
     cacheReadPerM: 0.5,
@@ -278,6 +303,34 @@ export const OPENAI_PRICING: PricingRow[] = [
     inputPerM: 2.5,
     outputPerM: 10,
     cacheReadPerM: 1.25,
+    cacheWritePerM: 0,
+    currency: "USD",
+  },
+  // ---- GPT-4 / GPT-4 Turbo（旧款，官方 2026-10-23 下线，保留用于历史用量换算）----
+  // 来源：developers.openai.com/api/docs/models/gpt-4-turbo 与 /models/gpt-4（核对 2026-10-08），
+  // 官方表无缓存输入价。gpt-4-1106-preview 不在这两页的快照列表里、官方也没有单列它的价，
+  // 所以不收录，保持「-」，不按 Turbo 价猜。
+  {
+    // 快照：gpt-4-turbo-2024-04-09、gpt-4-turbo-preview、gpt-4-0125-preview
+    key: "gpt-4-turbo",
+    label: "GPT-4 Turbo",
+    match: /gpt[.\-_]*4[.\-_]*(?:turbo|0125[.\-_]*preview)/i,
+    inputPerM: 10,
+    outputPerM: 30,
+    cacheReadPerM: 0,
+    cacheWritePerM: 0,
+    currency: "USD",
+  },
+  {
+    // 快照：gpt-4-0613、gpt-4-0314。只认「gpt-4」本身或后接日期：后面紧跟字母
+    // （gpt-4o、gpt-4-turbo、gpt-4-vision…）、1–3 位数字（gpt-4.1、gpt-4.5、gpt-4-32k）、
+    // 1106 / 0125（Turbo 时代的 preview）都不算，避免把别的型号按 $30/$60 计
+    key: "gpt-4",
+    label: "GPT-4",
+    match: /\bgpt[.\-_]*4(?![.\-_]*(?:[a-z]|\d{1,3}(?!\d)|1106|0125))/i,
+    inputPerM: 30,
+    outputPerM: 60,
+    cacheReadPerM: 0,
     cacheWritePerM: 0,
     currency: "USD",
   },
