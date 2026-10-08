@@ -11,7 +11,7 @@
  * 那个测试查源码，这个脚本查构建产物——两者的用途不同，
  * 但向量值必须一致，改动时两处都要改。
  */
-const { signAcs3 } = require("../electron-dist/adapters/signing.js");
+const { signAcs3 } = require("../electron-dist/electron/adapters/signing.js");
 
 // 官方固定参数示例：help.aliyun.com/zh/sdk/product-overview/v3-request-structure-and-signature
 const EXPECTED_SIGNATURE =

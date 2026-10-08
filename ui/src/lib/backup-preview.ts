@@ -1,20 +1,7 @@
-export interface BackupPreview {
-  local: number;
-  usage: number;
-  /** 备份里的服务数（旧版主进程不返回，按 0 处理） */
-  services?: number;
-  exportedAt: string;
-}
+import type { BackupImportResult, BackupPreview } from "@shared/types";
 
-export interface BackupImportResult {
-  local: number;
-  usage: number;
-  usageSkipped?: number;
-  /** 新建、需重新填写密钥的服务数 */
-  services?: number;
-  servicesMatched?: number;
-  servicesSkipped?: number;
-}
+/** 预览 / 导入结果的定义在 shared/types/app.ts（与主进程共用） */
+export type { BackupImportResult, BackupPreview };
 
 export function formatBackupPreviewText(p: BackupPreview): string {
   const day = p.exportedAt.slice(0, 10);

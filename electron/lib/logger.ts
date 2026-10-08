@@ -29,15 +29,10 @@ const MAX_BYTES = 2 * 1024 * 1024;
 /** 内存中保留的最近条目数，供界面直接展示，免得用户非得去翻文件 */
 const MEMORY_LIMIT = 200;
 
-export type LogLevel = "info" | "warn" | "error";
+import type { LogEntry, LogLevel } from "../../shared/types";
 
-export interface LogEntry {
-  time: string;
-  level: LogLevel;
-  /** 出错的模块，如 "refresh" / "adapter:gemini" / "local-usage" */
-  scope: string;
-  message: string;
-}
+/** 日志条目的定义在 shared/types/app.ts（界面「诊断」卡片共用） */
+export type { LogEntry, LogLevel };
 
 const recent: LogEntry[] = [];
 let logPath = "";

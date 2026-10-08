@@ -19,12 +19,16 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: {
     // 与 vite.config.ts 保持一致，改动需同步两处
-    alias: { "@": path.resolve(import.meta.dirname, "ui/src") },
+    alias: {
+      "@": path.resolve(import.meta.dirname, "ui/src"),
+      "@shared": path.resolve(import.meta.dirname, "shared"),
+    },
   },
   test: {
     include: [
       "ui/src/**/*.{test,spec}.{ts,tsx}",
       "electron/**/*.{test,spec}.ts",
+      "shared/**/*.{test,spec}.ts",
       "scripts/**/*.{test,spec}.{ts,mts}",
     ],
   },

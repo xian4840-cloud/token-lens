@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import type { ModelMonitorRecord } from "./model-monitor";
+import type { CaptureRemovalResult } from "../shared/types";
 
 /**
  * 由 Token Lens 写出的文件都以固定的首行标记开头，关闭采集 / 卸载时只删首行匹配的文件：
@@ -164,12 +165,8 @@ export function isClaudeCaptureEnabled(dataRoot: string): boolean {
 
 /* ───────────── 关闭采集：逐项撤销 enable 写下的东西 ───────────── */
 
-export interface CaptureRemovalResult {
-  /** 已删除 / 已还原的项 */
-  removed: string[];
-  /** 存在但判断不是我们写的、或目录里还有别的文件，因而保留的项 */
-  kept: string[];
-}
+/** 「关闭采集」的结果（定义在 shared/types/model-monitor.ts，界面共用） */
+export type { CaptureRemovalResult };
 
 /** 只读文件开头一小段，避免把大文件整个读进来 */
 function readHead(file: string, bytes = 4096): string | undefined {

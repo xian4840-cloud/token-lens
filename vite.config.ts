@@ -19,7 +19,11 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   define: { __APP_VERSION__: JSON.stringify(version) },
   resolve: {
-    alias: { "@": path.resolve(__dirname, "ui/src") },
+    // @shared：与主进程共用的类型与 IPC 契约（仓库根的 shared/），改动需同步 vitest.config.mts
+    alias: {
+      "@": path.resolve(__dirname, "ui/src"),
+      "@shared": path.resolve(__dirname, "shared"),
+    },
   },
   build: {
     outDir: "dist",

@@ -10,7 +10,7 @@
     "url": "git+https://github.com/xian4840-cloud/token-lens.git"
   },
   "private": true,
-  "main": "electron-dist/main.js",
+  "main": "electron-dist/electron/main.js",
   "engines": {
     "node": ">=22.5.0"
   },
@@ -20,7 +20,7 @@
     "dev:electron:run": "wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
     "dev": "concurrently -k -n tsc,vite,app \"npm:dev:electron:watch\" \"npm:dev:ui\" \"npm:dev:electron:run\"",
     "build:ui": "vite build",
-    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:electron": "node scripts/clean-electron-dist.cjs && tsc -p tsconfig.electron.json",
     "build": "npm run build:electron && npm run build:ui",
     "dist:portable": "npm run build && electron-builder --dir --config electron-builder-portable.yml",
     "dist:installer": "npm run build && electron-builder --config electron-builder-installer.yml",

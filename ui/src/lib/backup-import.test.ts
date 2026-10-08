@@ -7,6 +7,7 @@ describe("formatBackupPreviewText", () => {
       formatBackupPreviewText({
         local: 3,
         usage: 8,
+        services: 0,
         exportedAt: "2026-09-12T10:00:00.000Z",
       }),
     ).toBe(
@@ -18,6 +19,7 @@ describe("formatBackupPreviewText", () => {
     const text = formatBackupPreviewText({
       local: 0,
       usage: 0,
+      services: 0,
       exportedAt: "",
     });
     expect(text).not.toContain("导出于");
@@ -49,7 +51,14 @@ describe("formatBackupImportResult", () => {
   });
 
   it("没有额外信息时只报条数", () => {
-    expect(formatBackupImportResult({ local: 0, usage: 0 })).toBe(
+    expect(formatBackupImportResult({
+        local: 0,
+        usage: 0,
+        usageSkipped: 0,
+        services: 0,
+        servicesMatched: 0,
+        servicesSkipped: 0,
+      })).toBe(
       "已导入本地 0 条、API 用量 0 条",
     );
   });

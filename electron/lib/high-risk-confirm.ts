@@ -1,4 +1,5 @@
 import path from "node:path";
+import type { HighRiskResult } from "../../shared/types";
 
 /**
  * 高危操作（改用户环境变量、往用户目录装 / 删脚本、启动外部程序）执行前的系统确认框。
@@ -15,11 +16,8 @@ import path from "node:path";
 
 export type HighRiskAction = "enable-claude" | "enable-opencode" | "disable-claude" | "disable-opencode" | "launch-codex";
 
-/** 交给渲染进程的结果：确认后执行返回 ok；用户取消或已有待确认的操作时不执行 */
-export type HighRiskResult<T> =
-  | { status: "ok"; value: T }
-  | { status: "cancelled" }
-  | { status: "confirm-pending" };
+/** 交给渲染进程的结果：确认后执行返回 ok；用户取消或已有待确认的操作时不执行（定义在 shared/types） */
+export type { HighRiskResult };
 
 /** 拼文案用到的主进程状态（全部来自主进程，见 highRiskContextFromMain） */
 export interface HighRiskContext {

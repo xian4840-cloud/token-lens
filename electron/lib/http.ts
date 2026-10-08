@@ -4,6 +4,7 @@ import { getSetting } from "../db";
 import { logError, logWarn } from "./logger";
 import { redactError, redactUrl } from "./redact";
 import type { ProxyTestResult } from "../types";
+import type { ProxyConfigOverride } from "../../shared/types";
 
 /**
  * 网络与外部链接的安全工具集合。
@@ -157,11 +158,8 @@ export function shouldBypassProxy(targetUrl: string, rulesStr?: string): boolean
   return false;
 }
 
-export interface ProxyConfigOverride {
-  mode?: string;
-  customUrl?: string;
-  bypassRules?: string;
-}
+/** 代理测试的临时覆盖（定义在 shared/types/app.ts，界面共用） */
+export type { ProxyConfigOverride };
 
 /** 根据 URL 及当前配置获取 undici Dispatcher（支持 override 供测试用） */
 export async function getDispatcherForUrl(

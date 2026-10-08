@@ -7,6 +7,7 @@ import { mapErrorToUserMessage } from "./lib/user-error";
 import { createBusyLock } from "./lib/concurrency";
 import { flushDb } from "./db";
 import type { BalanceResult } from "./types";
+import type { EventChannel, EventPayload } from "../shared/ipc";
 
 /** 后台自动刷新调度器。应用运行期间按间隔刷新所有服务并记录快照，
  * 同时扫描本地 agent 用量落盘每日快照供趋势页使用。 */
@@ -26,7 +27,8 @@ function notify(
 ): void {
   // 窗口可能已关闭或正在销毁，send 前检查
   if (mainWin && !mainWin.isDestroyed()) {
-    mainWin.webContents.send("balance:updated", { id, ...payload });
+    const event: EventPayload<"balance:updated"> = { id, ...payload };
+    mainWin.webContents.send("balance:updated" satisfies EventChannel, event);
   }
 }
 

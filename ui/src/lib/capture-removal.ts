@@ -1,8 +1,7 @@
-/** 主进程 disable*Capture 的返回值（electron/agent-response-capture.ts 的 CaptureRemovalResult） */
-export interface CaptureRemovalResult {
-  removed: string[];
-  kept: string[];
-}
+import type { CaptureRemovalResult } from "@shared/types";
+
+/** 主进程 disable*Capture 的返回值（定义在 shared/types/model-monitor.ts） */
+export type { CaptureRemovalResult };
 
 /** 「关闭采集」完成后的提示文案 */
 export function formatCaptureRemoval(

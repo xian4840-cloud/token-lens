@@ -176,8 +176,9 @@ npm run dist:installer  # NSIS 安装包
 
 ## 目录结构
 
-- `electron/` - Electron 主进程（TypeScript，编译到 `electron-dist/`）
+- `electron/` - Electron 主进程（TypeScript，与 `shared/` 一起编译到 `electron-dist/`，入口 `electron-dist/electron/main.js`）
 - `ui/` - 前端源码（React + Vite，构建到 `ui/dist/`）
+- `shared/` - 主进程与界面共用的数据类型（`shared/types/`）和 IPC 契约（`shared/ipc.ts`：通道名、参数与返回值）。新增或修改 IPC 通道只改这里，preload 与主进程处理函数由编译器校验；界面经 `@shared/*` 引用
 - `electron/adapters/` - 各服务适配器（余额/用量查询）
 - `electron/local-usage/` - 本地 agent 用量采集器（Claude Code / Codex / OpenCode / Antigravity / Grok Build）
 - `electron/pet/` - 桌面宠物（独立无边框窗口、会话目录监听、今日花费汇总）

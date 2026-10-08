@@ -77,6 +77,8 @@ import { appIndexHtmlPath, devServerUrl } from "./lib/app-paths";
 import { clearUsageScanCache } from "./local-usage/clear-cache";
 import type { AppBootstrap } from "./types";
 import { registerPetIpc } from "./pet/ipc";
+import { typedIpc, type InvokeHandler } from "./lib/typed-ipc";
+import type { InvokeChannel } from "../shared/ipc";
 import { getAgentModelMonitorState } from "./agent-model-monitor";
 import { codexRoot, launchCapturedCodex } from "./codex-capture";
 import {
@@ -160,23 +162,25 @@ export function registerIpc(
   const guard = createGuardedIpc(target, guardConfigWithConfirm, (channel, reason) =>
     logWarn("ipc", `已拒绝 ${channel}：${reason}`),
   );
-  const handle = (channel: string, listener: (event: any, ...args: any[]) => unknown) =>
-    guard.handle(channel, MAIN_ONLY, listener);
+  // 通道名与返回值按 shared/ipc.ts 的契约做编译期校验
+  const typed = typedIpc(guard);
+  const handle = <C extends InvokeChannel>(channel: C, listener: InvokeHandler<C>) =>
+    typed.handle(channel, MAIN_ONLY, listener);
   handle("model-monitor:state", (_e, date?: unknown, source?: unknown) => getAgentModelMonitorState(date, source, app.getPath("userData")));
   // 以下五个会写用户目录 / 用户环境变量（HKCU\Environment）或启动外部程序：
   // 1. guard：只接受主窗口、前台、且当前就在「模型监测」页发起的请求；
   // 2. 主进程弹系统确认框（文案只由主进程状态拼出），用户点「继续」才执行；
   //    取消返回 { status: "cancelled" }，已有确认框开着时立即返回 { status: "confirm-pending" }。
   // 处理函数故意不接收任何渲染进程参数。
-  guard.handle("model-monitor:enable-opencode", MODEL_MONITOR_HIGH_RISK, (e) =>
+  typed.handle("model-monitor:enable-opencode", MODEL_MONITOR_HIGH_RISK, (e) =>
     confirm.run("enable-opencode", e, () => enableOpenCodeCapture(path.join(app.getAppPath(), "electron", "agent-capture", "opencode.mjs"), app.getPath("userData"))));
-  guard.handle("model-monitor:enable-claude", MODEL_MONITOR_HIGH_RISK, (e) =>
+  typed.handle("model-monitor:enable-claude", MODEL_MONITOR_HIGH_RISK, (e) =>
     confirm.run("enable-claude", e, () => enableClaudeCapture(path.join(app.getAppPath(), "electron", "agent-capture"), app.getPath("userData"))));
-  guard.handle("model-monitor:disable-opencode", MODEL_MONITOR_HIGH_RISK, (e) =>
+  typed.handle("model-monitor:disable-opencode", MODEL_MONITOR_HIGH_RISK, (e) =>
     confirm.run("disable-opencode", e, () => disableOpenCodeCapture(app.getPath("userData"))));
-  guard.handle("model-monitor:disable-claude", MODEL_MONITOR_HIGH_RISK, (e) =>
+  typed.handle("model-monitor:disable-claude", MODEL_MONITOR_HIGH_RISK, (e) =>
     confirm.run("disable-claude", e, () => disableClaudeCapture(app.getPath("userData"))));
-  guard.handle("model-monitor:launch-codex", MODEL_MONITOR_HIGH_RISK, (e) =>
+  typed.handle("model-monitor:launch-codex", MODEL_MONITOR_HIGH_RISK, (e) =>
     confirm.run("launch-codex", e, () => singleFlight(captureLaunch, () => launchCapturedCodex(path.join(app.getAppPath(), "electron", "codex-capture", "CodexCapture.cs"), app.getPath("userData")))));
   handle("app:ping", () => "pong");
   handle("encryption:available", () => isEncryptionAvailable());
@@ -410,7 +414,7 @@ export function registerIpc(
   // 渲染进程的报错也收进同一份日志：此前前端异常只进 devtools 控制台，
   // 用户那边等于完全不可见。
   // 桌宠窗口也会上报前端异常
-  guard.handle("logs:report-renderer-error", MAIN_AND_PET, (_e, message: unknown) => {
+  typed.handle("logs:report-renderer-error", MAIN_AND_PET, (_e, message: unknown) => {
     if (typeof message !== "string") return false;
     // 限长，避免超大堆栈把日志文件塞满
     writeLog("error", "renderer", message.slice(0, 4000));

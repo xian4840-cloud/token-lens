@@ -6,61 +6,25 @@ import { listJsonlFilesWithStat } from "./local-usage/files";
 import { extractCodexIncrements } from "./local-usage/codex";
 import { toDateKey } from "./local-usage/date";
 import { mapPool } from "./lib/concurrency";
-import { getCodexCaptureState, readCapturedModels, type CodexCaptureState } from "./codex-capture";
+import { getCodexCaptureState, readCapturedModels } from "./codex-capture";
 
-export type ModelMonitorSource = "codex" | "claude-code" | "opencode" | "grok-build" | "antigravity";
-export interface ModelMonitorSession { id: string; name: string; modifiedAt: string; archived: boolean }
-export interface ModelMonitorRecord {
-  id: string;
-  startedAt: string;
-  requestedModel?: string;
-  responseModel?: string;
-  sentModel?: string;
-  matchedCalls?: number;
-  mismatchedCalls?: number;
-  unverifiedCalls?: number;
-  responseCalls?: number;
-  responseId?: string;
-  reportedModel?: string;
-  evidence?: "response" | "assistant-message" | "generation-response" | "usage" | "selection";
-  modelCalls?: number;
-  status: "match" | "mismatch" | "unknown";
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  sessionId?: string;
-  sessionName?: string;
-  archived?: boolean;
-}
-export interface ModelMonitorDay {
-  date: string;
-  sessionCount: number;
-  callCount: number;
-  totalTokens: number;
-  verifiedCount: number;
-  mismatchCount: number;
-  unknownCount: number;
-  responseCount: number;
-  models: string[];
-}
-export interface ModelMonitorSessionDay {
-  sessionId: string; name: string; model?: string; modelBasis?: "request" | "response" | "unknown"; callCount: number; matchedCount: number; mismatchedCount: number; unknownCount: number; totalTokens: number;
-}
-export interface ModelMonitorState {
-  source: ModelMonitorSource;
-  description?: string;
-  root: string;
-  scannedAt: string;
-  sessions: ModelMonitorSession[];
-  days: ModelMonitorDay[];
-  selectedDate?: string;
-  callCount: number;
-  records: ModelMonitorRecord[];
-  sessionDays?: ModelMonitorSessionDay[];
-  agentCapture?: { enabled: boolean; /** 本机还留有任何一项我们写下的采集文件 / 环境变量（可「关闭采集」） */ installed?: boolean; requestCount: number; responseCount: number };
-  capture: CodexCaptureState;
-  unavailable?: string;
-}
+import type {
+  ModelMonitorDay,
+  ModelMonitorRecord,
+  ModelMonitorSession,
+  ModelMonitorSessionDay,
+  ModelMonitorState,
+} from "../shared/types";
+
+/** 模型监测的数据结构定义在 shared/types/model-monitor.ts（界面共用） */
+export type {
+  ModelMonitorDay,
+  ModelMonitorRecord,
+  ModelMonitorSession,
+  ModelMonitorSessionDay,
+  ModelMonitorSource,
+  ModelMonitorState,
+} from "../shared/types";
 
 type UsageEvents = Parameters<typeof extractCodexIncrements>[0];
 interface ParsedSession { records: ModelMonitorRecord[] }

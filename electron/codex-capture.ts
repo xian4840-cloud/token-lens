@@ -5,14 +5,9 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
-export interface CodexCaptureState {
-  supported: boolean;
-  ready: boolean;
-  active: boolean;
-  responseCount: number;
-  lastResponseAt?: string;
-  error?: string;
-}
+import type { CodexCaptureState } from "../shared/types";
+
+export type { CodexCaptureState };
 export const codexRoot = () => process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 export const captureDirectory = (dataRoot: string) => path.join(dataRoot, "model-capture");
 

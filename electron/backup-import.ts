@@ -13,21 +13,10 @@ import {
 } from "./lib/backup";
 import { parseIdList } from "./lib/id-list";
 import type { ServiceKind } from "./types";
+import type { BackupImportResult } from "../shared/types";
 
-export interface BackupImportResult {
-  /** 写入（或覆盖）的本地日桶数 */
-  local: number;
-  /** 新写入的 API 用量记录数 */
-  usage: number;
-  /** 因重复或找不到对应服务而跳过的用量记录数 */
-  usageSkipped: number;
-  /** 新建、需重新填写密钥的服务数 */
-  services: number;
-  /** 对上本机已有服务的数 */
-  servicesMatched: number;
-  /** 类型不支持或条目残缺、未恢复的服务数 */
-  servicesSkipped: number;
-}
+/** 导入结果（定义在 shared/types/app.ts，界面共用） */
+export type { BackupImportResult };
 
 /**
  * 把解析好的备份合并进本机数据。
