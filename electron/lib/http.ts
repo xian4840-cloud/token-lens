@@ -13,30 +13,9 @@ import type { ProxyTestResult } from "../types";
  * - applySessionProxy：同步 Electron Session 代理
  * - testNetworkConnectivity：一键测试海外与国内节点的网络连通性与延迟
  * - safeOpenExternal：仅放行 http/https 的 shell.openExternal，拦截 javascript:/file: 等危险协议
- * - CSP 域名白名单与构造：主窗口内容安全策略，限制脚本来源与外联目标
+ * - CSP 构造：主窗口内容安全策略，限制脚本来源与外联目标
  */
 
-/**
- * 适配器所需的全部远端域名（connect-src 白名单）。
- * 新增适配器时须在此登记，否则 CSP 会拦截其请求。
- */
-export const CSP_CONNECT_DOMAINS: readonly string[] = [
-  "api.openai.com",
-  "openrouter.ai",
-  "api.deepseek.com",
-  "api.siliconflow.cn",
-  "api.groq.com",
-  "generativelanguage.googleapis.com",
-  "api.together.xyz",
-  "api.anthropic.com",
-  "business.aliyuncs.com",
-  "billing.volcengineapi.com",
-  "console.volcengine.com",
-  "api.moonshot.cn",
-  "www.scnet.cn",
-  "open.bigmodel.cn",
-  "api.z.ai",
-];
 
 /** 默认请求超时（ms）。远端未响应则中止，避免调度器卡死。 */
 export const DEFAULT_TIMEOUT_MS = 15_000;
@@ -421,14 +400,16 @@ export function safeOpenExternal(url: string): void {
 /**
  * 构造主窗口内容安全策略。
  * dev 模式为 Vite HMR 放开 localhost 与 'unsafe-eval'；生产模式严格限制。
+ *
+ * connect-src 只有 'self'：渲染进程从不直接发网络请求——所有厂商接口都由主进程
+ * 用 undici 调用（适配器、代理、超时都在主进程），渲染进程只走 IPC。
+ * 此前这里列了十几个厂商域名，等于允许一个被注入的页面脚本把数据直接发往这些域名，
+ * 而它们没有一个是渲染进程真正需要的。登录窗口用独立 partition，不受这条 CSP 影响。
  */
 export function buildCsp(dev: boolean): string {
-  const connectDomains = [
-    "'self'",
-    ...CSP_CONNECT_DOMAINS.map((d) => `https://${d}`),
-  ];
+  const connectSrc = ["'self'"];
   if (dev) {
-    connectDomains.push(
+    connectSrc.push(
       "http://localhost:5173",
       "ws://localhost:5173",
       "http://127.0.0.1:5173",
@@ -445,7 +426,7 @@ export function buildCsp(dev: boolean): string {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
     "font-src 'self'",
-    `connect-src ${connectDomains.join(" ")}`,
+    `connect-src ${connectSrc.join(" ")}`,
     "object-src 'none'",
     "base-uri 'self'",
     "frame-ancestors 'none'",
