@@ -1,0 +1,58 @@
+name: CI
+
+# 每次推送到 main 与每个 PR 都跑一遍：类型检查、lint、格式、测试（含覆盖率）、构建。
+# 只读仓库，不发布、不签名、不使用任何密钥。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# 同一分支的新提交推上来时取消还在跑的旧一轮，省额度
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: 检查与测试（${{ matrix.os }}）
+    # windows 一起跑：应用的发布包是 Windows 的，且测试里有路径分隔符、
+    # 本地日期归档等平台相关逻辑，只在 ubuntu 上绿不代表 Windows 上绿。
+    # 代价是多一份 runner 时间（无缓存时 npm ci 约一两分钟）。
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # .nvmrc 是 22；node:sqlite 测试要求 ≥22.5，setup-node 会装该主版本的最新版
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # 测试全程 mock 了 electron，构建只是 tsc + vite，不需要下载 Electron 二进制
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      # 覆盖率只在 ubuntu 上收集（v8 覆盖率在 Windows 上慢且数字不可比）
+      - run: npm run test:coverage
+        if: runner.os == 'Linux'
+      - run: npm test
+        if: runner.os != 'Linux'
+      - run: npm run build
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux' && always()
+        with:
+          name: coverage
+          path: coverage
+          retention-days: 14
