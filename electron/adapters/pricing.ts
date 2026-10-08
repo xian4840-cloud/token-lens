@@ -124,18 +124,57 @@ export function pruneDefaultOverrides(
   return out;
 }
 
+/** ModelPricing 中的数值字段 */
+const PRICING_NUMBER_FIELDS = new Set<string>([
+  "inputPerM",
+  "outputPerM",
+  "cacheReadPerM",
+  "cacheWritePerM",
+]);
+
+/**
+ * 清洗价格覆盖（不抛异常）：只保留已知字段且类型正确的值，非对象整体视为空。
+ * 价格不能为负：负单价会让费用估算出现负数、把月度合计和预算进度一起拉低
+ * （CSV 导入同样拒绝负数）；0 保留，免费模型要用。
+ *
+ * 写入口（IPC 的 validatePricingOverrides）和读入口（parseOverrides）共用这一份规则。
+ * 放在这里而不是 validation.ts：validation.ts 依赖适配器注册表，而适配器又依赖本文件，
+ * 反过来引用会形成循环依赖。
+ */
+export function sanitizePricingOverrides(value: unknown): Record<string, Partial<ModelPricing>> {
+  const out: Record<string, Partial<ModelPricing>> = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return out;
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (!k) continue;
+    if (!v || typeof v !== "object") continue;
+    const clean: Partial<ModelPricing> = {};
+    const sink = clean as Record<string, unknown>;
+    for (const [fk, fv] of Object.entries(v as Record<string, unknown>)) {
+      if (PRICING_NUMBER_FIELDS.has(fk)) {
+        if (typeof fv === "number" && Number.isFinite(fv) && fv >= 0) sink[fk] = fv;
+      } else if (fk === "currency") {
+        if (typeof fv === "string") sink[fk] = fv;
+      }
+    }
+    if (Object.keys(clean).length > 0) out[k] = clean;
+  }
+  return out;
+}
+
 /**
  * 从 setting 原始字符串解析 overrides，容错。
  *
  * 这是唯一把存储字符串变成对象的入口（设置页展示与用量换算都经过它），
  * 所以冗余项的剔除放在这里做：存量数据也能在下次读取时自愈。
+ * 同样先按写入口的规则清洗一遍：旧版本存下的负价、备份导入带进来的、
+ * 用户手工改数据文件写进去的值，都不经过 IPC 校验，读取时一并兜住。
  */
 export function parseOverrides(raw: string | undefined): Record<string, Partial<ModelPricing>> {
   if (!raw) return {};
   try {
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     if (parsed && typeof parsed === "object") {
-      return pruneDefaultOverrides(parsed as Record<string, Partial<ModelPricing>>);
+      return pruneDefaultOverrides(sanitizePricingOverrides(parsed));
     }
   } catch (e) {
     logWarn(

@@ -23,6 +23,7 @@ import {
   type BackupPayload,
 } from "./lib/backup";
 import { refreshServiceInternal } from "./refresh";
+import { computeCost, parseOverrides } from "./adapters/pricing";
 import { refreshUsageInternal } from "./usage";
 import { mapErrorToUserMessage } from "./lib/user-error";
 import type { ServiceKind, ServiceRecord } from "./types";
@@ -399,5 +400,47 @@ describe("恢复出来的服务在补全密钥前不打厂商接口", () => {
     expect(mapErrorToUserMessage(new Error(NEEDS_CREDENTIALS_MESSAGE))).toBe(
       NEEDS_CREDENTIALS_MESSAGE,
     );
+  });
+});
+
+/**
+ * 价格覆盖的读路径：备份导入与数据文件里的 pricingOverrides 原样存储、不经过 IPC 校验，
+ * 必须在读取（parseOverrides）时清洗，负价不能进入费用估算。
+ */
+describe("价格覆盖：备份导入与存量数据的负价", () => {
+  const withPricing = (pricingOverrides: string) =>
+    JSON.stringify(
+      buildBackupPayload({
+        services: [],
+        usageRecords: [],
+        localDailyUsage: [],
+        settings: { pricingOverrides },
+        exportedAt: "2026-10-01T00:00:00.000Z",
+      }),
+    );
+
+  it("备份里带负价：导入后读取时丢弃负值，0 与正常覆盖保留", () => {
+    const raw = withPricing(
+      JSON.stringify({
+        "gpt-5": { inputPerM: -1, outputPerM: 12 },
+        "free-model": { inputPerM: 0, outputPerM: 0 },
+      }),
+    );
+    applyBackupImport(parse(raw), resolveKind);
+    expect(getSetting("pricingOverrides")).toContain("-1");
+    expect(parseOverrides(getSetting("pricingOverrides"))).toEqual({
+      "gpt-5": { outputPerM: 12 },
+      "free-model": { inputPerM: 0, outputPerM: 0 },
+    });
+  });
+
+  it("数据库里已有旧版本存下的负价（或手工改过的数据文件）：读出来已清洗，费用不为负", () => {
+    setSetting("pricingOverrides", JSON.stringify({ "gpt-5": { inputPerM: -50, outputPerM: -1 } }));
+    flushDb();
+    initDbAt(path.join(dir, "data.json"));
+    const overrides = parseOverrides(getSetting("pricingOverrides"));
+    expect(overrides).toEqual({});
+    const r = computeCost("gpt-5", { input: 1_000_000, output: 1_000_000 }, overrides);
+    expect(r?.cost).toBeGreaterThan(0);
   });
 });

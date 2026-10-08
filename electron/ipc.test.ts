@@ -14,7 +14,7 @@ const h = vi.hoisted(() => ({
     listUsageRecords: vi.fn(() => []),
     listLocalDailyUsage: vi.fn(() => []),
     clearAllLocalDailyUsage: vi.fn(),
-    getSetting: vi.fn((): string | undefined => undefined),
+    getSetting: vi.fn((_key: string): string | undefined => undefined),
     setSetting: vi.fn(),
     getLastBalances: vi.fn(() => ({})),
     upsertLocalDailyUsage: vi.fn(),
@@ -429,6 +429,17 @@ describe("价格表", () => {
     const saved = JSON.parse((h.db.setSetting.mock.calls.at(-1) as unknown[])[1] as string);
     expect(saved).not.toHaveProperty(first.key);
     expect(saved[table[1].key]).toMatchObject({ inputPerM: 123 });
+  });
+
+  it("pricing:get 读出存量负价时已清洗，展示内置价", async () => {
+    const { call } = setup();
+    const table = (await call("pricing:get")) as { key: string; inputPerM: number }[];
+    const first = table[0];
+    h.db.getSetting.mockImplementation((k: string) =>
+      k === "pricingOverrides" ? JSON.stringify({ [first.key]: { inputPerM: -9 } }) : undefined,
+    );
+    const after = (await call("pricing:get")) as { key: string; inputPerM: number }[];
+    expect(after[0]).toMatchObject({ key: first.key, inputPerM: first.inputPerM });
   });
 
   it("pricing:set 拒绝非对象；字段只保留认识的数值 / 币种", async () => {

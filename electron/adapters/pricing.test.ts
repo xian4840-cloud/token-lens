@@ -115,10 +115,30 @@ describe("parseOverrides", () => {
     expect(parseOverrides("")).toEqual({});
   });
 
+  it("读取时按写入口的规则清洗：负价丢弃、0 保留，未知字段与非数值丢弃（回归）", () => {
+    // 旧版本没有负数校验时存下来的、备份导入或手工改数据文件写进去的
+    const stored = JSON.stringify({
+      "gpt-5": { inputPerM: -1.25, outputPerM: 0, cacheReadPerM: "0.1", evil: 9 },
+      "made-up-model": { inputPerM: -3, outputPerM: -4 },
+      "legacy-free": { inputPerM: 0, outputPerM: 0 },
+    });
+    expect(parseOverrides(stored)).toEqual({
+      "gpt-5": { outputPerM: 0 },
+      "legacy-free": { inputPerM: 0, outputPerM: 0 },
+    });
+  });
+
+  it("存量负价不会再让费用估算变成负数：负的那一项回落到内置价", () => {
+    const overrides = parseOverrides(JSON.stringify({ "gpt-5": { inputPerM: -100 } }));
+    const r = computeCost("gpt-5", { input: 1_000_000 }, overrides);
+    expect(r?.cost).toBe(1.25);
+    const row = getPricingTable(overrides).find((x) => x.key === "gpt-5");
+    expect(row?.inputPerM).toBe(1.25);
+  });
+
   it("非对象（数组、字符串、数字）不作为覆盖使用", () => {
-    // JSON.parse 出来的数组是 object，但其键是 "0"/"1"，清理时查不到内置行，
-    // 会被当作遗留 key 保留；这里只要求不抛异常且不污染已知行
-    expect(() => parseOverrides("[1,2,3]")).not.toThrow();
+    expect(parseOverrides("[1,2,3]")).toEqual({});
+    expect(parseOverrides('[{"inputPerM":1}]')).toEqual({});
     expect(parseOverrides('"字符串"')).toEqual({});
     expect(parseOverrides("42")).toEqual({});
   });
