@@ -30,7 +30,7 @@
     "verify:signing": "node scripts/verify-acs3.cjs"
   },
   "dependencies": {
-    "undici": "^7.0.0"
+    "undici": "^7.30.0"
   },
   "devDependencies": {
     "@radix-ui/react-dialog": "^1.1.2",
@@ -47,7 +47,7 @@
     "clsx": "^2.1.1",
     "concurrently": "^9.1.0",
     "cross-env": "^7.0.3",
-    "electron": "^43.0.0",
+    "electron": "^43.7.9",
     "electron-builder": "^26.15.3",
     "lucide-react": "^0.460.0",
     "react": "^19.2.7",
